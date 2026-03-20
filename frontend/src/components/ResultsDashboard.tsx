@@ -45,10 +45,22 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
         <MetricCard label="盈亏比" value={num(metrics.profit_factor)} />
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="多头 Sharpe" value={num(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe)} color={(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe) >= 1 ? "green" : "default"} />
-        <MetricCard label="单调性" value={num(backtest_summary.monotonicity_score)} />
+        <MetricCard label="多空年化" value={pct(backtest_summary.long_short_annual ?? 0)} color={(backtest_summary.long_short_annual ?? 0) >= 0 ? "green" : "red"} />
+        <MetricCard label="单调性" value={num(backtest_summary.monotonicity_score)} color={backtest_summary.monotonicity_score >= 0.8 ? "green" : "default"} />
         <MetricCard label="分组价差" value={pct(backtest_summary.spread)} color={backtest_summary.spread >= 0 ? "green" : "red"} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MetricCard label="IC 均值" value={num(backtest_summary.ic_mean ?? 0)} color={(backtest_summary.ic_mean ?? 0) > 0.03 ? "green" : (backtest_summary.ic_mean ?? 0) < -0.03 ? "red" : "default"} />
+        <MetricCard label="Rank IC" value={num(backtest_summary.rank_ic_mean ?? 0)} color={(backtest_summary.rank_ic_mean ?? 0) > 0.03 ? "green" : (backtest_summary.rank_ic_mean ?? 0) < -0.03 ? "red" : "default"} />
+        <MetricCard label="IR (IC/std)" value={num(backtest_summary.ic_ir ?? 0)} color={Math.abs(backtest_summary.ic_ir ?? 0) >= 0.5 ? "green" : "default"} />
+        <MetricCard label="IC 胜率" value={pct(backtest_summary.ic_win_rate ?? 0)} color={(backtest_summary.ic_win_rate ?? 0) >= 0.55 ? "green" : "default"} />
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        <MetricCard label="换手率" value={pct(backtest_summary.turnover ?? 0)} />
       </div>
 
       {iterationSlot}

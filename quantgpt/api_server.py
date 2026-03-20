@@ -593,10 +593,16 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             "metrics": report_result["metrics"],
             "backtest_summary": {
                 "long_short_sharpe": result["long_short_sharpe"],
+                "long_short_annual": result.get("long_short_annual", 0),
                 "top_group_sharpe": result.get("top_group_sharpe", 0),
                 "monotonicity_score": result["monotonicity_score"],
                 "spread": result["spread"],
                 "group_returns": result["group_returns"],
+                "ic_mean": result.get("ic_mean", 0),
+                "rank_ic_mean": result.get("rank_ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "ic_win_rate": result.get("ic_win_rate", 0),
+                "turnover": result.get("turnover", 0),
             },
             "params": {
                 "expression": expression,
@@ -1082,25 +1088,17 @@ async def get_report(
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     user_id = str(user.id)
-
-    # Check DB for report ownership
-    result = await db.execute(
-        select(ReportModel).where(
-            ReportModel.filename == filename,
-            ReportModel.user_id == user.id,
-        )
-    )
-    report_record = result.scalar_one_or_none()
-    if not report_record:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    # Serve from user-specific directory
     user_report_dir = _REPORT_DIR / user_id
     file_path = (user_report_dir / filename).resolve()
+
+    # Security: ensure path stays within user's report directory
     if not file_path.is_relative_to(user_report_dir.resolve()):
         raise HTTPException(status_code=400, detail="Invalid path")
+
+    # Check file exists in user-specific directory (primary check)
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="Report not found")
+
     return FileResponse(str(file_path), media_type="text/html")
 
 

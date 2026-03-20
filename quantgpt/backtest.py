@@ -71,6 +71,7 @@ def run_factor_backtest(
 
     # Determine grouping strategy
     effective_groups = n_groups
+    use_value_grouping = False
     use_rank_fallback = False
     distinct_counts = work.groupby("trade_date")["factor_value"].nunique()
     median_distinct = int(distinct_counts.median()) if len(distinct_counts) > 0 else 0
@@ -78,9 +79,10 @@ def run_factor_backtest(
     if median_distinct < n_groups:
         if median_distinct >= 2:
             effective_groups = median_distinct
+            use_value_grouping = True
             logger.warning(
                 f"Factor has only ~{median_distinct} distinct values per date, "
-                f"reducing groups from {n_groups} to {effective_groups}"
+                f"reducing groups from {n_groups} to {effective_groups}, using value-based grouping"
             )
         else:
             use_rank_fallback = True
@@ -97,6 +99,13 @@ def run_factor_backtest(
                 return pd.cut(ranks, bins=effective_groups, labels=False)
             except ValueError:
                 return pd.Series(np.nan, index=vals.index)
+        if use_value_grouping:
+            # For few distinct values, group directly by sorted unique values
+            sorted_uniques = sorted(vals.dropna().unique())
+            if len(sorted_uniques) < 2:
+                return pd.Series(np.nan, index=vals.index)
+            mapping = {v: i for i, v in enumerate(sorted_uniques)}
+            return vals.map(mapping)
         try:
             return pd.qcut(vals, q=effective_groups, labels=False, duplicates="drop")
         except ValueError:
@@ -185,6 +194,7 @@ def run_factor_backtest(
 
     ls_mean, ls_std = ls_series.mean(), ls_series.std()
     ls_sharpe = float((ls_mean / ls_std * annualize) if ls_std > 0 else 0.0)
+    ls_annual = float((1 + ls_mean) ** 252 - 1)
 
     group_means = [float(daily_group_ret[g].mean()) for g in actual_groups]
     mono = _calc_monotonicity(group_means)
@@ -193,6 +203,17 @@ def run_factor_backtest(
     spread = float(group_means[-1] - group_means[0])
     if flipped:
         spread = -spread
+
+    # 9. IC / Rank IC / IR / IC win rate
+    ic_series, rank_ic_series = _calc_ic_series(work, holding_period)
+    ic_mean = float(ic_series.mean()) if len(ic_series) > 0 else 0.0
+    ic_std = float(ic_series.std()) if len(ic_series) > 0 else 0.0
+    ic_ir = float(ic_mean / ic_std) if ic_std > 0 else 0.0
+    ic_win_rate = float((ic_series > 0).sum() / len(ic_series)) if len(ic_series) > 0 else 0.0
+    rank_ic_mean = float(rank_ic_series.mean()) if len(rank_ic_series) > 0 else 0.0
+
+    # 10. Turnover rate
+    turnover = _calc_turnover(work, top_g, rebalance_dates_set)
 
     group_ret_summary = {}
     for g in actual_groups:
@@ -211,10 +232,16 @@ def run_factor_backtest(
         "ls_returns": ls_series,  # kept for backward compat
         "group_returns": group_ret_summary,
         "long_short_sharpe": ls_sharpe,
+        "long_short_annual": ls_annual,
         "top_group_sharpe": top_sharpe,
         "monotonicity_score": float(mono),
         "spread": spread,
         "flipped": flipped,
+        "ic_mean": ic_mean,
+        "rank_ic_mean": rank_ic_mean,
+        "ic_ir": ic_ir,
+        "ic_win_rate": ic_win_rate,
+        "turnover": turnover,
     }
 
 
@@ -236,6 +263,77 @@ def _calc_max_drawdown(returns: pd.Series) -> float:
     peak = cumulative.cummax()
     drawdown = (cumulative - peak) / peak
     return float(drawdown.min()) if len(drawdown) > 0 else 0.0
+
+
+def _calc_ic_series(
+    work: pd.DataFrame, holding_period: int
+) -> tuple:
+    """Calculate per-period IC and Rank IC series.
+
+    IC = Pearson correlation between factor value and forward N-day return
+    Rank IC = Spearman rank correlation (more robust to outliers)
+
+    Returns (ic_series, rank_ic_series) as pd.Series indexed by date.
+    """
+    # Compute forward N-day return per stock
+    # For day T: fwd_ret = ret[T+1] + ret[T+2] + ... + ret[T+holding_period]
+    work = work.copy()
+    work["fwd_ret"] = (
+        work.groupby("stock_code")["daily_ret"]
+        .transform(lambda s: s.shift(-1).rolling(holding_period, min_periods=holding_period).sum().shift(-(holding_period - 1)))
+    )
+
+    valid = work.dropna(subset=["factor_value", "fwd_ret"])
+    if valid.empty:
+        return pd.Series(dtype=float), pd.Series(dtype=float)
+
+    def _pearson(g):
+        if len(g) < 5:
+            return np.nan
+        if g["factor_value"].nunique() < 2 or g["fwd_ret"].nunique() < 2:
+            return np.nan
+        return g["factor_value"].corr(g["fwd_ret"])
+
+    def _spearman(g):
+        if len(g) < 5:
+            return np.nan
+        if g["factor_value"].nunique() < 2 or g["fwd_ret"].nunique() < 2:
+            return np.nan
+        corr, _ = sp_stats.spearmanr(g["factor_value"], g["fwd_ret"])
+        return corr if not np.isnan(corr) else 0.0
+
+    ic_series = valid.groupby("trade_date").apply(_pearson).dropna()
+    rank_ic_series = valid.groupby("trade_date").apply(_spearman).dropna()
+    return ic_series, rank_ic_series
+
+
+def _calc_turnover(
+    work: pd.DataFrame, top_group: int, rebalance_dates: list
+) -> float:
+    """Calculate average turnover rate for the top group.
+
+    Turnover = fraction of holdings that change at each rebalance.
+    """
+    if len(rebalance_dates) < 2:
+        return 0.0
+
+    top_holdings = {}
+    for d in rebalance_dates:
+        day_data = work[(work["_rebal_date"] == d) & (work["_group"] == top_group)]
+        top_holdings[d] = set(day_data["stock_code"].unique())
+
+    turnovers = []
+    sorted_dates = sorted(top_holdings.keys())
+    for i in range(1, len(sorted_dates)):
+        prev = top_holdings[sorted_dates[i - 1]]
+        curr = top_holdings[sorted_dates[i]]
+        if len(prev) == 0 and len(curr) == 0:
+            continue
+        union = prev | curr
+        changed = len(prev.symmetric_difference(curr))
+        turnovers.append(changed / len(union) if len(union) > 0 else 0.0)
+
+    return float(np.mean(turnovers)) if turnovers else 0.0
 
 
 def _calc_monotonicity(group_means: List[float]) -> float:

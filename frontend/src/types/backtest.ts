@@ -45,9 +45,16 @@ export interface IterationCandidate {
   component_scores: Record<string, number>;
   backtest_summary: {
     long_short_sharpe: number;
+    long_short_annual?: number;
+    top_group_sharpe?: number;
     monotonicity_score: number;
     spread: number;
     group_returns: Record<string, GroupReturn>;
+    ic_mean?: number;
+    rank_ic_mean?: number;
+    ic_ir?: number;
+    ic_win_rate?: number;
+    turnover?: number;
   };
   report_metrics: BacktestMetrics;
   report_url: string;
@@ -60,10 +67,16 @@ export interface BacktestResult {
   metrics: BacktestMetrics;
   backtest_summary: {
     long_short_sharpe: number;
+    long_short_annual?: number;
     top_group_sharpe?: number;
     monotonicity_score: number;
     spread: number;
     group_returns: Record<string, GroupReturn>;
+    ic_mean?: number;
+    rank_ic_mean?: number;
+    ic_ir?: number;
+    ic_win_rate?: number;
+    turnover?: number;
   };
   params: {
     expression: string;

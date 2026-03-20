@@ -139,9 +139,16 @@ def run_backtest(
             "metrics": report_result["metrics"],
             "backtest_summary": {
                 "long_short_sharpe": result["long_short_sharpe"],
+                "long_short_annual": result.get("long_short_annual", 0),
+                "top_group_sharpe": result.get("top_group_sharpe", 0),
                 "monotonicity_score": result["monotonicity_score"],
                 "spread": result["spread"],
                 "group_returns": result["group_returns"],
+                "ic_mean": result.get("ic_mean", 0),
+                "rank_ic_mean": result.get("rank_ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "ic_win_rate": result.get("ic_win_rate", 0),
+                "turnover": result.get("turnover", 0),
             },
             "params": {
                 "expression": expression,

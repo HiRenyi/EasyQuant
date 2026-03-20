@@ -375,6 +375,11 @@ class ExpressionParser:
                 right = self._sub_parse(expression[idx + 1:])
                 return lambda df, _l=left, _r=right, _op=op_fn: _op(_l(df), _r(df))
 
+        # Unary negation: -expr  (treat as 0 - expr)
+        if expression.startswith('-'):
+            inner = self._sub_parse(expression[1:])
+            return lambda df, _inner=inner: -_inner(df)
+
         # Strip outer parentheses
         if expression.startswith('(') and expression.endswith(')'):
             return self._sub_parse(expression[1:-1])
