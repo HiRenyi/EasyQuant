@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
-import StockRecommendations from "./StockRecommendations";
+import StockFactorPanel from "./StockFactorPanel";
 
 interface Props {
   result: BacktestResult;
@@ -66,8 +66,14 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
 
       {iterationSlot}
 
-      {result.stock_recommendations && (
-        <StockRecommendations recommendations={result.stock_recommendations} />
+      {result.stock_factor_data && (
+        <StockFactorPanel
+          data={result.stock_factor_data}
+          topGroupAnnualReturn={
+            Object.values(backtest_summary.group_returns)
+              .reduce((best, g) => g.annual_return > best ? g.annual_return : best, -Infinity)
+          }
+        />
       )}
 
       <GroupReturnsTable groupReturns={backtest_summary.group_returns} />

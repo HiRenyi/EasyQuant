@@ -619,7 +619,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "total_cost_drag": result.get("total_cost_drag", 0),
             },
             "anti_overfit": anti_overfit_result,
-            "stock_recommendations": result.get("_stock_recommendations"),
+            "stock_factor_data": result.get("_stock_factor_data"),
             "params": {
                 "expression": expression,
                 "universe": req.universe,
