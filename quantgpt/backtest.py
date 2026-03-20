@@ -124,13 +124,9 @@ def run_factor_backtest(
     rebal_data["_group"] = rebal_data["_group"].astype(int)
 
     # Build stock->group assignment that persists from rebalance to next rebalance
-    # For each stock, create a time series of group assignments
-    group_assignments = {}  # {(rebal_date, stock_code): group}
-    for _, row in rebal_data[["trade_date", "stock_code", "_group"]].iterrows():
-        group_assignments[(row["trade_date"], row["stock_code"])] = row["_group"]
+    # Vectorized: build a lookup DataFrame indexed by (trade_date, stock_code)
+    group_lookup = rebal_data.set_index(["trade_date", "stock_code"])["_group"]
 
-    # For every trading day, look up which group each stock belongs to
-    # based on the most recent rebalance date
     rebalance_dates_set = sorted(set(rebal_data["trade_date"].unique()))
     if len(rebalance_dates_set) < 2:
         raise ValueError("Not enough rebalance dates for backtest")
@@ -142,17 +138,20 @@ def run_factor_backtest(
     # → position entered at T+1 open → T+1 return is the first attributed).
     rebal_arr = np.array(rebalance_dates_set)
 
-    def _get_rebal_date(d):
-        idx = np.searchsorted(rebal_arr, d, side="left") - 1
-        return rebal_arr[idx] if idx >= 0 else None
+    # Vectorized searchsorted instead of per-row apply
+    trade_dates = work["trade_date"].values
+    indices = np.searchsorted(rebal_arr, trade_dates, side="left") - 1
+    valid_mask = indices >= 0
+    work = work[valid_mask].copy()
+    work["_rebal_date"] = rebal_arr[indices[valid_mask]]
+    work = work.dropna(subset=["daily_ret"])
 
-    work["_rebal_date"] = work["trade_date"].apply(_get_rebal_date)
-    work = work.dropna(subset=["_rebal_date", "daily_ret"])
-
-    # Look up group assignment from the rebalance date
-    work["_group"] = work.apply(
-        lambda r: group_assignments.get((r["_rebal_date"], r["stock_code"]), np.nan),
-        axis=1,
+    # Vectorized merge instead of per-row dict lookup
+    work = work.merge(
+        group_lookup.rename("_group"),
+        left_on=["_rebal_date", "stock_code"],
+        right_index=True,
+        how="left",
     )
     work = work.dropna(subset=["_group"])
     work["_group"] = work["_group"].astype(int)

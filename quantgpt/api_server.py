@@ -555,7 +555,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         # 3. Fetch data
         task["status"] = "fetching_data"
-        stock_codes = get_universe(req.universe)
+        stock_codes = get_universe(req.universe, date=req.start_date)
         fetcher = MarketDataFetcher()
         market_df = fetcher.fetch_stocks(stock_codes, req.start_date, req.end_date)
         if market_df is None or len(market_df) == 0:
@@ -882,7 +882,10 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
         task["expression"] = parent_expression
 
         # 3. Fetch market data (from cache, fast)
-        stock_codes = get_universe(parent_params.get("universe", "hs300"))
+        stock_codes = get_universe(
+            parent_params.get("universe", "hs300"),
+            date=parent_params.get("start_date", "2023-01-01"),
+        )
         fetcher = MarketDataFetcher()
         market_df = fetcher.fetch_stocks(
             stock_codes,

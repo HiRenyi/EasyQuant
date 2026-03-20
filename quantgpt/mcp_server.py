@@ -107,7 +107,7 @@ def run_backtest(
     try:
         # 1. Get stock universe
         logger.info(f"Getting universe: {universe}")
-        stock_codes = get_universe(universe)
+        stock_codes = get_universe(universe, date=start_date)
         logger.info(f"Universe {universe}: {len(stock_codes)} stocks")
 
         # 2. Fetch market data

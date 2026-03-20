@@ -4,6 +4,7 @@ export type TaskStatus =
   | "validating"
   | "fetching_data"
   | "backtesting"
+  | "analyzing"
   | "generating_report"
   | "completed"
   | "failed"

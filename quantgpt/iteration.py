@@ -252,7 +252,7 @@ def _generate_single_candidate(
     expressions_lock: threading.Lock,
     user_id: str,
     task_id: str = "",
-    max_dedup_retries: int = 2,
+    max_dedup_retries: int = 4,
 ) -> dict:
     """Generate a single iteration candidate: LLM -> validate -> backtest -> score.
 
@@ -266,8 +266,8 @@ def _generate_single_candidate(
     raw_expression = "unknown"
 
     try:
-        # Stagger concurrent calls to avoid rate limits
-        _time.sleep(iteration_index * 2)
+        # Stagger concurrent calls to reduce duplicates
+        _time.sleep(iteration_index * 3)
 
         api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
@@ -293,6 +293,8 @@ def _generate_single_candidate(
             )
 
             # 2. Call LLM with retry
+            # Increase temperature on dedup retries for more diversity
+            temp = min(0.9 + dedup_attempt * 0.3, 1.8)
             last_err = None
             for attempt in range(3):
                 try:
@@ -302,7 +304,7 @@ def _generate_single_candidate(
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
-                        temperature=0.9,
+                        temperature=temp,
                         max_tokens=256,
                         timeout=60,
                     )
@@ -351,13 +353,29 @@ def _generate_single_candidate(
         holding_period = params.get("holding_period", 5)
         result = run_factor_backtest(market_df, raw_expression, n_groups, holding_period)
 
-        # 5a. Run anti-overfit detection
+        # 5a. Run anti-overfit detection (lightweight: skip placebo in iteration)
         anti_overfit_result = None
         factor_df = result.get("_factor_df")
         if factor_df is not None and len(factor_df) > 100:
             try:
-                from .anti_overfit import run_anti_overfit
-                anti_overfit_result = run_anti_overfit(factor_df, holding_period)
+                from .anti_overfit import AntiOverfitDetector
+                detector = AntiOverfitDetector(factor_df, holding_period)
+                # Only run fast tests (IC stability + half-life), skip expensive placebo/stress
+                t1 = detector.test_ic_stability()
+                t4 = detector.test_half_life()
+                fast_passed = sum(1 for t in [t1, t4] if t.passed)
+                fast_score = fast_passed / 2 * 100
+                anti_overfit_result = {
+                    "score": fast_score,
+                    "recommendation": "推荐" if fast_score >= 75 else "谨慎" if fast_score >= 50 else "需改进",
+                    "passed_count": fast_passed,
+                    "total_count": 2,
+                    "tests": [
+                        {"name": t.name, "passed": t.passed, "details": t.details}
+                        for t in [t1, t4]
+                    ],
+                    "mode": "fast",
+                }
             except Exception as e:
                 logger.warning(f"Anti-overfit detection failed: {e}")
 

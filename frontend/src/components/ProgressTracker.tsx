@@ -6,6 +6,7 @@ const STEPS: { key: TaskStatus; label: string }[] = [
   { key: "validating", label: "验证" },
   { key: "fetching_data", label: "拉取数据" },
   { key: "backtesting", label: "回测" },
+  { key: "analyzing", label: "分析" },
   { key: "generating_report", label: "生成报告" },
   { key: "completed", label: "完成" },
 ];
@@ -16,6 +17,7 @@ const STATUS_ORDER: TaskStatus[] = [
   "validating",
   "fetching_data",
   "backtesting",
+  "analyzing",
   "generating_report",
   "completed",
 ];
