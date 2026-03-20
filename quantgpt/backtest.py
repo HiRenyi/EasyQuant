@@ -250,6 +250,48 @@ def run_factor_backtest(
             "max_drawdown": float(_calc_max_drawdown(s)),
         }
 
+    # 11. Stock recommendations — extract latest rebalance holdings
+    stock_recommendations = None
+    if len(rebalance_dates_set) > 0:
+        last_rebal = rebalance_dates_set[-1]
+        last_rebal_data = rebal_data[rebal_data["trade_date"] == last_rebal].copy()
+        if not last_rebal_data.empty:
+            # Percentile rank: high rank = better (top group direction)
+            last_rebal_data["factor_rank"] = last_rebal_data["factor_value"].rank(
+                ascending=(not flipped), pct=True
+            )
+            # Top group stocks
+            top_stocks = last_rebal_data[last_rebal_data["_group"] == top_g].copy()
+            n_top = len(top_stocks)
+            top_stocks_list = []
+            for _, row in top_stocks.sort_values("factor_rank", ascending=False).iterrows():
+                top_stocks_list.append({
+                    "stock_code": row["stock_code"],
+                    "factor_value": round(float(row["factor_value"]), 6),
+                    "factor_rank": round(float(row["factor_rank"]), 4),
+                    "weight": round(1.0 / n_top, 6) if n_top > 0 else 0,
+                })
+            # All stocks ranking
+            all_stocks_list = []
+            for _, row in last_rebal_data.sort_values("factor_rank", ascending=False).iterrows():
+                g_idx = int(row["_group"])
+                all_stocks_list.append({
+                    "stock_code": row["stock_code"],
+                    "factor_value": round(float(row["factor_value"]), 6),
+                    "factor_rank": round(float(row["factor_rank"]), 4),
+                    "group": g_idx,
+                    "group_label": f"G{g_idx + 1}",
+                })
+            stock_recommendations = {
+                "rebalance_date": str(last_rebal.date()) if hasattr(last_rebal, 'date') else str(last_rebal)[:10],
+                "top_group_label": f"G{int(top_g) + 1}",
+                "flipped": flipped,
+                "stock_count": n_top,
+                "total_stock_count": len(last_rebal_data),
+                "top_group_stocks": top_stocks_list,
+                "all_stocks_ranking": all_stocks_list,
+            }
+
     return {
         "strategy_returns": strategy_series,
         "ls_returns": ls_series,  # kept for backward compat
@@ -269,6 +311,7 @@ def run_factor_backtest(
         "cost_rate": cost_rate,
         "total_cost_drag": round(total_cost_drag, 6),
         "_factor_df": work[["trade_date", "stock_code", "factor_value", "daily_ret"]].copy(),
+        "_stock_recommendations": stock_recommendations,
     }
 
 

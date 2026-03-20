@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
+import StockRecommendations from "./StockRecommendations";
 
 interface Props {
   result: BacktestResult;
@@ -64,6 +65,10 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
       </div>
 
       {iterationSlot}
+
+      {result.stock_recommendations && (
+        <StockRecommendations recommendations={result.stock_recommendations} />
+      )}
 
       <GroupReturnsTable groupReturns={backtest_summary.group_returns} />
       <ReportViewer reportUrl={report_url} />

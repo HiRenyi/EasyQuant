@@ -63,6 +63,31 @@ export interface IterationCandidate {
   error?: string;
 }
 
+export interface StockRecommendation {
+  stock_code: string;
+  factor_value: number;
+  factor_rank: number;
+  weight: number;
+}
+
+export interface StockRanking {
+  stock_code: string;
+  factor_value: number;
+  factor_rank: number;
+  group: number;
+  group_label: string;
+}
+
+export interface StockRecommendations {
+  rebalance_date: string;
+  top_group_label: string;
+  flipped: boolean;
+  stock_count: number;
+  total_stock_count: number;
+  top_group_stocks: StockRecommendation[];
+  all_stocks_ranking: StockRanking[];
+}
+
 export interface BacktestResult {
   report_url: string;
   metrics: BacktestMetrics;
@@ -93,6 +118,7 @@ export interface BacktestResult {
     prompt: string;
     generated_expression: string;
   };
+  stock_recommendations?: StockRecommendations | null;
 }
 
 export interface Session {
