@@ -73,6 +73,7 @@ def validate_expression(expression: str) -> str:
             "volume": [100, 200, 300],
             "amount": [100, 400, 900],
             "pct_change": [0, 100, 50],
+            "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
         })
         func(dummy)
         return "OK: expression is valid"

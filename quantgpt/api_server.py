@@ -307,6 +307,25 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 - where() 条件会使因子值变成离散值（如 -1, 0, 1），可能导致分组失败，尽量避免使用
 - 优先使用连续值因子表达式（如 rank(), zscore(), ts_mean() 等），分组效果更好
 - returns 是日收益率（如 0.02 代表 2%），close 是收盘价
+- day/weekday/month 是日期特殊变量，仅在用户明确要求日历效应时使用
+
+================================================================================
+🎯 因子质量指南（非常重要）
+================================================================================
+简单单因子（如 rank(ts_delta(close, 20))）通常 Sharpe < 0.3，效果很差。
+请优先生成**多信号复合因子**，结合不同维度的信息：
+
+高质量因子设计原则：
+1. 多维度组合：结合价格动量 + 成交量 + 波动率等至少2个维度
+2. 非线性变换：使用 sign_power, tanh, sigmoid 捕捉非线性关系
+3. 多周期信号：组合短期(5日)和中期(20日)信号，捕获不同频率
+4. 截面标准化：最外层用 rank() 或 zscore() 保证因子截面可比
+5. 适度复杂度：3-6层嵌套为宜，避免过度简单也避免过度复杂
+
+避免生成以下低效因子：
+- 仅包含单一算子的简单因子：rank(close), rank(ts_delta(close, 20))
+- 仅调整窗口参数的同质因子：ts_mean(close, 5) - ts_mean(close, 20)
+- 纯离散型因子（大量使用 where 生成 -1/0/1 值）
 
 ================================================================================
 🚨 输出格式要求（必须严格遵守）🚨
@@ -490,6 +509,29 @@ def _persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_file
         logger.error(f"[{task_id}] main event loop not available for DB persist")
 
 
+# ---- Expression detection ----
+
+# Keywords that indicate factor expression syntax (not natural language)
+_EXPR_KEYWORDS = re.compile(
+    r'(?:rank|zscore|ts_mean|ts_std|ts_delta|ts_shift|ts_rank|ts_corr|ts_cov|'
+    r'ts_max|ts_min|ts_sum|ts_argmax|ts_argmin|decay_linear|product|sign_power|'
+    r'where|clip|log|abs|sign|scale|tanh|sigmoid|exp|sqrt|power)\s*\('
+)
+
+
+def _looks_like_expression(text: str) -> bool:
+    """Heuristic: does the text look like a factor expression rather than natural language?"""
+    # Contains factor function calls
+    if _EXPR_KEYWORDS.search(text):
+        return True
+    # Bare column arithmetic like "close / open" or "-1 * close"
+    cols = {'open', 'high', 'low', 'close', 'volume', 'amount', 'returns', 'vwap'}
+    tokens = re.findall(r'[a-zA-Z_]\w*', text)
+    if tokens and all(t in cols for t in tokens):
+        return True
+    return False
+
+
 # ---- Background worker ----
 
 def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
@@ -512,11 +554,29 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             task["error"] = f"日期范围不能超过 {MAX_DATE_RANGE_YEARS} 年"
             return
 
-        # 1. LLM generate expression
+        # 1. Check if user input is already a valid factor expression
         task["status"] = "generating_expression"
-        expression = _call_deepseek(req.prompt)
+        expression = None
+        user_text = req.prompt.strip()
+        if _looks_like_expression(user_text):
+            try:
+                _test_dummy = pd.DataFrame({
+                    "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
+                    "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
+                    "volume": [100, 200, 300], "amount": [100, 400, 900],
+                    "pct_change": [0, 100, 50],
+                    "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+                })
+                parse_expression(user_text)(_test_dummy)
+                expression = user_text
+                logger.info(f"[{task_id}] user input is a valid expression, using directly: {expression}")
+            except Exception:
+                pass  # Not a valid expression, fall through to LLM
+
+        if expression is None:
+            expression = _call_deepseek(req.prompt)
         task["expression"] = expression
-        logger.info(f"[{task_id}] expression generated: {expression}")
+        logger.info(f"[{task_id}] expression: {expression}")
 
         # 2. Validate expression (with fix-retry)
         task["status"] = "validating"
@@ -525,6 +585,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
             "volume": [100, 200, 300], "amount": [100, 400, 900],
             "pct_change": [0, 100, 50],
+            "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
         })
 
         # 2a. Parentheses pre-check

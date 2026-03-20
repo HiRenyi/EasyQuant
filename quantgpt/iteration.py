@@ -330,6 +330,7 @@ def _generate_single_candidate(
                     "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
                     "volume": [100, 200, 300], "amount": [100, 400, 900],
                     "pct_change": [0, 100, 50],
+                    "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
                 })
                 func = parse_expression(raw_expression)
                 func(dummy)
