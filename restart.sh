@@ -2,10 +2,10 @@
 cd "$(dirname "$0")"
 
 # Kill existing process on port 8002
-PID=$(lsof -ti :8002)
-if [ -n "$PID" ]; then
-  echo "Stopping PID $PID..."
-  kill "$PID"
+PIDS=$(lsof -ti :8002)
+if [ -n "$PIDS" ]; then
+  echo "Stopping PIDs: $(echo $PIDS | tr '\n' ' ')..."
+  echo "$PIDS" | xargs kill -9
   sleep 1
 fi
 

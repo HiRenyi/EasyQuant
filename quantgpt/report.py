@@ -65,6 +65,10 @@ def generate_report(
         rf=0.03,
         match_dates=False,
     )
+
+    # Patch QuantStats HTML: fix layout for iframe embedding
+    _patch_report_css(report_path)
+
     logger.info(f"Report saved: {report_path}")
 
     # Extract metrics
@@ -80,3 +84,32 @@ def generate_report(
     }
 
     return {"report_path": report_path, "metrics": metrics}
+
+
+_CSS_PATCH = """
+<style>
+/* QuantGPT: fix layout for iframe embedding */
+body { margin: 15px !important; }
+.container { max-width: 100% !important; display: flex; flex-wrap: wrap; gap: 0; }
+.container > h1, .container > h4, .container > hr { width: 100%; flex-shrink: 0; }
+#left { float: none !important; width: 62% !important; min-width: 0; margin-right: 0 !important; margin-top: -1.2rem; }
+#right { float: none !important; width: 36% !important; min-width: 280px; }
+#left svg { width: 100% !important; height: auto !important; }
+@media (max-width: 700px) {
+    #left, #right { width: 100% !important; }
+}
+</style>
+"""
+
+
+def _patch_report_css(report_path: str) -> None:
+    """Inject responsive CSS into QuantStats HTML report for iframe display."""
+    try:
+        path = Path(report_path)
+        html = path.read_text(encoding="utf-8")
+        # Insert our CSS right before </head>
+        if "</head>" in html:
+            html = html.replace("</head>", _CSS_PATCH + "</head>", 1)
+            path.write_text(html, encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to patch report CSS: {e}")

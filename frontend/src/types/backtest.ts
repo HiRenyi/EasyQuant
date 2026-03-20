@@ -6,7 +6,9 @@ export type TaskStatus =
   | "backtesting"
   | "generating_report"
   | "completed"
-  | "failed";
+  | "failed"
+  | "iterating"
+  | "iteration_completed";
 
 export interface BacktestRequest {
   prompt: string;
@@ -36,11 +38,29 @@ export interface GroupReturn {
   max_drawdown: number;
 }
 
+export interface IterationCandidate {
+  expression: string;
+  score: number;
+  grade: "A" | "B" | "C" | "D";
+  component_scores: Record<string, number>;
+  backtest_summary: {
+    long_short_sharpe: number;
+    monotonicity_score: number;
+    spread: number;
+    group_returns: Record<string, GroupReturn>;
+  };
+  report_metrics: BacktestMetrics;
+  report_url: string;
+  status: "success" | "failed";
+  error?: string;
+}
+
 export interface BacktestResult {
   report_url: string;
   metrics: BacktestMetrics;
   backtest_summary: {
     long_short_sharpe: number;
+    top_group_sharpe?: number;
     monotonicity_score: number;
     spread: number;
     group_returns: Record<string, GroupReturn>;
@@ -61,11 +81,25 @@ export interface BacktestResult {
   };
 }
 
+export interface Session {
+  id: string;
+  name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export interface Task {
   task_id: string;
   status: TaskStatus;
+  session_id?: string;
   params?: BacktestRequest;
   expression?: string;
   error?: string;
   result?: BacktestResult;
+  task_type?: "backtest" | "iteration";
+  parent_task_id?: string;
+  candidates?: IterationCandidate[];
+  candidates_done?: number;
+  candidates_total?: number;
+  selected_candidate_index?: number;
 }

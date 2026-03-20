@@ -22,7 +22,7 @@ Supported operations:
 - ts_sum(col, N)      : rolling sum over N periods
 - ts_shift(col, N)    : shift values by N periods (positive=lag, negative=lead)
 - ts_delta(col, N)    : N-period change
-- ts_rank(col, N)     : rolling rank
+- ts_rank(col, N)     : rolling percentile rank (returns 0~1, e.g. 0.8 means top 80%)
 - ts_argmax(col, N)   : position of max in rolling window
 - ts_argmin(col, N)   : position of min in rolling window
 - ts_corr(col1, col2, N) : rolling correlation
@@ -37,6 +37,8 @@ Supported operations:
 - where(cond, t, f)   : conditional selection (t if cond else f)
 - indneutralize(col, industry) : industry neutralization (placeholder)
 - Arithmetic: +, -, *, /, ^
+- Comparison: >, <, >=, <=, ==, !=
+- Logical: and, or, &, |
 
 Special variables:
 - vwap                : volume-weighted average price
@@ -69,7 +71,7 @@ class ExpressionParser:
     """Parse factor expressions into callable functions."""
 
     MAX_WINDOW = 500
-    MAX_DEPTH = 20
+    MAX_DEPTH = 40
     MAX_EXPRESSION_LENGTH = 1000
 
     # Pattern: func_name(args)
@@ -321,6 +323,28 @@ class ExpressionParser:
                 return lambda df, _t=true_val_fn, _c=condition_fn, _f=false_val_fn: (
                     _t(df).where(_c(df) > 0, _f(df))
                 )
+
+        # Try logical operators (lowest precedence, evaluated first during parsing)
+        for op_str, op_fn in [
+            (' or ', lambda a, b: ((a.astype(bool)) | (b.astype(bool))).astype(float)),
+            (' and ', lambda a, b: ((a.astype(bool)) & (b.astype(bool))).astype(float)),
+        ]:
+            idx = self._find_keyword(expression, op_str)
+            if idx is not None:
+                left = self._sub_parse(expression[:idx])
+                right = self._sub_parse(expression[idx + len(op_str):])
+                return lambda df, _l=left, _r=right, _op=op_fn: _op(_l(df), _r(df))
+
+        # Try bitwise logical operators (& and |, same semantics as and/or for conditions)
+        for op_str, op_fn in [
+            ('|', lambda a, b: ((a.astype(bool)) | (b.astype(bool))).astype(float)),
+            ('&', lambda a, b: ((a.astype(bool)) & (b.astype(bool))).astype(float)),
+        ]:
+            idx = self._find_operator(expression, op_str)
+            if idx is not None:
+                left = self._sub_parse(expression[:idx])
+                right = self._sub_parse(expression[idx + len(op_str):])
+                return lambda df, _l=left, _r=right, _op=op_fn: _op(_l(df), _r(df))
 
         # Try comparison operators
         for op_str, op_fn in [

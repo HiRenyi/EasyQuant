@@ -84,8 +84,8 @@ def validate_expression(expression: str) -> str:
 def run_backtest(
     expression: str,
     universe: str = "hs300",
-    start_date: str = "2022-01-01",
-    end_date: str = "2024-12-31",
+    start_date: str = "2023-01-01",
+    end_date: str = "2025-12-31",
     n_groups: int = 5,
     holding_period: int = 5,
     benchmark: str = "hs300",

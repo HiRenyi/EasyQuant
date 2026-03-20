@@ -13,6 +13,13 @@ build/
 # Data & reports (generated)
 data/
 reports/
+feedback/
+
+# Deploy (contains secrets)
+deploy/
+
+# Alembic config (contains DB URL)
+alembic.ini
 
 # Frontend
 frontend/node_modules/
