@@ -36,8 +36,8 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard label="总收益" value={pct(metrics.total_return)} color={metrics.total_return >= 0 ? "green" : "red"} />
-        <MetricCard label="年化收益" value={pct(metrics.cagr)} color={metrics.cagr >= 0 ? "green" : "red"} />
+        <MetricCard label="总收益" value={pct(metrics.total_return)} color={metrics.total_return >= 0 ? "green" : "red"} sub={metrics.benchmark_total_return != null ? pct(metrics.benchmark_total_return) : undefined} />
+        <MetricCard label="年化收益" value={pct(metrics.cagr)} color={metrics.cagr >= 0 ? "green" : "red"} sub={metrics.benchmark_cagr != null ? pct(metrics.benchmark_cagr) : undefined} />
         <MetricCard label="Sharpe" value={num(metrics.sharpe)} color={metrics.sharpe >= 1 ? "green" : "default"} />
         <MetricCard label="Sortino" value={num(metrics.sortino)} />
         <MetricCard label="最大回撤" value={pct(metrics.max_drawdown)} color="red" />
@@ -45,13 +45,6 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
         <MetricCard label="胜率" value={pct(metrics.win_rate)} />
         <MetricCard label="盈亏比" value={num(metrics.profit_factor)} />
       </div>
-
-      {metrics.benchmark_total_return != null && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MetricCard label="基准总收益" value={pct(metrics.benchmark_total_return)} color={metrics.benchmark_total_return >= 0 ? "green" : "red"} />
-          <MetricCard label="基准年化" value={pct(metrics.benchmark_cagr ?? 0)} color={(metrics.benchmark_cagr ?? 0) >= 0 ? "green" : "red"} />
-        </div>
-      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="多头 Sharpe" value={num(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe)} color={(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe) >= 1 ? "green" : "default"} />

@@ -55,6 +55,7 @@ export interface Overview {
   unresolved_feedback_count: number;
   status_distribution: { name: string; value: number }[];
   daily_tasks: { date: string; count: number }[];
+  user_trend: { date: string; new_users: number; total_users: number }[];
 }
 
 export async function fetchOverview(): Promise<Overview> {

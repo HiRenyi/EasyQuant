@@ -45,6 +45,9 @@ Special variables:
 - adv{N}              : N-day average daily volume (e.g., adv20)
 - returns             : daily returns
 - cap                 : market capitalization
+- day                 : day of month (1-31)
+- weekday             : day of week (0=Monday, 4=Friday)
+- month               : month (1-12)
 
 Operator aliases (for Alpha101 compatibility):
 - delta(col, N)       : alias for ts_delta
@@ -93,6 +96,9 @@ class ExpressionParser:
         'vwap': lambda df: (df['close'] * df['volume']).rolling(1).sum() / df['volume'].rolling(1).sum(),
         'returns': lambda df: df['close'].pct_change(),
         'cap': lambda df: df.get('market_cap', df['close'] * df.get('shares', 1)),  # fallback if no market_cap
+        'day': lambda df: pd.Series(df['trade_date'].dt.day, index=df.index, dtype=float),
+        'weekday': lambda df: pd.Series(df['trade_date'].dt.weekday, index=df.index, dtype=float),  # 0=Mon, 4=Fri
+        'month': lambda df: pd.Series(df['trade_date'].dt.month, index=df.index, dtype=float),
     }
 
     # Supported unary functions (column -> Series)

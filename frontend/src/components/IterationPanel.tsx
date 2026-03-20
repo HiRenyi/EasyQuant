@@ -180,6 +180,7 @@ export default function IterationPanel({
         >
           重试
         </button>
+        <p className="mt-2 text-xs text-red-400">如果问题持续出现，欢迎点击右下角「反馈」按钮告诉我们，我们会尽快修复。</p>
       </div>
     );
   }

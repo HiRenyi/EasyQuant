@@ -94,6 +94,34 @@ async def admin_overview(db: AsyncSession = Depends(get_db)):
         key = d.strftime("%m-%d")
         daily_tasks.append({"date": key, "count": daily_map.get(key, 0)})
 
+    # Daily new user registrations for last 30 days (for user trend chart)
+    thirty_days_ago = (now - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_user_q = await db.execute(
+        select(
+            func.date_trunc("day", User.created_at).label("day"),
+            func.count(User.id),
+        )
+        .where(User.created_at >= thirty_days_ago)
+        .group_by("day")
+        .order_by("day")
+    )
+    daily_user_map = {row[0].strftime("%m-%d"): row[1] for row in daily_user_q.all()}
+
+    # Cumulative user count before the 30-day window
+    base_user_q = await db.execute(
+        select(func.count(User.id)).where(User.created_at < thirty_days_ago)
+    )
+    base_user_count = base_user_q.scalar() or 0
+
+    user_trend = []
+    cumulative = base_user_count
+    for i in range(30):
+        d = thirty_days_ago + timedelta(days=i)
+        key = d.strftime("%m-%d")
+        new_users = daily_user_map.get(key, 0)
+        cumulative += new_users
+        user_trend.append({"date": key, "new_users": new_users, "total_users": cumulative})
+
     return {
         "user_count": user_count,
         "task_count": task_count,
@@ -103,6 +131,7 @@ async def admin_overview(db: AsyncSession = Depends(get_db)):
         "unresolved_feedback_count": unresolved_count,
         "status_distribution": status_distribution,
         "daily_tasks": daily_tasks,
+        "user_trend": user_trend,
     }
 
 

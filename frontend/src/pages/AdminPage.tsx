@@ -20,6 +20,7 @@ import {
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Bar, Legend, Line, ComposedChart,
 } from "recharts";
 import {
   fetchOverview,
@@ -242,6 +243,70 @@ function OverviewTab() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* User trend chart */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-medium text-gray-700 mb-4">用户增长趋势（近 30 天）</h3>
+        {data.user_trend && data.user_trend.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={data.user_trend}>
+              <defs>
+                <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                interval={Math.floor(data.user_trend.length / 8)}
+              />
+              <YAxis
+                yAxisId="left"
+                allowDecimals={false}
+                tick={{ fontSize: 12, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                width={35}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                allowDecimals={false}
+                tick={{ fontSize: 12, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                width={35}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}
+                formatter={(v, name) => [
+                  String(v),
+                  name === "new_users" ? "新增用户" : "累计用户",
+                ]}
+              />
+              <Legend
+                formatter={(value: string) => (value === "new_users" ? "新增用户" : "累计用户")}
+                wrapperStyle={{ fontSize: 12 }}
+              />
+              <Bar yAxisId="left" dataKey="new_users" fill="url(#barGrad)" radius={[3, 3, 0, 0]} barSize={14} />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="total_users"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="text-gray-400 text-sm text-center py-8">暂无数据</div>
+        )}
       </div>
     </div>
   );
