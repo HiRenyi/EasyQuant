@@ -15,8 +15,8 @@ data/
 reports/
 feedback/
 
-# Deploy (contains secrets)
-deploy/
+# Deploy (secrets)
+deploy/.env.*
 
 # Alembic config (contains DB URL)
 alembic.ini
