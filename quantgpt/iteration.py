@@ -18,6 +18,7 @@ import pandas as pd
 
 from .backtest import run_factor_backtest
 from .expression_parser import parse_expression
+from .mutation_engine import MutationEngine
 from .report import generate_report
 
 logger = logging.getLogger(__name__)
@@ -25,11 +26,13 @@ logger = logging.getLogger(__name__)
 
 # ---- Factor scoring ----
 
-def compute_factor_score(backtest_summary: dict, report_metrics: dict) -> dict:
+def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_overfit_score: float | None = None) -> dict:
     """Compute a composite 0-100 score for a factor backtest result.
 
-    Weights:
+    Weights (without anti_overfit):
         Sharpe 25%, monotonicity 20%, spread 15%, CAGR 15%, max_drawdown 15%, win_rate 10%
+    Weights (with anti_overfit):
+        Sharpe 22.5%, monotonicity 18%, spread 13.5%, CAGR 13.5%, max_drawdown 13.5%, win_rate 9%, anti_overfit 10%
     """
 
     def _clamp(v: float, lo: float, hi: float) -> float:
@@ -70,14 +73,28 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict) -> dict:
         "win_rate": round(wr_score, 1),
     }
 
-    score = (
-        sharpe_score * 0.25
-        + mono_score * 0.20
-        + spread_score * 0.15
-        + cagr_score * 0.15
-        + dd_score * 0.15
-        + wr_score * 0.10
-    )
+    if anti_overfit_score is not None:
+        ao_clamped = _clamp(anti_overfit_score, 0, 100)
+        components["anti_overfit"] = round(ao_clamped, 1)
+        # Re-weight: reduce each original weight by 10% proportionally, add 10% for anti_overfit
+        score = (
+            sharpe_score * 0.225
+            + mono_score * 0.18
+            + spread_score * 0.135
+            + cagr_score * 0.135
+            + dd_score * 0.135
+            + wr_score * 0.09
+            + ao_clamped * 0.10
+        )
+    else:
+        score = (
+            sharpe_score * 0.25
+            + mono_score * 0.20
+            + spread_score * 0.15
+            + cagr_score * 0.15
+            + dd_score * 0.15
+            + wr_score * 0.10
+        )
     score = round(_clamp(score, 0, 100), 1)
 
     if score >= 80:
@@ -154,71 +171,54 @@ def build_iterate_prompt(
     iteration_index: int,
     previous_expressions: list[str],
     task_id: str = "",
+    anti_overfit: dict | None = None,
 ) -> tuple[str, str]:
     """Build system and user prompts for iteration LLM call.
+
+    Uses MutationEngine for targeted diagnosis when available,
+    falls back to score-based heuristics.
 
     Returns:
         (system_prompt, user_prompt)
     """
     from .api_server import _FACTOR_OPERATORS
 
-    # System prompt
-    system_parts = [
-        "你是一个量化因子表达式优化专家。基于当前因子的回测结果，生成一个改进的因子表达式。",
-        "",
-        _FACTOR_OPERATORS,
-        "",
-        _DIVERSITY_GUIDE,
-        "",
-        _OUTPUT_FORMAT_RULES,
-    ]
-    system_prompt = "\n".join(system_parts)
+    # Try mutation engine for targeted prompts
+    engine = MutationEngine(
+        expression=expression,
+        metrics=metrics,
+        score=score,
+        anti_overfit=anti_overfit,
+    )
+    diagnosis = engine.diagnose_failure()
+    system_prompt, user_prompt = engine.build_mutation_prompt(operators_doc=_FACTOR_OPERATORS)
 
-    # User prompt — dynamic based on score
-    user_parts = []
+    # Append diversity guide and anti-repeat to user prompt
+    user_parts = [user_prompt]
 
-    # 1. Current expression + metrics feedback
-    backtest_summary = metrics.get("backtest_summary", {})
-    report_metrics = metrics.get("report_metrics", {})
-    user_parts.append(f"当前因子表达式: {expression}")
-    user_parts.append(f"综合评分: {score}/100 (等级: {grade})")
-    user_parts.append(f"Sharpe: {report_metrics.get('sharpe', 'N/A')}")
-    user_parts.append(f"单调性: {backtest_summary.get('monotonicity_score', 'N/A')}")
-    user_parts.append(f"多空价差: {backtest_summary.get('spread', 'N/A')}")
-    user_parts.append(f"年化收益(CAGR): {report_metrics.get('cagr', 'N/A')}")
-    user_parts.append(f"最大回撤: {report_metrics.get('max_drawdown', 'N/A')}")
-    user_parts.append(f"胜率: {report_metrics.get('win_rate', 'N/A')}")
-    user_parts.append("")
-
-    # 2. Strategy guidance based on score
-    if score < 20:
-        user_parts.append("## 策略指导：探索模式")
-        user_parts.append("当前因子表现很差，请完全换一个因子类型和信号来源。不要基于当前表达式做微调。")
-    elif score < 40:
-        user_parts.append("## 策略指导：大幅改进")
-        user_parts.append("当前因子表现不佳，请换信号类别（如从动量换到量价相关），大幅调整窗口参数，或引入非线性变换。")
-    elif score < 60:
-        user_parts.append("## 策略指导：精细调整")
-        user_parts.append("当前因子有一定效果，请在保留核心信号的基础上：加入非线性放大（sign_power/tanh）、引入交互项、调整窗口参数。")
-    else:
-        user_parts.append("## 策略指导：微调优化")
-        user_parts.append("当前因子表现不错，请在保留整体结构的前提下做精细优化：微调窗口、添加辅助信号、尝试轻微的非线性变换。")
-    user_parts.append("")
-
-    # 3. Category examples (rotated)
+    # Category examples (rotated)
     selected = _select_categories(task_id, iteration_index, n=5)
+    user_parts.append("")
     user_parts.append("## 参考因子类别示例（可选方向）")
     for name, example in selected:
         user_parts.append(f"- {name}: {example}")
-    user_parts.append("")
 
-    # 4. Anti-repeat
+    # Anti-repeat
     if previous_expressions:
+        user_parts.append("")
         user_parts.append("## 禁止重复（以下表达式已使用，不能再用或仅微调参数）")
         for expr in previous_expressions:
             user_parts.append(f"- {expr}")
-        user_parts.append("")
 
+    # Anti-overfit feedback
+    if anti_overfit:
+        user_parts.append("")
+        user_parts.append(f"## 反过拟合检测结果: {anti_overfit.get('recommendation', 'N/A')} (得分: {anti_overfit.get('score', 'N/A')})")
+        for test in anti_overfit.get("tests", []):
+            status = "✓" if test.get("passed") else "✗"
+            user_parts.append(f"  {status} {test.get('name', '')}")
+
+    user_parts.append("")
     user_parts.append("请生成一个改进的因子表达式：")
     user_prompt = "\n".join(user_parts)
 
@@ -351,6 +351,16 @@ def _generate_single_candidate(
         holding_period = params.get("holding_period", 5)
         result = run_factor_backtest(market_df, raw_expression, n_groups, holding_period)
 
+        # 5a. Run anti-overfit detection
+        anti_overfit_result = None
+        factor_df = result.get("_factor_df")
+        if factor_df is not None and len(factor_df) > 100:
+            try:
+                from .anti_overfit import run_anti_overfit
+                anti_overfit_result = run_anti_overfit(factor_df, holding_period)
+            except Exception as e:
+                logger.warning(f"Anti-overfit detection failed: {e}")
+
         # 6. Generate report
         from .market_data import fetch_benchmark_returns
         bm_returns = None
@@ -375,6 +385,7 @@ def _generate_single_candidate(
         report_filename = Path(report_result["report_path"]).name
 
         # 7. Score
+        ao_score_val = anti_overfit_result.get("score") if anti_overfit_result else None
         scoring = compute_factor_score(
             backtest_summary={
                 "long_short_sharpe": result["long_short_sharpe"],
@@ -382,6 +393,7 @@ def _generate_single_candidate(
                 "spread": result["spread"],
             },
             report_metrics=report_result["metrics"],
+            anti_overfit_score=ao_score_val,
         )
 
         return {
@@ -402,7 +414,11 @@ def _generate_single_candidate(
                 "ic_ir": result.get("ic_ir", 0),
                 "ic_win_rate": result.get("ic_win_rate", 0),
                 "turnover": result.get("turnover", 0),
+                "cost_adjusted": result.get("cost_adjusted", False),
+                "cost_rate": result.get("cost_rate", 0),
+                "total_cost_drag": result.get("total_cost_drag", 0),
             },
+            "anti_overfit": anti_overfit_result,
             "report_metrics": report_result["metrics"],
             "report_url": f"/api/v1/reports/{report_filename}",
             "report_filename": report_filename,

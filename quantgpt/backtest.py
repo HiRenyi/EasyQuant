@@ -23,6 +23,7 @@ def run_factor_backtest(
     expression: str,
     n_groups: int = 5,
     holding_period: int = 5,
+    cost_rate: float = 0.003,
 ) -> Dict:
     """Run quantile group backtest on a factor expression (long-only).
 
@@ -38,10 +39,11 @@ def run_factor_backtest(
         expression: Factor expression string.
         n_groups: Number of quantile groups.
         holding_period: Days between rebalances.
+        cost_rate: Single rebalance cost rate (default 0.3% = commission + stamp tax + slippage).
 
     Returns:
         Dict with keys: strategy_returns (daily Series), group_returns,
-        top_group_sharpe, monotonicity_score, spread.
+        top_group_sharpe, monotonicity_score, spread, cost_adjusted, etc.
     """
     # 1. Parse expression
     factor_func = parse_expression(expression)
@@ -166,6 +168,28 @@ def run_factor_backtest(
     )
 
     actual_groups = sorted(daily_group_ret.columns)
+
+    # 6a. Transaction cost deduction
+    cost_adjusted = False
+    total_cost_drag = 0.0
+    if cost_rate > 0:
+        per_group_turnover = _calc_per_group_turnover(work, rebalance_dates_set, len(actual_groups))
+        # For each group, on the first trading day after each rebalance, deduct turnover * cost_rate
+        for g in actual_groups:
+            if g not in per_group_turnover or per_group_turnover[g].empty:
+                continue
+            for rebal_date, turnover_val in per_group_turnover[g].items():
+                if turnover_val <= 0:
+                    continue
+                cost = turnover_val * cost_rate
+                # Find the first trading day AFTER rebal_date in daily_group_ret
+                future_dates = daily_group_ret.index[daily_group_ret.index > rebal_date]
+                if len(future_dates) > 0:
+                    first_day = future_dates[0]
+                    daily_group_ret.loc[first_day, g] -= cost
+                    total_cost_drag += cost
+        cost_adjusted = True
+
     top_g = actual_groups[-1]
     bot_g = actual_groups[0]
 
@@ -242,6 +266,10 @@ def run_factor_backtest(
         "ic_ir": ic_ir,
         "ic_win_rate": ic_win_rate,
         "turnover": turnover,
+        "cost_adjusted": cost_adjusted,
+        "cost_rate": cost_rate,
+        "total_cost_drag": round(total_cost_drag, 6),
+        "_factor_df": work[["trade_date", "stock_code", "factor_value", "daily_ret"]].copy(),
     }
 
 
@@ -343,3 +371,37 @@ def _calc_monotonicity(group_means: List[float]) -> float:
     ranks = list(range(len(group_means)))
     corr, _ = sp_stats.spearmanr(ranks, group_means)
     return abs(corr) if not np.isnan(corr) else 0.0
+
+
+def _calc_per_group_turnover(
+    work: pd.DataFrame,
+    rebalance_dates: list,
+    n_groups: int,
+) -> Dict[int, pd.Series]:
+    """Calculate turnover per group on each rebalance date.
+
+    Returns:
+        Dict mapping group_id -> Series indexed by rebalance_date with turnover values.
+    """
+    # Build holdings per (rebal_date, group)
+    holdings: Dict[tuple, set] = {}
+    for d in rebalance_dates:
+        for g in range(n_groups):
+            day_data = work[(work["_rebal_date"] == d) & (work["_group"] == g)]
+            holdings[(d, g)] = set(day_data["stock_code"].unique())
+
+    sorted_dates = sorted(set(d for d, _ in holdings.keys()))
+    result = {}
+    for g in range(n_groups):
+        turnovers = {}
+        for i in range(1, len(sorted_dates)):
+            prev = holdings.get((sorted_dates[i - 1], g), set())
+            curr = holdings.get((sorted_dates[i], g), set())
+            if len(prev) == 0 and len(curr) == 0:
+                turnovers[sorted_dates[i]] = 0.0
+                continue
+            union = prev | curr
+            changed = len(prev.symmetric_difference(curr))
+            turnovers[sorted_dates[i]] = changed / len(union) if len(union) > 0 else 0.0
+        result[g] = pd.Series(turnovers, dtype=float)
+    return result

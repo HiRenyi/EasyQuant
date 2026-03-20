@@ -68,7 +68,7 @@ MAX_SSE_CONNECTIONS = int(os.environ.get("QUANTGPT_MAX_SSE", "50"))
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("QUANTGPT_RATE_LIMIT", "10"))
 MAX_PROMPT_LENGTH = int(os.environ.get("QUANTGPT_MAX_PROMPT_LEN", "500"))
 MAX_REPORT_FILES = int(os.environ.get("QUANTGPT_MAX_REPORTS", "200"))
-MAX_DATE_RANGE_YEARS = 5
+MAX_DATE_RANGE_YEARS = 10
 VALID_UNIVERSES = {"small_scale", "hs300", "csi500"}
 VALID_BENCHMARKS = {"hs300", "zz500", "sz50"}
 
@@ -567,6 +567,17 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         task["status"] = "backtesting"
         result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period)
 
+        # 4a. Anti-overfit analysis
+        anti_overfit_result = None
+        factor_df = result.get("_factor_df")
+        if factor_df is not None and len(factor_df) > 100:
+            task["status"] = "analyzing"
+            try:
+                from .anti_overfit import run_anti_overfit
+                anti_overfit_result = run_anti_overfit(factor_df, req.holding_period)
+            except Exception as e:
+                logger.warning(f"[{task_id}] anti-overfit analysis failed: {e}")
+
         # 5. Generate report (into user-specific directory)
         task["status"] = "generating_report"
         bm_returns = None
@@ -603,7 +614,11 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "ic_ir": result.get("ic_ir", 0),
                 "ic_win_rate": result.get("ic_win_rate", 0),
                 "turnover": result.get("turnover", 0),
+                "cost_adjusted": result.get("cost_adjusted", False),
+                "cost_rate": result.get("cost_rate", 0),
+                "total_cost_drag": result.get("total_cost_drag", 0),
             },
+            "anti_overfit": anti_overfit_result,
             "params": {
                 "expression": expression,
                 "universe": req.universe,
@@ -836,6 +851,7 @@ async def stream_task(task_id: str, request: Request):
 
 class IterateRequest(BaseModel):
     n_candidates: int = Field(5, ge=1, le=10, description="候选因子数量")
+    run_rolling_validation: bool = Field(False, description="是否运行滚动验证")
 
 
 def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candidates: int):

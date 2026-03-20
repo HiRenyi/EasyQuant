@@ -3,6 +3,7 @@
 import os
 import time
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from pathlib import Path
@@ -11,6 +12,9 @@ import pandas as pd
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Global lock for baostock — it only supports one session per process
+_bs_lock = threading.Lock()
 
 try:
     import baostock as bs
@@ -39,12 +43,27 @@ UNIVERSES = {
 
 
 def _baostock_login():
-    """Login to baostock, return True on success."""
+    """Login to baostock, return True on success. Retries on network errors."""
     if not HAS_BAOSTOCK:
         raise RuntimeError("baostock is not installed")
-    lg = bs.login()
-    if lg.error_code != "0":
-        raise RuntimeError(f"baostock login failed: {lg.error_msg}")
+    for attempt in range(3):
+        try:
+            lg = bs.login()
+            if lg.error_code == "0":
+                return True
+            if attempt < 2:
+                logger.warning(f"baostock login attempt {attempt+1} failed: {lg.error_msg}, retrying...")
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise RuntimeError(f"baostock login failed: {lg.error_msg}")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            if attempt < 2:
+                logger.warning(f"baostock login attempt {attempt+1} error: {e}, retrying...")
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise RuntimeError(f"baostock login error: {e}")
     return True
 
 
@@ -72,21 +91,22 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
 def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
     """Fetch index constituents from baostock."""
     date = date or datetime.now().strftime("%Y-%m-%d")
-    _baostock_login()
-    try:
-        if name == "hs300":
-            rs = bs.query_hs300_stocks(date)
-        else:  # csi500 / zz500
-            rs = bs.query_zz500_stocks(date)
+    with _bs_lock:
+        _baostock_login()
+        try:
+            if name == "hs300":
+                rs = bs.query_hs300_stocks(date)
+            else:  # csi500 / zz500
+                rs = bs.query_zz500_stocks(date)
 
-        codes = []
-        while rs.error_code == "0" and rs.next():
-            row = rs.get_row_data()
-            codes.append(row[1])  # code column
-        logger.info(f"Fetched {len(codes)} constituents for {name}")
-        return codes
-    finally:
-        _baostock_logout()
+            codes = []
+            while rs.error_code == "0" and rs.next():
+                row = rs.get_row_data()
+                codes.append(row[1])  # code column
+            logger.info(f"Fetched {len(codes)} constituents for {name}")
+            return codes
+        finally:
+            _baostock_logout()
 
 
 # --- PLACEHOLDER_FETCHER ---
@@ -187,33 +207,39 @@ class MarketDataFetcher:
         all_data: List[pd.DataFrame] = []
         to_fetch: List[str] = []
 
+        req_start, req_end = pd.Timestamp(start_date), pd.Timestamp(end_date)
+
         for code in stock_codes:
             cached = self._load_cache(code)
             if cached is not None and len(cached) > 0:
-                req_start, req_end = pd.Timestamp(start_date), pd.Timestamp(end_date)
-                filtered = cached[(cached["trade_date"] >= req_start) & (cached["trade_date"] <= req_end)]
-                if len(filtered) > 0:
-                    all_data.append(filtered)
-                    continue
+                cache_min = cached["trade_date"].min()
+                cache_max = cached["trade_date"].max()
+                # Only use cache if it covers the full requested range
+                # Allow 5-day tolerance for weekends/holidays at boundaries
+                if cache_min <= req_start + pd.Timedelta(days=5) and cache_max >= req_end - pd.Timedelta(days=5):
+                    filtered = cached[(cached["trade_date"] >= req_start) & (cached["trade_date"] <= req_end)]
+                    if len(filtered) > 0:
+                        all_data.append(filtered)
+                        continue
             to_fetch.append(code)
 
         if to_fetch:
             logger.info(f"Fetching {len(to_fetch)} stocks from baostock...")
-            _baostock_login()
-            try:
-                for code in to_fetch:
-                    df = self._fetch_remote(code, start_date, end_date, already_logged_in=True)
-                    if df is not None and len(df) > 0:
-                        existing = self._load_cache(code)
-                        if existing is not None:
-                            df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
-                        self._save_cache(code, df)
-                        req_start, req_end = pd.Timestamp(start_date), pd.Timestamp(end_date)
-                        filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
-                        if len(filtered) > 0:
-                            all_data.append(filtered)
-            finally:
-                _baostock_logout()
+            with _bs_lock:
+                _baostock_login()
+                try:
+                    for code in to_fetch:
+                        df = self._fetch_remote(code, start_date, end_date, already_logged_in=True)
+                        if df is not None and len(df) > 0:
+                            existing = self._load_cache(code)
+                            if existing is not None:
+                                df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                            self._save_cache(code, df)
+                            filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
+                            if len(filtered) > 0:
+                                all_data.append(filtered)
+                finally:
+                    _baostock_logout()
 
         if all_data:
             result = pd.concat(all_data, ignore_index=True)
@@ -255,14 +281,20 @@ def fetch_benchmark_returns(
             df = pd.read_parquet(cache_path)
             df["trade_date"] = pd.to_datetime(df["trade_date"])
             df = df.sort_values("trade_date")
-            ret = df.set_index("trade_date")["daily_return"].dropna()
-            ret.name = info["name"]
-            if start_date:
-                ret = ret[ret.index >= pd.Timestamp(start_date)]
-            if end_date:
-                ret = ret[ret.index <= pd.Timestamp(end_date)]
-            if len(ret) > 10:
-                return ret
+            cache_min = df["trade_date"].min()
+            cache_max = df["trade_date"].max()
+            req_s = pd.Timestamp(start_date) if start_date else cache_min
+            req_e = pd.Timestamp(end_date) if end_date else cache_max
+            # Only use cache if it covers the full requested range
+            if cache_min <= req_s + pd.Timedelta(days=5) and cache_max >= req_e - pd.Timedelta(days=5):
+                ret = df.set_index("trade_date")["daily_return"].dropna()
+                ret.name = info["name"]
+                if start_date:
+                    ret = ret[ret.index >= pd.Timestamp(start_date)]
+                if end_date:
+                    ret = ret[ret.index <= pd.Timestamp(end_date)]
+                if len(ret) > 10:
+                    return ret
         except Exception:
             pass
 
@@ -270,29 +302,30 @@ def fetch_benchmark_returns(
     start_date = start_date or (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
     end_date = end_date or datetime.now().strftime("%Y-%m-%d")
 
-    _baostock_login()
-    try:
-        rs = bs.query_history_k_data_plus(
-            code,
-            "date,close",
-            start_date=start_date,
-            end_date=end_date,
-            frequency="d",
-            adjustflag="2",
-        )
-        rows = []
-        while rs.error_code == "0" and rs.next():
-            rows.append(rs.get_row_data())
-        if not rows:
-            return None
-        df = pd.DataFrame(rows, columns=rs.fields)
-        df["trade_date"] = pd.to_datetime(df["date"])
-        df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        df = df.sort_values("trade_date")
-        df["daily_return"] = df["close"].pct_change()
-        df[["trade_date", "close", "daily_return"]].to_parquet(cache_path, index=False)
-        ret = df.set_index("trade_date")["daily_return"].dropna()
-        ret.name = info["name"]
-        return ret
-    finally:
-        _baostock_logout()
+    with _bs_lock:
+        _baostock_login()
+        try:
+            rs = bs.query_history_k_data_plus(
+                code,
+                "date,close",
+                start_date=start_date,
+                end_date=end_date,
+                frequency="d",
+                adjustflag="2",
+            )
+            rows = []
+            while rs.error_code == "0" and rs.next():
+                rows.append(rs.get_row_data())
+            if not rows:
+                return None
+            df = pd.DataFrame(rows, columns=rs.fields)
+            df["trade_date"] = pd.to_datetime(df["date"])
+            df["close"] = pd.to_numeric(df["close"], errors="coerce")
+            df = df.sort_values("trade_date")
+            df["daily_return"] = df["close"].pct_change()
+            df[["trade_date", "close", "daily_return"]].to_parquet(cache_path, index=False)
+            ret = df.set_index("trade_date")["daily_return"].dropna()
+            ret.name = info["name"]
+            return ret
+        finally:
+            _baostock_logout()

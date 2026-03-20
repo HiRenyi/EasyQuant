@@ -120,6 +120,16 @@ def run_backtest(
         logger.info(f"Running backtest: {expression}")
         result = run_factor_backtest(market_df, expression, n_groups, holding_period)
 
+        # 3a. Anti-overfit analysis
+        anti_overfit_result = None
+        factor_df = result.get("_factor_df")
+        if factor_df is not None and len(factor_df) > 100:
+            try:
+                from .anti_overfit import run_anti_overfit
+                anti_overfit_result = run_anti_overfit(factor_df, holding_period)
+            except Exception as e:
+                logger.warning(f"Anti-overfit analysis failed: {e}")
+
         # 4. Fetch benchmark & generate report
         bm_returns = None
         try:
@@ -149,7 +159,11 @@ def run_backtest(
                 "ic_ir": result.get("ic_ir", 0),
                 "ic_win_rate": result.get("ic_win_rate", 0),
                 "turnover": result.get("turnover", 0),
+                "cost_adjusted": result.get("cost_adjusted", False),
+                "cost_rate": result.get("cost_rate", 0),
+                "total_cost_drag": result.get("total_cost_drag", 0),
             },
+            "anti_overfit": anti_overfit_result,
             "params": {
                 "expression": expression,
                 "universe": universe,
