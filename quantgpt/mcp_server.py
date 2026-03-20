@@ -50,6 +50,18 @@ def validate_expression(expression: str) -> str:
     import pandas as pd
     import numpy as np
 
+    # Parentheses balance pre-check
+    depth = 0
+    for i, ch in enumerate(expression):
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth < 0:
+                return f"ERROR: 括号不平衡：位置 {i} 处多余的右括号 ')'"
+    if depth > 0:
+        return f"ERROR: 括号不平衡：缺少 {depth} 个右括号 ')'"
+
     try:
         func = parse_expression(expression)
         # Quick smoke test on a tiny dummy DataFrame

@@ -198,37 +198,120 @@ class AutoBacktestRequest(BaseModel):
 
 # ---- LLM: DeepSeek (OpenAI-compatible) ----
 
-_OPERATORS_DOC = """
-一元函数: rank, zscore, sign, log, abs, scale, tanh, sigmoid, exp, sqrt
-时序函数: ts_mean, ts_std, ts_max, ts_min, ts_sum, ts_shift, ts_delta, ts_rank, ts_argmax, ts_argmin, decay_linear, product
-双列时序: ts_corr(col1, col2, N), ts_cov(col1, col2, N)
-二元函数: power, max, min
-条件函数: clip(expr, lo, hi), where(cond, t, f)
-算术运算: +, -, *, /, ^
-可用列名: open, high, low, close, volume, amount, pct_change
-特殊变量: vwap, returns, adv{N}
-别名: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
+_FACTOR_OPERATORS = """
+================================================================================
+Factor Expression Syntax (Alpha101+ Extended)
+================================================================================
+
+SUPPORTED OPERATORS:
+
+Cross-sectional: rank(expr), zscore(expr), sign(expr), log(expr), abs(expr), scale(expr)
+Time-series: ts_mean(col,N), ts_std(col,N), ts_sum(col,N), ts_max(col,N), ts_min(col,N),
+  ts_shift(col,N), ts_delta(col,N), ts_rank(col,N), ts_argmax(col,N), ts_argmin(col,N),
+  decay_linear(col,N), product(col,N)
+Dual-column: ts_corr(col1,col2,N), ts_cov(col1,col2,N)
+Nonlinear: power(base,exp), sign_power(base,exp), tanh(expr), sigmoid(expr), exp(expr), sqrt(expr)
+Conditional: max(a,b), min(a,b), where(cond,true_val,false_val), clip(expr,lower,upper)
+Arithmetic: +, -, *, /, ^ (power)
+Columns: open, high, low, close, volume, amount, pct_change
+Special vars: vwap, adv{N} (e.g. adv20), returns, cap
+Aliases: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
+
+================================================================================
+SYNTAX RULES:
+================================================================================
+RULE #1: 每个时序函数需要正确的参数个数
+  ts_mean(col, N) — 2 个参数    ts_corr(col1, col2, N) — 3 个参数
+  where(cond, true_val, false_val) — 3 个参数
+  ✗ ts_shift(expr < 30, 1, ...) ← 错误，ts_shift 只接受 2 个参数
+
+RULE #2: 括号必须严格平衡
+  ✓ rank(close / ts_mean(close, 20))
+  ✗ rank(close / ts_mean(close, 20) ← 缺少右括号
+
+RULE #3: 使用非线性变换捕捉市场动态
+  ✓ power(rank(volume/adv20), 2)
+  ✓ sign_power(ts_corr(close, volume, 20), 0.5)
+  ✓ log(1 + abs(ts_delta(close, 20)/close)) * sign(ts_delta(close, 20))
+
+RULE #4: 组合多种信号类型
+  ✓ rank(ts_corr(close, volume, 20)) * rank(ts_delta(close, 10)/close)
+
+================================================================================
+EXAMPLES:
+================================================================================
+动量: rank(close/ts_mean(close, 20))
+反转: rank(-1 * ts_delta(close, 5) / ts_shift(close, 5))
+波动率: ts_std(close/ts_shift(close, 1) - 1, 20)
+量价相关: rank(ts_corr(close, volume, 10))
+成交量异动: rank(volume/ts_mean(volume, 10))
+非线性动量: sign_power(ts_delta(close, 20)/close, 0.5) * rank(volume/adv20)
+条件因子: rank(where(ts_rank(volume,20) > 0.7, ts_delta(close,10)/close, 0)) * rank(volume/adv20)
+衰减加权: decay_linear(rank(ts_corr(vwap, volume, 10)), 5)
+复合因子: sign_power(rank(volume/adv20), 2) * rank((close-vwap)/close) * rank(ts_std(returns,20))
+裁剪因子: rank(clip(ts_corr(close, volume, 20), -0.5, 0.5)) * sign_power(ts_delta(close,20)/close, 0.5)
+================================================================================
 """
+
+_OPERATORS_DOC = _FACTOR_OPERATORS  # backward compat alias
 
 _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自然语言描述想要的因子，你需要生成一个合法的因子表达式。
 
-可用算子:
 {operators}
 
-规则:
-1. 只输出一个因子表达式，不要任何解释、markdown 或代码块
-2. 表达式必须可直接被解析器执行
-3. 可用列名: open, high, low, close, volume, amount, pct_change
-4. 特殊变量: vwap, returns, adv{{N}}
-5. 如果用户描述模糊，选择最常见的实现方式
+================================================================================
+🚨 输出格式要求（必须严格遵守）🚨
+================================================================================
+只返回一个因子表达式，不要任何解释、分析或推理过程。
+不要使用 markdown 代码块、反引号或引号包裹。
+不要以"根据分析"、"我将"、"改进的因子"等开头。
 
-示例:
-- "动量因子" → rank(close/ts_mean(close, 20))
-- "成交量异动" → rank(volume/ts_mean(volume, 10))
-- "波动率因子" → ts_std(close/ts_shift(close, 1) - 1, 20)
-- "反转因子" → rank(-1 * ts_delta(close, 5) / ts_shift(close, 5))
-- "量价相关性" → rank(ts_corr(close, volume, 10))
+✅ 正确（你的完整回复）:
+rank(volume / ts_mean(volume, 20))
+
+❌ 错误（会导致执行失败）:
+根据分析，我建议使用反转因子：
+rank((close - ts_mean(close, 60)) / ts_std(close, 60))
+
+你的回复必须是恰好一行可执行的因子表达式，不要任何其他内容。
+================================================================================
 """
+
+
+def _clean_expression(raw: str) -> str:
+    """Clean LLM response to extract pure factor expression."""
+    text = raw.strip()
+    # Remove markdown code blocks
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    text = text.strip("`").strip()
+    # If multi-line, extract last line containing factor operators
+    if "\n" in text:
+        factor_ops = ["rank(", "ts_mean(", "ts_std(", "ts_delta(", "ts_shift(",
+                       "ts_corr(", "where(", "sign_power(", "power(", "decay_linear(",
+                       "log(", "abs(", "zscore(", "close", "volume"]
+        for line in reversed(text.split("\n")):
+            line = line.strip()
+            if any(op in line for op in factor_ops):
+                return line
+    return text
+
+
+def _validate_parentheses(expr: str) -> str | None:
+    """Check if parentheses are balanced. Returns error message or None."""
+    depth = 0
+    for i, ch in enumerate(expr):
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth < 0:
+                return f"括号不平衡：位置 {i} 处多余的右括号 ')'"
+    if depth > 0:
+        return f"括号不平衡：缺少 {depth} 个右括号 ')'"
+    return None
 
 
 def _call_deepseek(prompt: str) -> str:
@@ -242,7 +325,7 @@ def _call_deepseek(prompt: str) -> str:
     model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
     client = OpenAI(api_key=api_key, base_url=base_url)
-    operators_doc = _expr_module_doc or _OPERATORS_DOC
+    operators_doc = _expr_module_doc or _FACTOR_OPERATORS
     system = _SYSTEM_PROMPT.format(operators=operators_doc)
 
     resp = client.chat.completions.create(
@@ -255,12 +338,45 @@ def _call_deepseek(prompt: str) -> str:
         max_tokens=256,
         timeout=30,
     )
-    expression = resp.choices[0].message.content.strip()
-    if expression.startswith("```"):
-        expression = expression.split("\n", 1)[-1]
-    if expression.endswith("```"):
-        expression = expression.rsplit("```", 1)[0]
-    return expression.strip()
+    return _clean_expression(resp.choices[0].message.content)
+
+
+def _call_fix_expression(expression: str, error: str, prompt: str) -> str:
+    """Call LLM to fix a broken factor expression."""
+    from openai import OpenAI
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY environment variable is not set")
+    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    operators_doc = _expr_module_doc or _FACTOR_OPERATORS
+
+    system = (
+        "你是一个因子表达式修复助手。\n\n"
+        f"{operators_doc}\n\n"
+        "修复下面的表达式。只返回修正后的表达式，不要任何解释、代码块或引号。"
+    )
+    user = (
+        f"用户需求: {prompt}\n\n"
+        f"以下因子表达式执行失败:\n"
+        f"`{expression}`\n\n"
+        f"错误信息:\n{error}"
+    )
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.1,
+        max_tokens=256,
+        timeout=30,
+    )
+    return _clean_expression(resp.choices[0].message.content)
 
 
 # ---- Background worker ----
@@ -287,23 +403,42 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest):
         task["status"] = "generating_expression"
         expression = _call_deepseek(req.prompt)
         task["expression"] = expression
-        logger.info(f"[{task_id}] expression generated")
+        logger.info(f"[{task_id}] expression generated: {expression}")
 
-        # 2. Validate expression
+        # 2. Validate expression (with fix-retry)
         task["status"] = "validating"
+        dummy = pd.DataFrame({
+            "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
+            "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
+            "volume": [100, 200, 300], "amount": [100, 400, 900],
+            "pct_change": [0, 100, 50],
+        })
+
+        # 2a. Parentheses pre-check
+        paren_err = _validate_parentheses(expression)
+        if paren_err:
+            logger.warning(f"[{task_id}] parentheses error, attempting fix: {paren_err}")
+            expression = _call_fix_expression(expression, paren_err, req.prompt)
+            task["expression"] = expression
+
+        # 2b. Parse & smoke-test
         try:
             func = parse_expression(expression)
-            dummy = pd.DataFrame({
-                "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
-                "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
-                "volume": [100, 200, 300], "amount": [100, 400, 900],
-                "pct_change": [0, 100, 50],
-            })
             func(dummy)
-        except Exception:
-            task["status"] = "failed"
-            task["error"] = "生成的因子表达式无效，请换一种描述方式重试"
-            return
+        except Exception as e:
+            # Attempt LLM fix (once)
+            logger.warning(f"[{task_id}] validation failed, attempting fix: {e}")
+            try:
+                fixed = _call_fix_expression(expression, str(e), req.prompt)
+                func = parse_expression(fixed)
+                func(dummy)
+                expression = fixed
+                task["expression"] = expression
+                logger.info(f"[{task_id}] expression fixed: {expression}")
+            except Exception as e2:
+                task["status"] = "failed"
+                task["error"] = f"因子表达式无效: {e2}"
+                return
 
         # 3. Fetch data
         task["status"] = "fetching_data"
