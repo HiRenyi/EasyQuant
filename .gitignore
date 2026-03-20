@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.env.*
+
+# Data & reports (generated)
+data/
+reports/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+logs/
+
+# MCP config (local paths)
+.mcp.json
+
+# Build cache
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
