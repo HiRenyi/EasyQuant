@@ -260,10 +260,10 @@ def run_factor_backtest(
             last_rebal_data["factor_rank"] = last_rebal_data["factor_value"].rank(
                 ascending=(not flipped), pct=True
             )
-            # Per-stock cumulative return over the backtest period
+            # Per-stock cumulative return over the backtest period (vectorized)
             period_ret_by_stock = (
                 work.groupby("stock_code")["daily_ret"]
-                .apply(lambda s: float((1 + s).prod() - 1))
+                .agg(lambda s: float((1 + s).prod() - 1))
             )
             stocks_list = []
             for _, row in last_rebal_data.sort_values("factor_rank", ascending=False).iterrows():
@@ -340,10 +340,14 @@ def _calc_ic_series(
     # Compute forward N-day return per stock
     # For day T: fwd_ret = ret[T+1] + ret[T+2] + ... + ret[T+holding_period]
     work = work.copy()
-    work["fwd_ret"] = (
-        work.groupby("stock_code")["daily_ret"]
-        .transform(lambda s: s.shift(-1).rolling(holding_period, min_periods=holding_period).sum().shift(-(holding_period - 1)))
-    )
+    work = work.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
+    shifted = work.groupby("stock_code")["daily_ret"].shift(-1)
+    rolled = shifted.groupby(work["stock_code"]).rolling(
+        holding_period, min_periods=holding_period
+    ).sum()
+    # rolling produces MultiIndex (stock_code, orig_index), extract orig_index level
+    rolled = rolled.droplevel(0)
+    work["fwd_ret"] = rolled.groupby(work["stock_code"]).shift(-(holding_period - 1))
 
     valid = work.dropna(subset=["factor_value", "fwd_ret"])
     if valid.empty:
@@ -352,20 +356,31 @@ def _calc_ic_series(
     def _pearson(g):
         if len(g) < 5:
             return np.nan
-        if g["factor_value"].nunique() < 2 or g["fwd_ret"].nunique() < 2:
+        fv = g["factor_value"]
+        fr = g["fwd_ret"]
+        if fv.nunique() < 2 or fr.nunique() < 2:
             return np.nan
-        return g["factor_value"].corr(g["fwd_ret"])
+        return fv.corr(fr)
 
     def _spearman(g):
         if len(g) < 5:
             return np.nan
-        if g["factor_value"].nunique() < 2 or g["fwd_ret"].nunique() < 2:
+        fv = g["factor_value"]
+        fr = g["fwd_ret"]
+        if fv.nunique() < 2 or fr.nunique() < 2:
             return np.nan
-        corr, _ = sp_stats.spearmanr(g["factor_value"], g["fwd_ret"])
+        corr, _ = sp_stats.spearmanr(fv.values, fr.values)
         return corr if not np.isnan(corr) else 0.0
 
-    ic_series = valid.groupby("trade_date").apply(_pearson).dropna()
-    rank_ic_series = valid.groupby("trade_date").apply(_spearman).dropna()
+    # Subsample dates for large datasets to avoid O(N*M) slowness
+    all_ic_dates = sorted(valid["trade_date"].unique())
+    if len(all_ic_dates) > 300:
+        step = max(1, len(all_ic_dates) // 300)
+        sampled_dates = set(all_ic_dates[::step])
+        valid = valid[valid["trade_date"].isin(sampled_dates)]
+
+    ic_series = valid.groupby("trade_date")[["factor_value", "fwd_ret"]].apply(_pearson).dropna()
+    rank_ic_series = valid.groupby("trade_date")[["factor_value", "fwd_ret"]].apply(_spearman).dropna()
     return ic_series, rank_ic_series
 
 
