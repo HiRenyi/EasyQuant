@@ -46,6 +46,13 @@ export default function ResultsDashboard({ result, iterationSlot }: Props) {
         <MetricCard label="盈亏比" value={num(metrics.profit_factor)} />
       </div>
 
+      {metrics.benchmark_total_return != null && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MetricCard label="基准总收益" value={pct(metrics.benchmark_total_return)} color={metrics.benchmark_total_return >= 0 ? "green" : "red"} />
+          <MetricCard label="基准年化" value={pct(metrics.benchmark_cagr ?? 0)} color={(metrics.benchmark_cagr ?? 0) >= 0 ? "green" : "red"} />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="多头 Sharpe" value={num(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe)} color={(backtest_summary.top_group_sharpe ?? backtest_summary.long_short_sharpe) >= 1 ? "green" : "default"} />
         <MetricCard label="多空年化" value={pct(backtest_summary.long_short_annual ?? 0)} color={(backtest_summary.long_short_annual ?? 0) >= 0 ? "green" : "red"} />

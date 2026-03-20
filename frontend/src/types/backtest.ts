@@ -30,6 +30,8 @@ export interface BacktestMetrics {
   volatility: number;
   win_rate: number;
   profit_factor: number;
+  benchmark_total_return?: number | null;
+  benchmark_cagr?: number | null;
 }
 
 export interface GroupReturn {

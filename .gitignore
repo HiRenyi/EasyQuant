@@ -34,6 +34,9 @@ logs/
 # Build cache
 *.tsbuildinfo
 
+# Marketing (local only)
+marketing/
+
 # IDE
 .vscode/
 .idea/

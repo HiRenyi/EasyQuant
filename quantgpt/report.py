@@ -83,6 +83,10 @@ def generate_report(
         "profit_factor": float(qs.stats.profit_factor(returns)),
     }
 
+    if benchmark_returns is not None:
+        metrics["benchmark_total_return"] = float(qs.stats.comp(benchmark_returns))
+        metrics["benchmark_cagr"] = float(qs.stats.cagr(benchmark_returns))
+
     return {"report_path": report_path, "metrics": metrics}
 
 
