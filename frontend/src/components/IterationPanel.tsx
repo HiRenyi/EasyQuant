@@ -75,7 +75,7 @@ function CandidateRow({
             {candidate.grade}
           </span>
         </td>
-        <td className="px-3 py-2 text-center text-sm">{num(candidate.backtest_summary.long_short_sharpe)}</td>
+        <td className="px-3 py-2 text-center text-sm">{num(candidate.report_metrics.sharpe)}</td>
         <td className="px-3 py-2 text-center text-sm">{num(candidate.backtest_summary.monotonicity_score)}</td>
         <td className="px-3 py-2 text-center">
           <button

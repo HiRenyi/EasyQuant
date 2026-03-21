@@ -1,10 +1,14 @@
 """FastMCP server for factor backtesting.
 
-Provides 4 tools for Agent-driven backtest workflow:
+Provides tools for Agent-driven backtest workflow:
 - list_operators: Show available factor expression operators
 - list_universes: Show available stock universes
 - validate_expression: Check expression syntax
 - run_backtest: Execute full backtest pipeline
+- score_factor: Compute composite factor quality score
+- diagnose_factor: Diagnose factor issues and suggest mutations
+- run_anti_overfit: Run anti-overfit detection
+- run_rolling_validation: Walk-forward rolling validation
 """
 
 import json
@@ -23,7 +27,7 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("quantgpt", instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。")
+mcp = FastMCP("quantgpt", instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。可用 score_factor 评分、diagnose_factor 诊断、run_anti_overfit 检测过拟合、run_rolling_validation 滚动验证。")
 
 
 @mcp.tool()
@@ -48,9 +52,7 @@ def list_universes() -> str:
 def validate_expression(expression: str) -> str:
     """验证因子表达式语法是否正确。返回 OK 或错误信息。"""
     import pandas as pd
-    import numpy as np
 
-    # Parentheses balance pre-check
     depth = 0
     for i, ch in enumerate(expression):
         if ch == '(':
@@ -64,7 +66,6 @@ def validate_expression(expression: str) -> str:
 
     try:
         func = parse_expression(expression)
-        # Quick smoke test on a tiny dummy DataFrame
         dummy = pd.DataFrame({
             "open": [1.0, 2.0, 3.0],
             "high": [1.1, 2.1, 3.1],
@@ -91,47 +92,43 @@ def run_backtest(
     holding_period: int = 5,
     benchmark: str = "hs300",
 ) -> str:
-    """执行因子回测，生成 QuantStats HTML 报告。
+    """执行因子回测,生成 QuantStats HTML 报告。
 
     Args:
-        expression: 因子表达式，如 "rank(close/ts_mean(close, 20))"
+        expression: 因子表达式,如 "rank(close/ts_mean(close, 20))"
         universe: 股票池名称 (small_scale / hs300 / csi500)
         start_date: 回测起始日期 YYYY-MM-DD
         end_date: 回测结束日期 YYYY-MM-DD
         n_groups: 分组数量
-        holding_period: 持仓周期（交易日）
+        holding_period: 持仓周期(交易日)
         benchmark: 基准指数 (hs300 / zz500 / sz50)
 
     Returns:
-        JSON string with report_path, metrics, group_returns.
+        JSON string with report_path, metrics, group_returns, anti_overfit.
     """
     try:
-        # 1. Get stock universe
         logger.info(f"Getting universe: {universe}")
         stock_codes = get_universe(universe, date=start_date)
         logger.info(f"Universe {universe}: {len(stock_codes)} stocks")
 
-        # 2. Fetch market data
         fetcher = MarketDataFetcher()
         market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available. Check date range and stock codes."})
 
-        # 3. Run backtest
         logger.info(f"Running backtest: {expression}")
         result = run_factor_backtest(market_df, expression, n_groups, holding_period)
 
-        # 3a. Anti-overfit analysis
+        # Anti-overfit analysis
         anti_overfit_result = None
         factor_df = result.get("_factor_df")
         if factor_df is not None and len(factor_df) > 100:
             try:
-                from .anti_overfit import run_anti_overfit
-                anti_overfit_result = run_anti_overfit(factor_df, holding_period)
+                from .anti_overfit import run_anti_overfit as _run_ao
+                anti_overfit_result = _run_ao(factor_df, holding_period)
             except Exception as e:
                 logger.warning(f"Anti-overfit analysis failed: {e}")
 
-        # 4. Fetch benchmark & generate report
         bm_returns = None
         try:
             bm_returns = fetch_benchmark_returns(benchmark, start_date, end_date)
@@ -144,7 +141,6 @@ def run_backtest(
             title=f"Factor: {expression}",
         )
 
-        # 5. Build response
         output = {
             "report_path": report_result["report_path"],
             "metrics": report_result["metrics"],
@@ -180,6 +176,232 @@ def run_backtest(
 
     except Exception as e:
         logger.error(f"Backtest failed: {traceback.format_exc()}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def score_factor(
+    expression: str,
+    universe: str = "hs300",
+    start_date: str = "2023-01-01",
+    end_date: str = "2025-12-31",
+    n_groups: int = 5,
+    holding_period: int = 5,
+    benchmark: str = "hs300",
+) -> str:
+    """执行因子回测并返回综合评分(0-100)和等级(A/B/C/D)。
+
+    比 run_backtest 更轻量,不生成 HTML 报告,专注评分。
+
+    Args:
+        expression: 因子表达式
+        universe: 股票池 (small_scale / hs300 / csi500)
+        start_date: 起始日期 YYYY-MM-DD
+        end_date: 结束日期 YYYY-MM-DD
+        n_groups: 分组数量
+        holding_period: 持仓周期(交易日)
+        benchmark: 基准指数 (hs300 / zz500 / sz50)
+
+    Returns:
+        JSON with score, grade, component_scores, key metrics.
+    """
+    from .iteration import compute_factor_score
+
+    try:
+        stock_codes = get_universe(universe, date=start_date)
+        fetcher = MarketDataFetcher()
+        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        if market_df is None or len(market_df) == 0:
+            return json.dumps({"error": "No market data available."})
+
+        result = run_factor_backtest(market_df, expression, n_groups, holding_period)
+
+        bm_returns = None
+        try:
+            bm_returns = fetch_benchmark_returns(benchmark, start_date, end_date)
+        except Exception:
+            pass
+
+        report_result = generate_report(
+            result["strategy_returns"],
+            benchmark_returns=bm_returns,
+            title="Factor Score",
+        )
+
+        scoring = compute_factor_score(
+            backtest_summary={
+                "long_short_sharpe": result["long_short_sharpe"],
+                "monotonicity_score": result["monotonicity_score"],
+                "spread": result["spread"],
+            },
+            report_metrics=report_result["metrics"],
+        )
+
+        output = {
+            "score": scoring["score"],
+            "grade": scoring["grade"],
+            "component_scores": scoring["component_scores"],
+            "key_metrics": {
+                "ic_mean": result.get("ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "monotonicity": result["monotonicity_score"],
+                "top_group_sharpe": result.get("top_group_sharpe", 0),
+                "turnover": result.get("turnover", 0),
+                "sharpe": report_result["metrics"].get("sharpe", 0),
+                "max_drawdown": report_result["metrics"].get("max_drawdown", 0),
+            },
+        }
+        return json.dumps(output, ensure_ascii=False, indent=2, default=str)
+
+    except Exception as e:
+        logger.error(f"Score failed: {traceback.format_exc()}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def diagnose_factor(
+    expression: str,
+    ic_mean: float = 0.0,
+    ic_ir: float = 0.0,
+    monotonicity_score: float = 0.0,
+    score: float = 50.0,
+) -> str:
+    """诊断因子问题并推荐突变策略。
+
+    根据因子的 IC/IR/单调性/评分,判断失败模式(IC为零、IC为负、嵌套过深等),
+    返回推荐的改进策略和定向 LLM 提示词。
+
+    Args:
+        expression: 当前因子表达式
+        ic_mean: IC 均值
+        ic_ir: IC 信息比率
+        monotonicity_score: 分组单调性 (0-1)
+        score: 综合评分 (0-100)
+
+    Returns:
+        JSON with diagnosis strategy, reason, and suggested mutation prompt.
+    """
+    from .mutation_engine import MutationEngine
+
+    try:
+        engine = MutationEngine(
+            expression=expression,
+            metrics={
+                "backtest_summary": {
+                    "ic_mean": ic_mean,
+                    "ic_ir": ic_ir,
+                    "monotonicity_score": monotonicity_score,
+                },
+                "report_metrics": {},
+            },
+            score=score,
+        )
+        diagnosis = engine.diagnose_failure()
+        sys_prompt, user_prompt = engine.build_mutation_prompt()
+
+        output = {
+            "strategy": diagnosis.strategy.value,
+            "reason": diagnosis.reason,
+            "details": diagnosis.details,
+            "mutation_prompt": {
+                "system": sys_prompt[:500] + "..." if len(sys_prompt) > 500 else sys_prompt,
+                "user": user_prompt,
+            },
+        }
+        return json.dumps(output, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        logger.error(f"Diagnose failed: {traceback.format_exc()}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def run_anti_overfit(
+    expression: str,
+    universe: str = "hs300",
+    start_date: str = "2023-01-01",
+    end_date: str = "2025-12-31",
+    holding_period: int = 5,
+) -> str:
+    """对因子执行反过拟合检测(4项测试)。
+
+    测试项: IC稳定性、子样本压力、安慰剂检验、半衰期估计。
+    返回总分(0-100)和各测试通过情况。
+
+    Args:
+        expression: 因子表达式
+        universe: 股票池 (small_scale / hs300 / csi500)
+        start_date: 起始日期 YYYY-MM-DD
+        end_date: 结束日期 YYYY-MM-DD
+        holding_period: 持仓周期(交易日)
+
+    Returns:
+        JSON with score, recommendation, and per-test details.
+    """
+    from .anti_overfit import run_anti_overfit as _run_ao
+
+    try:
+        stock_codes = get_universe(universe, date=start_date)
+        fetcher = MarketDataFetcher()
+        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        if market_df is None or len(market_df) == 0:
+            return json.dumps({"error": "No market data available."})
+
+        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
+        factor_df = result.get("_factor_df")
+        if factor_df is None or len(factor_df) < 100:
+            return json.dumps({"error": "Insufficient factor data for anti-overfit analysis."})
+
+        ao_result = _run_ao(factor_df, holding_period)
+        return json.dumps(ao_result, ensure_ascii=False, indent=2, default=str)
+
+    except Exception as e:
+        logger.error(f"Anti-overfit failed: {traceback.format_exc()}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def run_rolling_validation(
+    expression: str,
+    universe: str = "hs300",
+    start_date: str = "2020-01-01",
+    end_date: str = "2025-12-31",
+    holding_period: int = 5,
+) -> str:
+    """对因子执行滚动验证(Walk-Forward)。
+
+    将数据切分为多个 训练/验证/测试 窗口(默认 3年/1年/1年,步长3个月),
+    计算每个窗口的 IC/IR,评估因子在样本外的衰减情况。
+
+    Args:
+        expression: 因子表达式
+        universe: 股票池 (small_scale / hs300 / csi500)
+        start_date: 起始日期(建议≥5年数据)
+        end_date: 结束日期
+        holding_period: 持仓周期(交易日)
+
+    Returns:
+        JSON with composite score, per-window results, decay analysis.
+    """
+    from .rolling_validator import run_rolling_validation as _run_rv
+
+    try:
+        stock_codes = get_universe(universe, date=start_date)
+        fetcher = MarketDataFetcher()
+        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        if market_df is None or len(market_df) == 0:
+            return json.dumps({"error": "No market data available."})
+
+        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
+        factor_df = result.get("_factor_df")
+        if factor_df is None or len(factor_df) < 100:
+            return json.dumps({"error": "Insufficient factor data for rolling validation."})
+
+        rv_result = _run_rv(factor_df, holding_period)
+        return json.dumps(rv_result, ensure_ascii=False, indent=2, default=str)
+
+    except Exception as e:
+        logger.error(f"Rolling validation failed: {traceback.format_exc()}")
         return json.dumps({"error": str(e)})
 
 
