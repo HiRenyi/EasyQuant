@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import type { Task } from "./types/backtest";
 import { useBacktest } from "./hooks/useBacktest";
 import { useTaskHistory } from "./hooks/useTaskHistory";
@@ -12,12 +12,20 @@ import IterationPanel from "./components/IterationPanel";
 import FeedbackButton from "./components/FeedbackButton";
 import FactorLibrary from "./components/FactorLibrary";
 import { Star, MessageSquare } from "lucide-react";
-import { saveFactor } from "./api/factorLibrary";
+import { saveFactor, fetchFactors } from "./api/factorLibrary";
 
 export default function App() {
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savedExpressions, setSavedExpressions] = useState<Set<string>>(new Set());
+
+  // Load saved expressions on mount
+  useEffect(() => {
+    fetchFactors().then((factors) => {
+      setSavedExpressions(new Set(factors.map((f) => f.expression)));
+    }).catch(() => {});
+  }, [factorLibKey]);
 
   const {
     sessions,
@@ -72,24 +80,32 @@ export default function App() {
 
   const handleSaveFactor = useCallback(async () => {
     if (!activeTask?.result || saving) return;
+    const expr = activeTask.result.params.expression;
+    if (savedExpressions.has(expr)) return;
     setSaving(true);
     try {
       await saveFactor({
         task_id: activeTask.task_id,
-        expression: activeTask.result.params.expression,
+        expression: expr,
         metrics: activeTask.result.metrics as unknown as Record<string, unknown>,
         backtest_summary: activeTask.result.backtest_summary as unknown as Record<string, unknown>,
         params: activeTask.result.params as unknown as Record<string, unknown>,
         report_url: activeTask.result.report_url,
       });
+      setSavedExpressions((prev) => new Set(prev).add(expr));
       setFactorLibKey((k) => k + 1);
       setSidebarTab("factors");
     } catch (e) {
-      alert("收藏失败: " + (e instanceof Error ? e.message : "未知错误"));
+      const msg = e instanceof Error ? e.message : "未知错误";
+      if (msg.includes("已收藏")) {
+        setSavedExpressions((prev) => new Set(prev).add(expr));
+      } else {
+        alert("收藏失败: " + msg);
+      }
     } finally {
       setSaving(false);
     }
-  }, [activeTask, saving]);
+  }, [activeTask, saving, savedExpressions]);
 
   const showProgress =
     activeTask &&
@@ -126,6 +142,7 @@ export default function App() {
               result={activeTask.result}
               onSaveFactor={handleSaveFactor}
               isSaving={saving}
+              isSaved={savedExpressions.has(activeTask.result.params.expression)}
               iterationSlot={
                 <IterationPanel
                   parentTaskId={activeTask.task_id}

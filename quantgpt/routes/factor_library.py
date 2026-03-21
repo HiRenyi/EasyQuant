@@ -55,6 +55,16 @@ async def save_factor(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # 防重复：同一用户同一表达式不允许重复收藏
+    existing = await db.execute(
+        select(SavedFactor).where(
+            SavedFactor.user_id == user.id,
+            SavedFactor.expression == req.expression,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="该因子已收藏")
+
     factor = SavedFactor(
         id=uuid.uuid4(),
         user_id=user.id,

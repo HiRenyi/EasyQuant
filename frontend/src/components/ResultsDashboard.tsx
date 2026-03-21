@@ -11,6 +11,7 @@ interface Props {
   iterationSlot?: ReactNode;
   onSaveFactor?: () => void;
   isSaving?: boolean;
+  isSaved?: boolean;
 }
 
 function pct(n: number): string {
@@ -21,7 +22,7 @@ function num(n: number): string {
   return n.toFixed(4);
 }
 
-export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving }: Props) {
+export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved }: Props) {
   const { metrics, backtest_summary, report_url, params } = result;
 
   return (
@@ -32,11 +33,15 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
           {onSaveFactor && (
             <button
               onClick={onSaveFactor}
-              disabled={isSaving}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors disabled:opacity-50"
+              disabled={isSaving || isSaved}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                isSaved
+                  ? "text-amber-600 bg-amber-50 cursor-default"
+                  : "text-amber-700 bg-amber-50 hover:bg-amber-100"
+              }`}
             >
-              <Star className="h-3.5 w-3.5" />
-              {isSaving ? "保存中..." : "收藏因子"}
+              <Star className={`h-3.5 w-3.5 ${isSaved ? "fill-amber-400" : ""}`} />
+              {isSaved ? "已收藏" : isSaving ? "保存中..." : "收藏因子"}
             </button>
           )}
           <span className="text-xs text-gray-400">
