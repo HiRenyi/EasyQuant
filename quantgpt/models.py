@@ -23,6 +23,7 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=True)  # bcrypt, NULL=未设置密码
     nickname = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

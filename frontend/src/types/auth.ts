@@ -2,6 +2,7 @@ export interface User {
   id: string;
   email: string;
   nickname: string | null;
+  has_password: boolean;
   created_at: string;
 }
 

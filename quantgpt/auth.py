@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -123,3 +124,13 @@ async def require_admin(request: Request) -> bool:
     if payload.get("type") != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return True
+
+
+def hash_password(plain: str) -> str:
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a password against a bcrypt hash."""
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))

@@ -8,8 +8,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   accessToken: string | null;
+  showSetPassword: boolean;
+  setShowSetPassword: (v: boolean) => void;
   login: (accessToken: string, refreshToken: string, user: User) => void;
   logout: () => void;
+  updateUser: (u: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -21,12 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSetPassword, setShowSetPassword] = useState(false);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     setAccessToken(null);
     setUser(null);
+    setShowSetPassword(false);
   }, []);
 
   const login = useCallback((access: string, refresh: string, u: User) => {
@@ -34,6 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(REFRESH_KEY, refresh);
     setAccessToken(access);
     setUser(u);
+    // If user has no password, prompt to set one
+    if (!u.has_password) {
+      setShowSetPassword(true);
+    }
+  }, []);
+
+  const updateUser = useCallback((partial: Partial<User>) => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : prev));
   }, []);
 
   // On mount: check stored token
@@ -76,8 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         accessToken,
+        showSetPassword,
+        setShowSetPassword,
         login,
         logout,
+        updateUser,
       }}
     >
       {children}
