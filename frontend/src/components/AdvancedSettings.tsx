@@ -47,7 +47,7 @@ export default function AdvancedSettings({ values, onChange }: Props) {
                 <option value="hs300">沪深300</option>
                 <option value="csi500">中证500</option>
                 <option value="csi1000">中证1000</option>
-                <option value="full_a">全A (最多2000只)</option>
+                <option value="full_a">全A</option>
               </select>
             </label>
             <label className="block">

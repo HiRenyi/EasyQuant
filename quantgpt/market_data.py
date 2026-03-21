@@ -150,23 +150,15 @@ def _fetch_csi1000(date: Optional[str] = None) -> List[str]:
     result = remaining[:1000]
     logger.info(f"CSI1000 derived: {len(result)} stocks (all_a={len(all_stocks)}, excluded={len(exclude)})")
 
-    cache_path.write_text("\n".join(result))
+    if len(result) > 100:
+        cache_path.write_text("\n".join(result))
     return result
 
 
 def _fetch_full_a(date: Optional[str] = None) -> List[str]:
-    """Fetch all tradable A-share stock codes.
-
-    Limits to 2000 stocks to keep backtest memory/time manageable.
-    """
+    """Fetch all tradable A-share stock codes."""
     date = date or datetime.now().strftime("%Y-%m-%d")
     all_codes = _fetch_all_stock_codes(date)
-
-    MAX_FULL_A = 2000
-    if len(all_codes) > MAX_FULL_A:
-        logger.warning(f"Full A has {len(all_codes)} stocks, limiting to {MAX_FULL_A}")
-        all_codes = all_codes[:MAX_FULL_A]
-
     return all_codes
 
 
@@ -187,25 +179,31 @@ def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
     with _bs_lock:
         _baostock_login()
         try:
-            rs = bs.query_all_stock(day=date)
-            codes = []
-            while rs.error_code == "0" and rs.next():
-                row = rs.get_row_data()
-                code = row[0]  # code column
-                trade_status = row[1] if len(row) > 1 else "1"
-                # Filter: only sh/sz, skip indices (000xxx with sh prefix), skip ST-like
-                if not (code.startswith("sh.") or code.startswith("sz.")):
-                    continue
-                # Skip index codes (sh.000xxx)
-                if code.startswith("sh.000"):
-                    continue
-                # Skip Beijing exchange (bj.)
-                if code.startswith("bj."):
-                    continue
-                codes.append(code)
+            # Try the given date first; if it returns nothing (e.g. holiday),
+            # retry with a few nearby dates
+            for offset in range(0, 10):
+                from datetime import timedelta
+                try_date = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=offset)).strftime("%Y-%m-%d")
+                rs = bs.query_all_stock(day=try_date)
+                codes = []
+                while rs.error_code == "0" and rs.next():
+                    row = rs.get_row_data()
+                    code = row[0]
+                    if not (code.startswith("sh.") or code.startswith("sz.")):
+                        continue
+                    if code.startswith("sh.000"):
+                        continue
+                    if code.startswith("bj."):
+                        continue
+                    codes.append(code)
+                if len(codes) > 100:
+                    logger.info(f"All A-share stocks on {try_date}: {len(codes)}")
+                    break
 
-            logger.info(f"All A-share stocks: {len(codes)}")
-            cache_path.write_text("\n".join(codes))
+            if len(codes) > 100:
+                cache_path.write_text("\n".join(codes))
+            else:
+                logger.warning(f"Failed to get all_a stocks near {date}, got {len(codes)}")
             return codes
         finally:
             _baostock_logout()
