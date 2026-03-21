@@ -136,10 +136,10 @@ def run_factor_backtest(
     # the *previous* rebalance date. This ensures the new grouping only takes
     # effect from T+1 onward, avoiding look-ahead bias (factor computed at T close
     # → position entered at T+1 open → T+1 return is the first attributed).
-    rebal_arr = np.array(rebalance_dates_set)
+    rebal_arr = np.array(rebalance_dates_set, dtype="datetime64[ns]")
 
     # Vectorized searchsorted instead of per-row apply
-    trade_dates = work["trade_date"].values
+    trade_dates = work["trade_date"].values.astype("datetime64[ns]")
     indices = np.searchsorted(rebal_arr, trade_dates, side="left") - 1
     valid_mask = indices >= 0
     work = work[valid_mask].copy()
