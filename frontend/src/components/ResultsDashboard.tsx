@@ -1,5 +1,6 @@
 import type { BacktestResult } from "../types/backtest";
 import type { ReactNode } from "react";
+import { Star } from "lucide-react";
 import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
@@ -8,6 +9,8 @@ import StockFactorPanel from "./StockFactorPanel";
 interface Props {
   result: BacktestResult;
   iterationSlot?: ReactNode;
+  onSaveFactor?: () => void;
+  isSaving?: boolean;
 }
 
 function pct(n: number): string {
@@ -18,16 +21,28 @@ function num(n: number): string {
   return n.toFixed(4);
 }
 
-export default function ResultsDashboard({ result, iterationSlot }: Props) {
+export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving }: Props) {
   const { metrics, backtest_summary, report_url, params } = result;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-700">回测结果</h3>
-        <span className="text-xs text-gray-400">
-          {params.universe} · {params.start_date} ~ {params.end_date} · {params.stock_count} 只股票
-        </span>
+        <div className="flex items-center gap-3">
+          {onSaveFactor && (
+            <button
+              onClick={onSaveFactor}
+              disabled={isSaving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors disabled:opacity-50"
+            >
+              <Star className="h-3.5 w-3.5" />
+              {isSaving ? "保存中..." : "收藏因子"}
+            </button>
+          )}
+          <span className="text-xs text-gray-400">
+            {params.universe} · {params.start_date} ~ {params.end_date} · {params.stock_count} 只股票
+          </span>
+        </div>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">

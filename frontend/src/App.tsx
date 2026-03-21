@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { Task } from "./types/backtest";
 import { useBacktest } from "./hooks/useBacktest";
 import { useTaskHistory } from "./hooks/useTaskHistory";
@@ -10,8 +10,15 @@ import ResultsDashboard from "./components/ResultsDashboard";
 import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
 import FeedbackButton from "./components/FeedbackButton";
+import FactorLibrary from "./components/FactorLibrary";
+import { Star, MessageSquare } from "lucide-react";
+import { saveFactor } from "./api/factorLibrary";
 
 export default function App() {
+  const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
+  const [factorLibKey, setFactorLibKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+
   const {
     sessions,
     activeSessionId,
@@ -63,6 +70,27 @@ export default function App() {
     setActiveTask(null);
   }, [createSession, setActiveTask]);
 
+  const handleSaveFactor = useCallback(async () => {
+    if (!activeTask?.result || saving) return;
+    setSaving(true);
+    try {
+      await saveFactor({
+        task_id: activeTask.task_id,
+        expression: activeTask.result.params.expression,
+        metrics: activeTask.result.metrics as unknown as Record<string, unknown>,
+        backtest_summary: activeTask.result.backtest_summary as unknown as Record<string, unknown>,
+        params: activeTask.result.params as unknown as Record<string, unknown>,
+        report_url: activeTask.result.report_url,
+      });
+      setFactorLibKey((k) => k + 1);
+      setSidebarTab("factors");
+    } catch (e) {
+      alert("收藏失败: " + (e instanceof Error ? e.message : "未知错误"));
+    } finally {
+      setSaving(false);
+    }
+  }, [activeTask, saving]);
+
   const showProgress =
     activeTask &&
     activeTask.status !== "pending" &&
@@ -96,6 +124,8 @@ export default function App() {
           {showResults && activeTask.result && (
             <ResultsDashboard
               result={activeTask.result}
+              onSaveFactor={handleSaveFactor}
+              isSaving={saving}
               iterationSlot={
                 <IterationPanel
                   parentTaskId={activeTask.task_id}
@@ -111,19 +141,42 @@ export default function App() {
 
         <aside className="w-72 shrink-0 hidden lg:block">
           <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
-            <h2 className="text-sm font-medium text-gray-500 mb-3 shrink-0">会话</h2>
+            <div className="flex gap-1 mb-3 shrink-0">
+              <button
+                onClick={() => setSidebarTab("sessions")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
+                }`}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                会话
+              </button>
+              <button
+                onClick={() => setSidebarTab("factors")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
+                }`}
+              >
+                <Star className="h-3.5 w-3.5" />
+                因子库
+              </button>
+            </div>
             <div className="overflow-y-auto min-h-0">
-              <SessionSidebar
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              tasks={tasks}
-              activeTaskId={activeTask?.task_id}
-              onCreateSession={handleCreateSession}
-              onSwitchSession={handleSwitchSession}
-              onRenameSession={renameSession}
-              onDeleteSession={deleteSession}
-              onSelectTask={(task) => setActiveTask(task)}
-            />
+              {sidebarTab === "sessions" ? (
+                <SessionSidebar
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  tasks={tasks}
+                  activeTaskId={activeTask?.task_id}
+                  onCreateSession={handleCreateSession}
+                  onSwitchSession={handleSwitchSession}
+                  onRenameSession={renameSession}
+                  onDeleteSession={deleteSession}
+                  onSelectTask={(task) => setActiveTask(task)}
+                />
+              ) : (
+                <FactorLibrary key={factorLibKey} />
+              )}
             </div>
           </div>
         </aside>

@@ -97,6 +97,26 @@ class Report(Base):
     task = relationship("Task", back_populates="reports")
 
 
+class SavedFactor(Base):
+    __tablename__ = "saved_factors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    task_id = Column(String(12), ForeignKey("tasks.id"), nullable=True)
+    expression = Column(Text, nullable=False)
+    name = Column(String(200), nullable=True)       # 用户自定义名称
+    note = Column(Text, nullable=True)              # 备注
+    tags = Column(JSON, nullable=True)              # 标签列表
+    metrics = Column(JSON, nullable=True)           # 快照：report_metrics
+    backtest_summary = Column(JSON, nullable=True)  # 快照：backtest_summary
+    params = Column(JSON, nullable=True)            # 回测参数
+    report_url = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    user = relationship("User")
+
+
 class Feedback(Base):
     __tablename__ = "feedbacks"
 

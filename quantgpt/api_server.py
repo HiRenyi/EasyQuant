@@ -54,6 +54,7 @@ from .auth import get_current_user, decode_token
 from .routes.auth import router as auth_router
 from .routes.sessions import router as sessions_router
 from .routes.admin import router as admin_router
+from .routes.factor_library import router as factor_library_router
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(admin_router)
+app.include_router(factor_library_router)
 
 
 # ---- Rate limiter (in-memory, per IP) ----

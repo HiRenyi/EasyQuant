@@ -2,9 +2,18 @@ import { useState } from "react";
 import { BarChart3, LogOut, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
-export const APP_VERSION = "v1.3.0";
+export const APP_VERSION = "v1.4.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.4.0",
+    date: "2026-03-21",
+    items: [
+      "新增「我的因子库」：收藏优质因子，跨会话保存",
+      "侧边栏支持会话/因子库 Tab 切换",
+      "回测结果页新增「收藏因子」按钮",
+    ],
+  },
   {
     version: "v1.3.0",
     date: "2026-03-21",
