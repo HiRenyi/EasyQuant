@@ -931,16 +931,39 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
         return
 
     try:
-        # 1. Read parent task result
+        # 1. Read parent task result — memory first, then DB
         parent_task = _tasks.get(parent_task_id)
-        if not parent_task or parent_task.get("status") != "completed":
-            task["status"] = "failed"
-            task["error"] = "父任务未完成"
-            return
+        if parent_task and parent_task.get("status") == "completed":
+            parent_result = parent_task.get("result", {})
+            parent_expression = parent_task.get("expression", "")
+            parent_params = parent_result.get("params", {})
+        else:
+            # Fallback to DB for historical tasks (e.g. after server restart)
+            async def _fetch_parent():
+                from .db import _get_session_factory
+                factory = _get_session_factory()
+                async with factory() as session:
+                    r = await session.execute(
+                        select(TaskModel).where(TaskModel.id == parent_task_id)
+                    )
+                    return r.scalar_one_or_none()
 
-        parent_result = parent_task.get("result", {})
-        parent_expression = parent_task.get("expression", "")
-        parent_params = parent_result.get("params", {})
+            db_parent = None
+            if _main_loop and _main_loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(_fetch_parent(), _main_loop)
+                try:
+                    db_parent = future.result(timeout=10)
+                except Exception as e:
+                    logger.error(f"[{task_id}] fetch parent from DB failed: {e}")
+
+            if not db_parent or db_parent.status != "completed":
+                task["status"] = "failed"
+                task["error"] = "父任务未完成或不存在"
+                return
+
+            parent_result = db_parent.result or {}
+            parent_expression = db_parent.expression or ""
+            parent_params = parent_result.get("params", {})
 
         if not parent_expression:
             task["status"] = "failed"
@@ -1066,6 +1089,7 @@ async def iterate_task(
     req: IterateRequest,
     request: Request,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """提交迭代优化任务，基于已完成的回测结果生成候选改进因子。"""
     client_ip = request.client.host if request.client else "unknown"
@@ -1074,14 +1098,27 @@ async def iterate_task(
 
     user_id = str(user.id)
 
-    # Validate parent task
+    # Validate parent task — check memory first, then DB
     parent_task = _tasks.get(task_id)
-    if not parent_task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if parent_task.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if parent_task.get("status") != "completed":
-        raise HTTPException(status_code=400, detail="只能对已完成的任务进行迭代优化")
+    if parent_task:
+        if parent_task.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if parent_task.get("status") != "completed":
+            raise HTTPException(status_code=400, detail="只能对已完成的任务进行迭代优化")
+        parent_params = parent_task.get("result", {}).get("params", {})
+        parent_expression = parent_task.get("expression")
+    else:
+        # Fallback to DB for historical tasks (e.g. after server restart)
+        result = await db.execute(
+            select(TaskModel).where(TaskModel.id == task_id, TaskModel.user_id == user.id)
+        )
+        db_task = result.scalar_one_or_none()
+        if not db_task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if db_task.status != "completed":
+            raise HTTPException(status_code=400, detail="只能对已完成的任务进行迭代优化")
+        parent_params = (db_task.result or {}).get("params", {})
+        parent_expression = db_task.expression
 
     if _active_task_count() >= MAX_ACTIVE_TASKS:
         raise HTTPException(status_code=503, detail="当前任务已满，请稍后再试")
@@ -1097,11 +1134,11 @@ async def iterate_task(
             "task_type": "iteration",
             "parent_task_id": task_id,
             "params": {
-                **(parent_task.get("result", {}).get("params", {})),
+                **parent_params,
                 "parent_task_id": task_id,
                 "n_candidates": req.n_candidates,
             },
-            "expression": parent_task.get("expression"),
+            "expression": parent_expression,
             "candidates": [],
             "candidates_done": 0,
             "candidates_total": req.n_candidates,
