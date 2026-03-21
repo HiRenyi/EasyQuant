@@ -2,9 +2,17 @@ import { useState } from "react";
 import { BarChart3, LogOut, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
-export const APP_VERSION = "v1.5.0";
+export const APP_VERSION = "v1.5.1";
 
 const CHANGELOG = [
+  {
+    version: "v1.5.1",
+    date: "2026-03-21",
+    items: [
+      "多因子组合 / 因子对比页支持从因子库选择已收藏因子",
+      "修复策略模板库为空的路径问题",
+    ],
+  },
   {
     version: "v1.5.0",
     date: "2026-03-21",
