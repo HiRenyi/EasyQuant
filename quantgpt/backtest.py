@@ -20,10 +20,13 @@ logger = logging.getLogger(__name__)
 
 def run_factor_backtest(
     market_df: pd.DataFrame,
-    expression: str,
+    expression: str | None = None,
     n_groups: int = 5,
     holding_period: int = 5,
     cost_rate: float = 0.003,
+    neutralize_industry: bool = False,
+    neutralize_cap: bool = False,
+    precomputed_factor: pd.Series | None = None,
 ) -> Dict:
     """Run quantile group backtest on a factor expression (long-only).
 
@@ -36,27 +39,42 @@ def run_factor_backtest(
     Args:
         market_df: DataFrame with columns trade_date, stock_code, open, high,
                    low, close, volume, amount, pct_change.
-        expression: Factor expression string.
+        expression: Factor expression string. Can be None if precomputed_factor is provided.
         n_groups: Number of quantile groups.
         holding_period: Days between rebalances.
         cost_rate: Single rebalance cost rate (default 0.3% = commission + stamp tax + slippage).
+        precomputed_factor: Pre-computed factor values (Series indexed like market_df).
+                           If provided, expression is ignored.
 
     Returns:
         Dict with keys: strategy_returns (daily Series), group_returns,
         top_group_sharpe, monotonicity_score, spread, cost_adjusted, etc.
     """
-    # 1. Parse expression
-    factor_func = parse_expression(expression)
-
-    # 2. Compute factor values per stock
+    # 1. Compute factor values
     market_df = market_df.copy()
     market_df["trade_date"] = pd.to_datetime(market_df["trade_date"])
     market_df = market_df.sort_values(["stock_code", "trade_date"])
 
-    factor_values = market_df.groupby("stock_code", group_keys=False).apply(
-        lambda g: _safe_apply_factor(g, factor_func)
-    )
-    market_df["factor_value"] = factor_values
+    if precomputed_factor is not None:
+        market_df["factor_value"] = precomputed_factor.values if hasattr(precomputed_factor, 'values') else precomputed_factor
+    elif expression is not None:
+        factor_func = parse_expression(expression)
+        factor_values = market_df.groupby("stock_code", group_keys=False).apply(
+            lambda g: _safe_apply_factor(g, factor_func)
+        )
+        market_df["factor_value"] = factor_values
+    else:
+        raise ValueError("必须提供 expression 或 precomputed_factor")
+
+    # 1b. Neutralize factor values (optional)
+    if neutralize_industry or neutralize_cap:
+        from .neutralize import neutralize_factor
+        market_df["factor_value"] = neutralize_factor(
+            market_df["factor_value"],
+            market_df,
+            industry=neutralize_industry,
+            market_cap=neutralize_cap,
+        )
 
     # 3. Compute daily returns from close prices (T-1 close → T close)
     market_df["daily_ret"] = market_df.groupby("stock_code")["close"].pct_change()

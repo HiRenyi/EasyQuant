@@ -172,11 +172,16 @@ def build_iterate_prompt(
     previous_expressions: list[str],
     task_id: str = "",
     anti_overfit: dict | None = None,
+    direction: str | None = None,
 ) -> tuple[str, str]:
     """Build system and user prompts for iteration LLM call.
 
     Uses MutationEngine for targeted diagnosis when available,
     falls back to score-based heuristics.
+
+    Args:
+        direction: Optional iteration direction hint from user, e.g.
+            "加入量价信息", "增加低波暴露", "做行业中性版本".
 
     Returns:
         (system_prompt, user_prompt)
@@ -219,6 +224,10 @@ def build_iterate_prompt(
             user_parts.append(f"  {status} {test.get('name', '')}")
 
     user_parts.append("")
+    if direction:
+        user_parts.append(f"## 用户指定的迭代方向")
+        user_parts.append(f"请重点朝以下方向改进：{direction}")
+        user_parts.append("")
     user_parts.append("请生成一个改进的因子表达式：")
     user_prompt = "\n".join(user_parts)
 
@@ -253,6 +262,7 @@ def _generate_single_candidate(
     user_id: str,
     task_id: str = "",
     max_dedup_retries: int = 4,
+    direction: str | None = None,
 ) -> dict:
     """Generate a single iteration candidate: LLM -> validate -> backtest -> score.
 
@@ -290,6 +300,7 @@ def _generate_single_candidate(
                 iteration_index=iteration_index + dedup_attempt * 100,
                 previous_expressions=previous_expressions,
                 task_id=task_id,
+                direction=direction,
             )
 
             # 2. Call LLM with retry
@@ -464,6 +475,7 @@ def generate_iteration_candidates(
     max_concurrent: int = 3,
     on_progress: Optional[Callable[[int, dict], None]] = None,
     task_id: str = "",
+    direction: str | None = None,
 ) -> list[dict]:
     """Generate N candidate factor improvements in parallel.
 
@@ -479,6 +491,7 @@ def generate_iteration_candidates(
         max_concurrent: Max parallel workers.
         on_progress: Callback(done_count, candidate_result) for progress updates.
         task_id: Task ID for deterministic category selection.
+        direction: Optional iteration direction hint from user.
 
     Returns:
         List of candidate dicts sorted by score descending.
@@ -504,6 +517,7 @@ def generate_iteration_candidates(
                 expressions_lock=expressions_lock,
                 user_id=user_id,
                 task_id=task_id,
+                direction=direction,
             )
             futures[f] = i
 

@@ -19,6 +19,8 @@ export interface BacktestRequest {
   n_groups?: number;
   holding_period?: number;
   benchmark?: string;
+  neutralize_industry?: boolean;
+  neutralize_cap?: boolean;
 }
 
 export interface BacktestMetrics {
@@ -86,6 +88,10 @@ export interface FactorInterpretation {
   source: string;
   guidance: string;
   risk: string;
+  rating?: string;
+  rating_reason?: string;
+  conclusion?: string;
+  suggestions?: string[];
 }
 
 export interface BacktestResult {
@@ -137,7 +143,7 @@ export interface Task {
   expression?: string;
   error?: string;
   result?: BacktestResult;
-  task_type?: "backtest" | "iteration";
+  task_type?: "backtest" | "iteration" | "composite";
   parent_task_id?: string;
   candidates?: IterationCandidate[];
   candidates_done?: number;

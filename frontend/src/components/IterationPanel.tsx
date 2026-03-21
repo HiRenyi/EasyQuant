@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { Task, IterationCandidate } from "../types/backtest";
 import { getReportUrl } from "../api/client";
+import { pct, num } from "../utils/format";
 
 interface Props {
   parentTaskId: string;
   iterationTask: Task | null;
   isIterating: boolean;
-  onIterate: (taskId: string, nCandidates?: number) => void;
+  onIterate: (taskId: string, nCandidates?: number, direction?: string) => void;
   onSelectCandidate: (iterTaskId: string, index: number) => void;
 }
 
@@ -16,14 +17,6 @@ const GRADE_COLORS: Record<string, string> = {
   C: "bg-amber-100 text-amber-700",
   D: "bg-red-100 text-red-700",
 };
-
-function pct(n: number): string {
-  return (n * 100).toFixed(2) + "%";
-}
-
-function num(n: number): string {
-  return n.toFixed(4);
-}
 
 function CandidateRow({
   candidate,
@@ -150,20 +143,68 @@ export default function IterationPanel({
   onIterate,
   onSelectCandidate,
 }: Props) {
+  const [direction, setDirection] = useState("");
+  const [showDirectionInput, setShowDirectionInput] = useState(false);
+
+  const DIRECTION_PRESETS = [
+    "加入量价信息",
+    "增加低波暴露",
+    "融合动量与反转",
+    "加入非线性变换",
+    "增强行业中性",
+  ];
+
   // Trigger state — no iteration started
   if (!iterationTask && !isIterating) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5 text-center">
-        <p className="text-sm text-gray-500 mb-3">对当前结果不满意？尝试让 AI 自动优化因子</p>
-        <button
-          onClick={() => onIterate(parentTaskId)}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 transition-all"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          迭代优化 (5 个候选)
-        </button>
+      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5">
+        <p className="text-sm text-gray-500 mb-3 text-center">对当前结果不满意？尝试让 AI 自动优化因子</p>
+
+        {showDirectionInput && (
+          <div className="mb-3 space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {DIRECTION_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setDirection(preset)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    direction === preset
+                      ? "bg-blue-50 border-blue-300 text-blue-700"
+                      : "border-gray-200 text-gray-500 hover:border-blue-200 hover:text-blue-600"
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={direction}
+              onChange={(e) => setDirection(e.target.value)}
+              placeholder="输入自定义迭代方向，如：加入量价信息、增加低波暴露..."
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => setShowDirectionInput(!showDirectionInput)}
+            className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+          >
+            {showDirectionInput ? "收起方向设置" : "指定迭代方向"}
+          </button>
+          <button
+            onClick={() => onIterate(parentTaskId, 5, direction || undefined)}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:from-blue-700 hover:to-indigo-700 transition-all"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {direction ? "按方向迭代" : "迭代优化 (5 个候选)"}
+          </button>
+        </div>
       </div>
     );
   }

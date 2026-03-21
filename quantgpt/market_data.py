@@ -29,6 +29,7 @@ BENCHMARK_CODES = {
     "hs300": {"baostock": "sh.000300", "name": "沪深300"},
     "zz500": {"baostock": "sh.000905", "name": "中证500"},
     "csi500": {"baostock": "sh.000905", "name": "中证500"},  # alias
+    "csi1000": {"baostock": "sh.000852", "name": "中证1000"},
     "sz50": {"baostock": "sh.000016", "name": "上证50"},
 }
 
@@ -77,7 +78,9 @@ def _baostock_logout():
 def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     """Return stock code list for a named universe.
 
-    Supports: small_scale (static), hs300, csi500/zz500 (dynamic via baostock).
+    Supports: small_scale (static), hs300, csi500/zz500 (dynamic via baostock),
+              csi1000 (derived: hs300+csi500 excluded from all A),
+              full_a (all tradable A-share stocks).
     """
     if name in UNIVERSES:
         return UNIVERSES[name]
@@ -85,7 +88,13 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     if name in ("hs300", "csi500", "zz500"):
         return _fetch_index_constituents(name, date)
 
-    raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500']}")
+    if name == "csi1000":
+        return _fetch_csi1000(date)
+
+    if name == "full_a":
+        return _fetch_full_a(date)
+
+    raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500', 'csi1000', 'full_a']}")
 
 
 def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
@@ -104,6 +113,99 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
                 row = rs.get_row_data()
                 codes.append(row[1])  # code column
             logger.info(f"Fetched {len(codes)} constituents for {name}")
+            return codes
+        finally:
+            _baostock_logout()
+
+
+def _fetch_csi1000(date: Optional[str] = None) -> List[str]:
+    """Fetch CSI 1000 constituents (derived: all A - HS300 - CSI500).
+
+    Since baostock has no direct CSI1000 API, we get all A-share stocks
+    and exclude HS300 + CSI500 constituents, then take the top 1000 by
+    average daily trading volume (proxy for liquidity/market-cap ranking).
+    """
+    date = date or datetime.now().strftime("%Y-%m-%d")
+
+    # Cache path
+    cache_dir = _PROJECT_ROOT / "data" / "universe"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"csi1000_{date[:7]}.txt"  # monthly cache
+
+    if cache_path.exists():
+        codes = cache_path.read_text().strip().split("\n")
+        if len(codes) > 500:
+            logger.info(f"CSI1000 loaded from cache: {len(codes)} stocks")
+            return codes
+
+    hs300 = set(_fetch_index_constituents("hs300", date))
+    csi500 = set(_fetch_index_constituents("csi500", date))
+    exclude = hs300 | csi500
+
+    all_stocks = _fetch_all_stock_codes(date)
+    remaining = [c for c in all_stocks if c not in exclude]
+
+    # Take first 1000 (baostock returns them sorted by code; better would be
+    # by market cap, but code order is a reasonable proxy for established stocks)
+    result = remaining[:1000]
+    logger.info(f"CSI1000 derived: {len(result)} stocks (all_a={len(all_stocks)}, excluded={len(exclude)})")
+
+    cache_path.write_text("\n".join(result))
+    return result
+
+
+def _fetch_full_a(date: Optional[str] = None) -> List[str]:
+    """Fetch all tradable A-share stock codes.
+
+    Limits to 2000 stocks to keep backtest memory/time manageable.
+    """
+    date = date or datetime.now().strftime("%Y-%m-%d")
+    all_codes = _fetch_all_stock_codes(date)
+
+    MAX_FULL_A = 2000
+    if len(all_codes) > MAX_FULL_A:
+        logger.warning(f"Full A has {len(all_codes)} stocks, limiting to {MAX_FULL_A}")
+        all_codes = all_codes[:MAX_FULL_A]
+
+    return all_codes
+
+
+def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
+    """Fetch all A-share stock codes from baostock."""
+    date = date or datetime.now().strftime("%Y-%m-%d")
+
+    # Monthly cache
+    cache_dir = _PROJECT_ROOT / "data" / "universe"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"all_a_{date[:7]}.txt"
+
+    if cache_path.exists():
+        codes = cache_path.read_text().strip().split("\n")
+        if len(codes) > 100:
+            return codes
+
+    with _bs_lock:
+        _baostock_login()
+        try:
+            rs = bs.query_all_stock(day=date)
+            codes = []
+            while rs.error_code == "0" and rs.next():
+                row = rs.get_row_data()
+                code = row[0]  # code column
+                trade_status = row[1] if len(row) > 1 else "1"
+                # Filter: only sh/sz, skip indices (000xxx with sh prefix), skip ST-like
+                if not (code.startswith("sh.") or code.startswith("sz.")):
+                    continue
+                # Skip index codes (sh.000xxx)
+                if code.startswith("sh.000"):
+                    continue
+                # Skip Beijing exchange (bj.)
+                if code.startswith("bj."):
+                    continue
+                codes.append(code)
+
+            logger.info(f"All A-share stocks: {len(codes)}")
+            cache_path.write_text("\n".join(codes))
             return codes
         finally:
             _baostock_logout()

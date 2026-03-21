@@ -5,9 +5,13 @@ import { submitBacktest, streamTask, submitIteration, selectCandidate } from "..
 export function useBacktest(onComplete?: (task: Task) => void, sessionId?: string | null) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [iterationTask, setIterationTask] = useState<Task | null>(null);
+  // Map from parentTaskId → iterationTask, so each task has its own iteration state
+  const [iterationMap, setIterationMap] = useState<Record<string, Task>>({});
   const [isIterating, setIsIterating] = useState(false);
   const closeRef = useRef<(() => void) | null>(null);
+
+  // Derived: iteration task for the currently active task
+  const iterationTask = activeTask ? (iterationMap[activeTask.task_id] ?? null) : null;
 
   const stopStream = useCallback(() => {
     closeRef.current?.();
@@ -18,7 +22,6 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
     async (req: BacktestRequest) => {
       stopStream();
       setIsLoading(true);
-      setIterationTask(null);
       setIsIterating(false);
       try {
         const { task_id } = await submitBacktest(req, sessionId ?? undefined);
@@ -34,12 +37,8 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
               onComplete?.(task);
             }
           },
-          () => {
-            setIsLoading(false);
-          },
-          () => {
-            setIsLoading(false);
-          },
+          () => { setIsLoading(false); },
+          () => { setIsLoading(false); },
         );
       } catch (err) {
         setIsLoading(false);
@@ -54,12 +53,20 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
   );
 
   const iterate = useCallback(
-    async (taskId: string, nCandidates = 5) => {
+    async (taskId: string, nCandidates = 5, direction?: string) => {
       stopStream();
       setIsIterating(true);
-      setIterationTask(null);
+      setIterationMap((prev) => ({ ...prev, [taskId]: {
+        task_id: "",
+        status: "pending",
+        task_type: "iteration",
+        parent_task_id: taskId,
+        candidates: [],
+        candidates_done: 0,
+        candidates_total: nCandidates,
+      }}));
       try {
-        const { task_id } = await submitIteration(taskId, nCandidates);
+        const { task_id } = await submitIteration(taskId, nCandidates, direction);
         const initial: Task = {
           task_id,
           status: "pending",
@@ -69,30 +76,26 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
           candidates_done: 0,
           candidates_total: nCandidates,
         };
-        setIterationTask(initial);
+        setIterationMap((prev) => ({ ...prev, [taskId]: initial }));
 
         closeRef.current = streamTask(
           task_id,
           (task) => {
-            setIterationTask(task);
+            setIterationMap((prev) => ({ ...prev, [taskId]: task }));
             if (task.status === "iteration_completed" || task.status === "failed") {
               setIsIterating(false);
             }
           },
-          () => {
-            setIsIterating(false);
-          },
-          () => {
-            setIsIterating(false);
-          },
+          () => { setIsIterating(false); },
+          () => { setIsIterating(false); },
         );
       } catch (err) {
         setIsIterating(false);
-        setIterationTask({
+        setIterationMap((prev) => ({ ...prev, [taskId]: {
           task_id: "error",
           status: "failed",
           error: err instanceof Error ? err.message : "Unknown error",
-        });
+        }}));
       }
     },
     [stopStream]
@@ -102,7 +105,6 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
     async (iterTaskId: string, index: number) => {
       try {
         const result = await selectCandidate(iterTaskId, index);
-        // Update active task with selected candidate's data
         if (result.expression) {
           setActiveTask((prev) => {
             if (!prev || !prev.result) return prev;
@@ -114,18 +116,18 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
                 report_url: result.report_url as string,
                 metrics: result.report_metrics as typeof prev.result.metrics,
                 backtest_summary: result.backtest_summary as typeof prev.result.backtest_summary,
-                params: {
-                  ...prev.result.params,
-                  expression: result.expression as string,
-                },
+                params: { ...prev.result.params, expression: result.expression as string },
               },
             };
           });
         }
-        // Mark selected in iteration task
-        setIterationTask((prev) =>
-          prev ? { ...prev, selected_candidate_index: index } : prev
-        );
+        // Mark selected in the iteration task for this parent
+        setIterationMap((prev) => {
+          const entry = Object.entries(prev).find(([, t]) => t.task_id === iterTaskId);
+          if (!entry) return prev;
+          const [parentId, task] = entry;
+          return { ...prev, [parentId]: { ...task, selected_candidate_index: index } };
+        });
       } catch (err) {
         console.error("Select candidate failed:", err);
       }

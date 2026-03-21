@@ -1,6 +1,6 @@
 import type { BacktestRequest, Task, Session } from "../types/backtest";
 
-const BASE = "";
+export const BASE = "";
 
 function getAccessToken(): string | null {
   return localStorage.getItem("quantgpt_access_token");
@@ -13,7 +13,7 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const headers = { ...authHeaders(), ...options.headers };
   const res = await fetch(url, { ...options, headers });
 
@@ -45,7 +45,7 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   return res;
 }
 
-async function parseError(res: Response): Promise<string> {
+export async function parseError(res: Response): Promise<string> {
   try {
     const body = await res.json();
     return body.detail || `请求失败 (${res.status})`;
@@ -117,10 +117,13 @@ export async function fetchTasks(page = 1, pageSize = 20, sessionId?: string): P
 export async function submitIteration(
   taskId: string,
   nCandidates = 5,
+  direction?: string,
 ): Promise<{ task_id: string; status: string }> {
+  const body: Record<string, unknown> = { n_candidates: nCandidates };
+  if (direction) body.direction = direction;
   const res = await authFetch(`${BASE}/api/v1/tasks/${taskId}/iterate`, {
     method: "POST",
-    body: JSON.stringify({ n_candidates: nCandidates }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();

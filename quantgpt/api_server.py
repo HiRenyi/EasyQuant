@@ -55,6 +55,9 @@ from .routes.auth import router as auth_router
 from .routes.sessions import router as sessions_router
 from .routes.admin import router as admin_router
 from .routes.factor_library import router as factor_library_router
+from .routes.templates import router as templates_router
+from .routes.composite import router as composite_router
+from .routes.comparison import router as comparison_router
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +73,7 @@ RATE_LIMIT_PER_MINUTE = int(os.environ.get("QUANTGPT_RATE_LIMIT", "10"))
 MAX_PROMPT_LENGTH = int(os.environ.get("QUANTGPT_MAX_PROMPT_LEN", "500"))
 MAX_REPORT_FILES = int(os.environ.get("QUANTGPT_MAX_REPORTS", "200"))
 MAX_DATE_RANGE_YEARS = 10
-VALID_UNIVERSES = {"small_scale", "hs300", "csi500"}
-VALID_BENCHMARKS = {"hs300", "zz500", "sz50"}
+from .schemas import VALID_UNIVERSES, VALID_BENCHMARKS
 
 # ---- Lifespan ----
 
@@ -113,6 +115,9 @@ app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(admin_router)
 app.include_router(factor_library_router)
+app.include_router(templates_router)
+app.include_router(composite_router)
+app.include_router(comparison_router)
 
 
 # ---- Rate limiter (in-memory, per IP) ----
@@ -182,7 +187,7 @@ def _cleanup_reports(user_id: str | None = None):
 
 # ---- Request model ----
 
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+from .schemas import validate_date_format as _validate_date_fn, validate_universe_value as _validate_univ_fn, validate_benchmark_value as _validate_bench_fn
 
 
 class AutoBacktestRequest(BaseModel):
@@ -194,6 +199,8 @@ class AutoBacktestRequest(BaseModel):
     holding_period: int = Field(5, description="持仓周期(交易日)", ge=1, le=60)
     benchmark: str = Field("hs300", description="基准指数: hs300 / zz500 / sz50")
     session_id: str | None = Field(None, description="关联会话 ID")
+    neutralize_industry: bool = Field(False, description="行业中性化")
+    neutralize_cap: bool = Field(False, description="市值中性化")
 
     @field_validator("prompt")
     @classmethod
@@ -205,30 +212,9 @@ class AutoBacktestRequest(BaseModel):
             raise ValueError(f"prompt 长度不能超过 {MAX_PROMPT_LENGTH} 字符")
         return v
 
-    @field_validator("universe")
-    @classmethod
-    def validate_universe(cls, v: str) -> str:
-        if v not in VALID_UNIVERSES:
-            raise ValueError(f"universe 必须是 {VALID_UNIVERSES} 之一")
-        return v
-
-    @field_validator("benchmark")
-    @classmethod
-    def validate_benchmark(cls, v: str) -> str:
-        if v not in VALID_BENCHMARKS:
-            raise ValueError(f"benchmark 必须是 {VALID_BENCHMARKS} 之一")
-        return v
-
-    @field_validator("start_date", "end_date")
-    @classmethod
-    def validate_date_format(cls, v: str) -> str:
-        if not _DATE_RE.match(v):
-            raise ValueError("日期格式必须为 YYYY-MM-DD")
-        try:
-            datetime.strptime(v, "%Y-%m-%d")
-        except ValueError:
-            raise ValueError(f"无效日期: {v}")
-        return v
+    _validate_universe = field_validator("universe")(_validate_univ_fn)
+    _validate_benchmark = field_validator("benchmark")(_validate_bench_fn)
+    _validate_dates = field_validator("start_date", "end_date")(_validate_date_fn)
 
 
 # ---- LLM: DeepSeek (OpenAI-compatible) ----
@@ -449,15 +435,25 @@ def _call_fix_expression(expression: str, error: str, prompt: str) -> str:
     return _clean_expression(resp.choices[0].message.content)
 
 
-_INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语言解读因子表达式的经济含义。
+_INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语言解读因子表达式的经济含义并撰写研究报告。
 
 你的任务是解读一个 A 股因子表达式，输出 JSON，格式如下：
 {
   "logic": "因子的核心逻辑（1-2句，说明该因子捕捉了什么市场现象）",
   "source": "收益来源（1-2句，说明为什么这个因子能产生超额收益，背后的行为金融或基本面逻辑）",
   "guidance": "交易指导（2-4句，从经济含义角度指导用户如何利用该因子思路交易，禁止推荐具体股票，聚焦行为规律和风险提示）",
-  "risk": "主要风险（1句，说明该因子在什么市场环境下容易失效）"
+  "risk": "主要风险（1句，说明该因子在什么市场环境下容易失效）",
+  "rating": "A/B/C/D",
+  "rating_reason": "评级理由（1句话总结）",
+  "conclusion": "核心结论（2-3句，总结因子整体表现和是否推荐使用）",
+  "suggestions": ["改进建议1", "改进建议2"]
 }
+
+评级标准：
+- A级：Sharpe > 1.5, IC > 0.03, 单调性 > 0.7 → 强烈推荐
+- B级：Sharpe > 0.8, IC > 0.02, 单调性 > 0.5 → 推荐
+- C级：Sharpe > 0.3, 有一定选股能力 → 谨慎使用
+- D级：其他 → 不推荐
 
 交易指导要求：
 - 禁止推荐任何具体股票或行业
@@ -703,7 +699,9 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         # 4. Run backtest
         task["status"] = "backtesting"
-        result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period)
+        result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
+                                     neutralize_industry=req.neutralize_industry,
+                                     neutralize_cap=req.neutralize_cap)
 
         # 4a. Anti-overfit analysis
         anti_overfit_result = None
@@ -1017,9 +1015,10 @@ async def stream_task(task_id: str, request: Request):
 class IterateRequest(BaseModel):
     n_candidates: int = Field(5, ge=1, le=10, description="候选因子数量")
     run_rolling_validation: bool = Field(False, description="是否运行滚动验证")
+    direction: str | None = Field(None, description="迭代方向提示，如'加入量价信息'、'增加低波暴露'")
 
 
-def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candidates: int):
+def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candidates: int, direction: str | None = None):
     """Execute iteration in background thread."""
     task = _tasks.get(task_id)
     if not task:
@@ -1123,6 +1122,7 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
             max_concurrent=3,
             on_progress=on_progress,
             task_id=task_id,
+            direction=direction,
         )
 
         # 6. Complete — store sorted candidates (replace the incrementally-built list)
@@ -1243,7 +1243,7 @@ async def iterate_task(
 
     thread = threading.Thread(
         target=_run_iteration_task,
-        args=(iter_task_id, task_id, user_id, req.n_candidates),
+        args=(iter_task_id, task_id, user_id, req.n_candidates, req.direction),
         daemon=True,
     )
     thread.start()

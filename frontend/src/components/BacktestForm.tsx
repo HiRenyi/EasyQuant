@@ -17,6 +17,8 @@ export default function BacktestForm({ onSubmit, isLoading }: Props) {
     n_groups: 5,
     holding_period: 5,
     benchmark: "hs300",
+    neutralize_industry: false,
+    neutralize_cap: false,
   });
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -9,7 +9,7 @@ from sqlalchemy import select, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..models import User, Session, Task as TaskModel
+from ..models import User, Session, Task as TaskModel, Report as ReportModel, SavedFactor
 from ..auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -111,9 +111,21 @@ async def delete_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Delete tasks belonging to this session
-    await db.execute(
-        TaskModel.__table__.delete().where(TaskModel.session_id == session.id)
+    # Delete in FK order: reports → saved_factors → tasks → session
+    task_ids_result = await db.execute(
+        select(TaskModel.id).where(TaskModel.session_id == session.id)
     )
+    task_ids = [row[0] for row in task_ids_result.fetchall()]
+
+    if task_ids:
+        await db.execute(
+            ReportModel.__table__.delete().where(ReportModel.task_id.in_(task_ids))
+        )
+        await db.execute(
+            SavedFactor.__table__.delete().where(SavedFactor.task_id.in_(task_ids))
+        )
+        await db.execute(
+            TaskModel.__table__.delete().where(TaskModel.session_id == session.id)
+        )
     await db.delete(session)
     await db.commit()

@@ -1,0 +1,272 @@
+[
+  {
+    "id": "momentum_20d",
+    "name": "20日动量",
+    "category": "momentum",
+    "description": "过去20个交易日的涨幅排名，捕捉趋势延续效应",
+    "expression": "rank(ts_delta(close, 20) / ts_shift(close, 20))",
+    "tags": ["动量", "趋势"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Jegadeesh & Titman (1993)"
+  },
+  {
+    "id": "momentum_accelerated",
+    "name": "加速动量",
+    "category": "momentum",
+    "description": "短期动量加速度——近5日动量强于近20日动量的股票",
+    "expression": "rank(ts_delta(close, 5)/ts_shift(close, 5)) - rank(ts_delta(close, 20)/ts_shift(close, 20))",
+    "tags": ["动量", "加速"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Chan et al. (1996)"
+  },
+  {
+    "id": "momentum_volume_confirm",
+    "name": "量价确认动量",
+    "category": "momentum",
+    "description": "价格上涨且成交量放大确认的动量信号",
+    "expression": "rank(ts_delta(close, 10)/ts_shift(close, 10)) * rank(volume/ts_mean(volume, 20))",
+    "tags": ["动量", "量价"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Lee & Swaminathan (2000)"
+  },
+  {
+    "id": "reversal_5d",
+    "name": "5日短期反转",
+    "category": "value",
+    "description": "过去5日跌幅最大的股票倾向于反弹，捕捉短期过度反应",
+    "expression": "rank(-1 * ts_delta(close, 5) / ts_shift(close, 5))",
+    "tags": ["反转", "短期"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "De Bondt & Thaler (1985)"
+  },
+  {
+    "id": "mean_reversion_60d",
+    "name": "60日均值回归",
+    "category": "value",
+    "description": "价格偏离60日均线的程度，低估值股票更具回归潜力",
+    "expression": "rank(-1 * (close - ts_mean(close, 60)) / ts_std(close, 60))",
+    "tags": ["均值回归", "价值"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Poterba & Summers (1988)"
+  },
+  {
+    "id": "ep_earnings_yield",
+    "name": "盈利收益率 (EP)",
+    "category": "value",
+    "description": "使用 close 近似替代的盈利收益率，低价股相对高价股的价值效应",
+    "expression": "rank(-1 * close / ts_mean(close, 60))",
+    "tags": ["价值", "估值"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama & French (1992)"
+  },
+  {
+    "id": "volume_anomaly",
+    "name": "成交量异动",
+    "category": "volume",
+    "description": "当日成交量相对20日均量的倍率，捕捉资金异动信号",
+    "expression": "rank(volume / ts_mean(volume, 20))",
+    "tags": ["量价", "异动"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Campbell et al. (1993)"
+  },
+  {
+    "id": "volume_price_divergence",
+    "name": "量价背离",
+    "category": "volume",
+    "description": "价格上涨但成交量萎缩——潜在反转信号",
+    "expression": "rank(-1 * ts_corr(close, volume, 20))",
+    "tags": ["量价", "背离"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Chordia & Swaminathan (2000)"
+  },
+  {
+    "id": "turnover_reversal",
+    "name": "换手率反转",
+    "category": "volume",
+    "description": "近期换手率下降的股票往往被低估，具有反转潜力",
+    "expression": "rank(-1 * ts_delta(volume/ts_mean(volume, 60), 10))",
+    "tags": ["换手率", "反转"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Datar et al. (1998)"
+  },
+  {
+    "id": "low_volatility",
+    "name": "低波动率异象",
+    "category": "volatility",
+    "description": "波动率最低的股票组合往往跑赢高波动股票，与传统理论相悖",
+    "expression": "rank(-1 * ts_std(close/ts_shift(close, 1) - 1, 20))",
+    "tags": ["波动率", "异象"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Baker et al. (2011)"
+  },
+  {
+    "id": "volatility_mean_reversion",
+    "name": "波动率均值回归",
+    "category": "volatility",
+    "description": "近期波动率高于长期水平时倾向回归，适合捕捉恐慌后的修复机会",
+    "expression": "rank(-1 * (ts_std(close/ts_shift(close,1)-1, 5) - ts_std(close/ts_shift(close,1)-1, 60)))",
+    "tags": ["波动率", "均值回归"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Ang et al. (2006)"
+  },
+  {
+    "id": "intraday_momentum",
+    "name": "日内动量",
+    "category": "technical",
+    "description": "日内收盘价相对开盘价的偏离，反映日内资金方向",
+    "expression": "rank(ts_mean((close - open) / open, 10))",
+    "tags": ["日内", "动量"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Gao et al. (2018)"
+  },
+  {
+    "id": "price_range_breakout",
+    "name": "价格区间突破",
+    "category": "technical",
+    "description": "收盘价接近20日最高价——突破型趋势信号",
+    "expression": "rank((close - ts_min(low, 20)) / (ts_max(high, 20) - ts_min(low, 20) + 0.001))",
+    "tags": ["突破", "趋势"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Donchian Channel"
+  },
+  {
+    "id": "ma_deviation",
+    "name": "均线偏离度",
+    "category": "technical",
+    "description": "价格偏离均线的标准化程度，极端偏离后倾向回归",
+    "expression": "rank(-1 * (close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
+    "tags": ["均线", "超买超卖"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Bollinger Bands"
+  },
+  {
+    "id": "composite_momentum_volume",
+    "name": "动量+量价复合",
+    "category": "composite",
+    "description": "结合价格动量和成交量变化的多维复合因子",
+    "expression": "rank(ts_delta(close, 20)/ts_shift(close, 20)) * rank(volume/ts_mean(volume, 10)) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
+    "tags": ["复合", "动量", "量价"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Multi-factor"
+  },
+  {
+    "id": "composite_value_low_vol",
+    "name": "价值+低波复合",
+    "category": "composite",
+    "description": "买入被低估且波动率低的股票——防守型策略",
+    "expression": "rank(-1 * close/ts_mean(close, 60)) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
+    "tags": ["复合", "价值", "低波"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama-French + Low-Vol"
+  },
+  {
+    "id": "composite_nonlinear",
+    "name": "非线性复合因子",
+    "category": "composite",
+    "description": "使用非线性变换组合多维信号，捕捉复杂市场模式",
+    "expression": "sign_power(rank(volume/adv20), 2) * rank((close-vwap)/close) * rank(ts_std(close/ts_shift(close,1)-1, 20))",
+    "tags": ["复合", "非线性"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Alpha101"
+  },
+  {
+    "id": "decay_weighted_corr",
+    "name": "衰减加权量价相关",
+    "category": "composite",
+    "description": "对量价相关性做衰减加权，近期数据权重更高",
+    "expression": "decay_linear(rank(ts_corr(vwap, volume, 10)), 5)",
+    "tags": ["衰减", "量价相关"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "Alpha101 #6"
+  }
+]

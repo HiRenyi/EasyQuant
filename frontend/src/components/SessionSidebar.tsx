@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, MessageSquare } from "lucide-react";
+import { Plus, Trash2, MessageSquare, ChevronDown } from "lucide-react";
 import type { Session, Task } from "../types/backtest";
 import TaskHistoryItem from "./TaskHistoryItem";
 
@@ -28,6 +28,7 @@ export default function SessionSidebar({
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,6 +50,15 @@ export default function SessionSidebar({
     setEditingId(null);
   };
 
+  const toggleCollapse = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-2">
       <button
@@ -63,21 +73,17 @@ export default function SessionSidebar({
         {sessions.map((session) => {
           const isActive = session.id === activeSessionId;
           const isEditing = session.id === editingId;
+          const isCollapsed = collapsedIds.has(session.id);
+          const sessionTasks = isActive ? tasks : [];
 
           return (
             <div key={session.id}>
-              {/* Session header */}
               <div
                 className={`group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100"
+                  isActive ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-100"
                 }`}
                 onClick={() => onSwitchSession(session.id)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  startEdit(session);
-                }}
+                onDoubleClick={(e) => { e.stopPropagation(); startEdit(session); }}
               >
                 <MessageSquare className="h-4 w-4 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -95,29 +101,34 @@ export default function SessionSidebar({
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="text-sm truncate">
-                      {session.name || "新会话"}
-                    </p>
+                    <p className="text-sm truncate">{session.name || "新会话"}</p>
                   )}
                 </div>
                 {!isEditing && (
-                  <button
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.id);
-                    }}
-                    title="删除会话"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
-                  </button>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isActive && sessionTasks.length > 0 && (
+                      <button
+                        onClick={(e) => toggleCollapse(session.id, e)}
+                        className="p-0.5 rounded hover:bg-blue-100"
+                        title={isCollapsed ? "展开" : "折叠"}
+                      >
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      </button>
+                    )}
+                    <button
+                      className="p-0.5 rounded hover:bg-red-100"
+                      onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}
+                      title="删除会话"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* Tasks under active session */}
-              {isActive && tasks.length > 0 && (
+              {isActive && !isCollapsed && sessionTasks.length > 0 && (
                 <div className="ml-4 mt-1 space-y-1">
-                  {tasks.map((task) => (
+                  {sessionTasks.map((task) => (
                     <TaskHistoryItem
                       key={task.task_id}
                       task={task}
@@ -133,9 +144,7 @@ export default function SessionSidebar({
       </div>
 
       {sessions.length === 0 && (
-        <div className="text-center py-8 text-sm text-gray-400">
-          暂无会话
-        </div>
+        <div className="text-center py-8 text-sm text-gray-400">暂无会话</div>
       )}
     </div>
   );

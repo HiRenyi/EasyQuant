@@ -4,6 +4,7 @@ import type { StockFactorData, StockFactorInfo } from "../types/backtest";
 interface Props {
   data: StockFactorData;
   topGroupAnnualReturn: number;
+  expression?: string;
 }
 
 function pct(n: number): string {
@@ -21,16 +22,46 @@ function SignalBar({ value }: { value: number }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${width}%` }}
-        />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
       </div>
-      <span className="text-xs text-gray-600 w-12 text-right tabular-nums">
-        {pct(value)}
-      </span>
+      <span className="text-xs text-gray-600 w-12 text-right tabular-nums">{pct(value)}</span>
     </div>
   );
+}
+
+function generateStockInterpretation(
+  stock: StockFactorInfo,
+  flipped: boolean,
+  topGroupAnnualReturn: number,
+): string {
+  const rankPct = Math.round(stock.factor_rank * 100);
+  const isTop = flipped ? stock.group_label === "G5" : stock.group_label === "G1";
+  const isBottom = flipped ? stock.group_label === "G1" : stock.group_label === "G5";
+  const returnStr = stock.period_return >= 0
+    ? `上涨 ${pct(stock.period_return)}`
+    : `下跌 ${pct(Math.abs(stock.period_return))}`;
+
+  let signal = "";
+  if (isTop) {
+    signal = `该股票因子信号强度处于前 ${100 - rankPct}%，属于强信号区间（${stock.group_label} 组）。`;
+  } else if (isBottom) {
+    signal = `该股票因子信号强度处于后 ${rankPct}%，属于弱信号区间（${stock.group_label} 组）。`;
+  } else {
+    signal = `该股票因子信号强度处于中间区间（${stock.group_label} 组，强度 ${rankPct}%）。`;
+  }
+
+  const returnContext = `回测期间该股票累计${returnStr}，同期因子 Top 组年化收益为 ${pct(topGroupAnnualReturn)}。`;
+
+  let guidance = "";
+  if (isTop) {
+    guidance = `根据因子历史表现，该组别股票平均表现优于大盘。但历史规律不代表未来，需结合当前市场环境判断。`;
+  } else if (isBottom) {
+    guidance = `该股票在此因子下信号偏弱，历史上该组别表现相对落后。若使用此因子策略，该股票通常不在优选范围内。`;
+  } else {
+    guidance = `该股票处于中间分组，因子信号不强不弱，历史上该组别表现接近市场平均水平。`;
+  }
+
+  return `${signal} ${returnContext} ${guidance}`;
 }
 
 export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) {
@@ -144,25 +175,28 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
               </p>
             </div>
 
-            {/* Factor Explanation */}
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">因子解释</p>
-              <p className="text-sm text-gray-600">
-                {data.flipped
-                  ? "该因子为反转型，低因子值对应更强信号"
-                  : "高因子值对应更强信号"}
+            {/* AI Signal Interpretation */}
+            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
+              <p className="text-xs font-medium text-blue-600 mb-1">信号解读</p>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {generateStockInterpretation(
+                  searchResult,
+                  data.flipped,
+                  topGroupAnnualReturn,
+                )}
               </p>
+              <p className="text-[10px] text-gray-400 mt-1.5">基于历史回测数据，不构成投资建议</p>
             </div>
 
             {/* Return Contribution */}
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">收益贡献</p>
+              <p className="text-xs font-medium text-gray-500 mb-1">回测期收益</p>
               <p className="text-sm text-gray-600">
-                该股票在回测期间累计收益{" "}
+                累计{" "}
                 <span className={searchResult.period_return >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
                   {searchResult.period_return >= 0 ? "+" : ""}{pct(searchResult.period_return)}
                 </span>
-                ，同期因子 Top 组年化{" "}
+                {" "}· Top 组年化{" "}
                 <span className={topGroupAnnualReturn >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
                   {topGroupAnnualReturn >= 0 ? "+" : ""}{pct(topGroupAnnualReturn)}
                 </span>

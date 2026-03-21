@@ -94,6 +94,7 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
       {result.stock_factor_data && (
         <StockFactorPanel
           data={result.stock_factor_data}
+          expression={params.expression}
           topGroupAnnualReturn={
             Object.values(backtest_summary.group_returns)
               .reduce((best, g) => g.annual_return > best ? g.annual_return : best, -Infinity)

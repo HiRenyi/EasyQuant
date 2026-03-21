@@ -11,14 +11,22 @@ import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
 import FeedbackButton from "./components/FeedbackButton";
 import FactorLibrary from "./components/FactorLibrary";
-import { Star, MessageSquare } from "lucide-react";
+import TemplateGallery from "./components/TemplateGallery";
+import CompositeBuilder from "./components/CompositeBuilder";
+import FactorComparison from "./components/FactorComparison";
+import { Star, MessageSquare, BookOpen, Layers, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
+import { submitCompositeBacktest } from "./api/composite";
+import type { CompositeBacktestPayload } from "./api/composite";
 
 export default function App() {
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedExpressions, setSavedExpressions] = useState<Set<string>>(new Set());
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showComposite, setShowComposite] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   // Load saved expressions on mount
   useEffect(() => {
@@ -78,6 +86,51 @@ export default function App() {
     setActiveTask(null);
   }, [createSession, setActiveTask]);
 
+  const handleUseTemplate = useCallback(
+    (expression: string, params?: { universe: string; holding_period: number; n_groups: number }) => {
+      setShowTemplates(false);
+      submit({
+        prompt: expression,
+        ...(params ? {
+          universe: params.universe,
+          holding_period: params.holding_period,
+          n_groups: params.n_groups,
+        } : {}),
+      });
+    },
+    [submit]
+  );
+
+  const handleCompositeSubmit = useCallback(
+    async (payload: CompositeBacktestPayload) => {
+      setShowComposite(false);
+      try {
+        const { task_id } = await submitCompositeBacktest({
+          ...payload,
+          session_id: activeSessionId ?? undefined,
+        });
+        // Use the same SSE stream mechanism
+        const { streamTask } = await import("./api/client");
+        const initial: Task = { task_id, status: "pending", task_type: "composite" as Task["task_type"] };
+        setActiveTask(initial);
+        streamTask(
+          task_id,
+          (task) => {
+            setActiveTask(task);
+            if (task.status === "completed" || task.status === "failed") {
+              onComplete(task);
+            }
+          },
+          () => {},
+          () => {},
+        );
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "组合回测失败");
+      }
+    },
+    [activeSessionId, setActiveTask, onComplete]
+  );
+
   const handleSaveFactor = useCallback(async () => {
     if (!activeTask?.result || saving) return;
     const expr = activeTask.result.params.expression;
@@ -121,6 +174,73 @@ export default function App() {
       <div className="mx-auto max-w-7xl px-6 py-6 flex gap-6">
         <main className="flex-1 min-w-0 space-y-4">
           <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
+
+          {/* Template Gallery */}
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-blue-500" />
+                策略模板库
+                <span className="text-xs text-gray-400 font-normal">18个经典策略一键回测</span>
+              </span>
+              {showTemplates ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showTemplates && (
+              <div className="px-4 pb-4">
+                <TemplateGallery onUseTemplate={handleUseTemplate} />
+              </div>
+            )}
+          </div>
+
+          {/* Composite Builder */}
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowComposite(!showComposite)}
+              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-purple-500" />
+                多因子组合
+                <span className="text-xs text-gray-400 font-normal">组合多个因子一键回测</span>
+              </span>
+              {showComposite ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showComposite && (
+              <div className="px-4 pb-4">
+                <CompositeBuilder
+                  onSubmit={handleCompositeSubmit}
+                  isLoading={isLoading}
+                  savedExpressions={Array.from(savedExpressions)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Factor Comparison */}
+          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowComparison(!showComparison)}
+              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-emerald-500" />
+                因子对比
+                <span className="text-xs text-gray-400 font-normal">并排比较多个因子表现</span>
+              </span>
+              {showComparison ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showComparison && (
+              <div className="px-4 pb-4">
+                <FactorComparison savedExpressions={Array.from(savedExpressions)} />
+              </div>
+            )}
+          </div>
 
           {showProgress && (
             <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
