@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
-import { Plus, Trash2, Play, Loader2, Shuffle } from "lucide-react";
+import { Plus, Trash2, Play, Loader2, Shuffle, Star, Check } from "lucide-react";
 import type { FactorItem, CompositeBacktestPayload } from "../api/composite";
+import type { SavedFactor } from "../api/factorLibrary";
+import { fetchFactors } from "../api/factorLibrary";
 import AttributionChart from "./AttributionChart";
 
 interface Props {
@@ -29,6 +31,64 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
     holding_period: 5,
     benchmark: "hs300",
   });
+
+  // Factor library picker
+  const [showPicker, setShowPicker] = useState(false);
+  const [libraryFactors, setLibraryFactors] = useState<SavedFactor[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+
+  const openPicker = useCallback(async () => {
+    setShowPicker(true);
+    setPickerSelected(new Set());
+    setPickerLoading(true);
+    try {
+      const data = await fetchFactors();
+      setLibraryFactors(data);
+    } catch {
+      setLibraryFactors([]);
+    } finally {
+      setPickerLoading(false);
+    }
+  }, []);
+
+  const togglePickerItem = (expr: string) => {
+    setPickerSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(expr)) next.delete(expr); else next.add(expr);
+      return next;
+    });
+  };
+
+  const confirmPicker = () => {
+    if (pickerSelected.size === 0) { setShowPicker(false); return; }
+    // Existing non-empty expressions
+    const existing = new Set(factors.map((f) => f.expression).filter(Boolean));
+    const newItems: FactorItem[] = [];
+    for (const expr of pickerSelected) {
+      if (!existing.has(expr)) {
+        newItems.push({ expression: expr, weight: 1.0 });
+      }
+    }
+    if (newItems.length > 0) {
+      setFactors((prev) => {
+        // Fill empty slots first, then append
+        const result = [...prev];
+        let newIdx = 0;
+        for (let i = 0; i < result.length && newIdx < newItems.length; i++) {
+          if (!result[i].expression.trim()) {
+            result[i] = newItems[newIdx++];
+          }
+        }
+        // Append remaining
+        while (newIdx < newItems.length && result.length < 10) {
+          result.push(newItems[newIdx++]);
+        }
+        return result;
+      });
+    }
+    setShowPicker(false);
+  };
 
   const updateFactor = (idx: number, field: keyof FactorItem, value: string | number) => {
     setFactors((prev) => prev.map((f, i) => i === idx ? { ...f, [field]: value } : f));
@@ -110,14 +170,112 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
         ))}
       </div>
 
-      <button
-        onClick={addFactor}
-        disabled={factors.length >= 10}
-        className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        添加因子 ({factors.length}/10)
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={addFactor}
+          disabled={factors.length >= 10}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          添加因子 ({factors.length}/10)
+        </button>
+        <button
+          onClick={openPicker}
+          className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700"
+        >
+          <Star className="h-3.5 w-3.5" />
+          从因子库选择
+        </button>
+      </div>
+
+      {/* Factor library picker modal */}
+      {showPicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setShowPicker(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[70vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">从因子库选择</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  勾选要加入组合的因子{pickerSelected.size > 0 && `（已选 ${pickerSelected.size} 个）`}
+                </p>
+              </div>
+              <button
+                onClick={confirmPicker}
+                disabled={pickerSelected.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                <Check className="h-3.5 w-3.5" />
+                确认添加
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-3 space-y-1.5">
+              {pickerLoading ? (
+                <div className="text-center py-8 text-xs text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-1" />加载中...
+                </div>
+              ) : libraryFactors.length === 0 ? (
+                <div className="text-center py-8">
+                  <Star className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-xs text-gray-500">因子库为空</p>
+                  <p className="text-[10px] text-gray-400 mt-1">先在单因子回测页收藏因子</p>
+                </div>
+              ) : (
+                libraryFactors.map((f) => {
+                  const selected = pickerSelected.has(f.expression);
+                  const alreadyInList = factors.some((x) => x.expression === f.expression);
+                  const m = f.metrics;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => !alreadyInList && togglePickerItem(f.expression)}
+                      disabled={alreadyInList}
+                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
+                        alreadyInList
+                          ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                          : selected
+                          ? "border-blue-300 bg-blue-50 ring-1 ring-blue-200"
+                          : "border-gray-150 bg-white hover:border-blue-200 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          alreadyInList ? "border-gray-300 bg-gray-200" :
+                          selected ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                        }`}>
+                          {(selected || alreadyInList) && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                        <code className="text-xs text-blue-700 font-mono truncate flex-1" title={f.expression}>
+                          {f.expression}
+                        </code>
+                        {alreadyInList && (
+                          <span className="text-[10px] text-gray-400 shrink-0">已添加</span>
+                        )}
+                      </div>
+                      {m && (
+                        <div className="flex items-center gap-2 mt-1 ml-6 text-[11px] text-gray-500">
+                          <span>Sharpe <span className="font-medium text-gray-700">{m.sharpe.toFixed(2)}</span></span>
+                          <span className="text-gray-200">|</span>
+                          <span className={m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}>
+                            {(m.cagr * 100).toFixed(1)}%
+                          </span>
+                          <span className="text-gray-200">|</span>
+                          <span className="text-red-500">{(m.max_drawdown * 100).toFixed(1)}%</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Method selection */}
       <div className="flex gap-2">
