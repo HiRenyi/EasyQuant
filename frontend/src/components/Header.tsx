@@ -2,9 +2,23 @@ import { useState } from "react";
 import { BarChart3, LogOut, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
-export const APP_VERSION = "v1.4.0";
+export const APP_VERSION = "v1.5.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.5.0",
+    date: "2026-03-21",
+    items: [
+      "新增策略模板库：18个经典因子策略一键回测",
+      "新增多因子组合回测 + 因子归因分析",
+      "新增因子对比看板：并排比较多个因子表现",
+      "新增方向引导迭代：指定 AI 迭代优化方向",
+      "支持中证1000 / 全A市场股票池",
+      "支持行业中性化 / 市值中性化",
+      "AI 因子解读升级：新增评级、核心结论、改进建议",
+      "页面重构：顶部 Tab 导航，功能区更清晰",
+    ],
+  },
   {
     version: "v1.4.0",
     date: "2026-03-21",

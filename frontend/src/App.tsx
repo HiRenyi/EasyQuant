@@ -14,19 +14,26 @@ import FactorLibrary from "./components/FactorLibrary";
 import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
-import { Star, MessageSquare, BookOpen, Layers, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3 } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
+type MainTab = "backtest" | "templates" | "composite" | "comparison";
+
+const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
+  { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
+  { id: "templates", label: "策略模板库", icon: BookOpen, color: "indigo" },
+  { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
+  { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
+];
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<MainTab>("backtest");
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedExpressions, setSavedExpressions] = useState<Set<string>>(new Set());
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showComposite, setShowComposite] = useState(false);
-  const [showComparison, setShowComparison] = useState(false);
 
   // Load saved expressions on mount
   useEffect(() => {
@@ -50,7 +57,7 @@ export default function App() {
   const onComplete = useCallback(
     (task: Task) => {
       addTask(task);
-      refreshSessions(); // pick up auto-named session
+      refreshSessions();
     },
     [addTask, refreshSessions]
   );
@@ -88,7 +95,7 @@ export default function App() {
 
   const handleUseTemplate = useCallback(
     (expression: string, params?: { universe: string; holding_period: number; n_groups: number }) => {
-      setShowTemplates(false);
+      setActiveTab("backtest");
       submit({
         prompt: expression,
         ...(params ? {
@@ -103,13 +110,12 @@ export default function App() {
 
   const handleCompositeSubmit = useCallback(
     async (payload: CompositeBacktestPayload) => {
-      setShowComposite(false);
+      setActiveTab("backtest");
       try {
         const { task_id } = await submitCompositeBacktest({
           ...payload,
           session_id: activeSessionId ?? undefined,
         });
-        // Use the same SSE stream mechanism
         const { streamTask } = await import("./api/client");
         const initial: Task = { task_id, status: "pending", task_type: "composite" as Task["task_type"] };
         setActiveTask(initial);
@@ -171,152 +177,146 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f9fafb]">
       <Header />
+
+      {/* Main navigation tabs */}
+      <div className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6">
+          <nav className="flex gap-1 -mb-px">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    isActive
+                      ? `border-${tab.color}-600 text-${tab.color}-600`
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                  style={isActive ? {
+                    borderBottomColor: tab.color === "blue" ? "#2563eb"
+                      : tab.color === "indigo" ? "#4f46e5"
+                      : tab.color === "purple" ? "#9333ea"
+                      : "#059669",
+                    color: tab.color === "blue" ? "#2563eb"
+                      : tab.color === "indigo" ? "#4f46e5"
+                      : tab.color === "purple" ? "#9333ea"
+                      : "#059669",
+                  } : undefined}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
       <div className="mx-auto max-w-7xl px-6 py-6 flex gap-6">
-        <main className="flex-1 min-w-0 space-y-4">
-          <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
+        {/* Main content area — changes per tab */}
+        <main className={`min-w-0 space-y-4 ${activeTab === "backtest" ? "flex-1" : "w-full"}`}>
+          {activeTab === "backtest" && (
+            <>
+              <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
 
-          {/* Template Gallery */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowTemplates(!showTemplates)}
-              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-blue-500" />
-                策略模板库
-                <span className="text-xs text-gray-400 font-normal">18个经典策略一键回测</span>
-              </span>
-              {showTemplates ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {showTemplates && (
-              <div className="px-4 pb-4">
-                <TemplateGallery onUseTemplate={handleUseTemplate} />
-              </div>
-            )}
-          </div>
-
-          {/* Composite Builder */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowComposite(!showComposite)}
-              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-purple-500" />
-                多因子组合
-                <span className="text-xs text-gray-400 font-normal">组合多个因子一键回测</span>
-              </span>
-              {showComposite ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {showComposite && (
-              <div className="px-4 pb-4">
-                <CompositeBuilder
-                  onSubmit={handleCompositeSubmit}
-                  isLoading={isLoading}
-                  savedExpressions={Array.from(savedExpressions)}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Factor Comparison */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowComparison(!showComparison)}
-              className="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-emerald-500" />
-                因子对比
-                <span className="text-xs text-gray-400 font-normal">并排比较多个因子表现</span>
-              </span>
-              {showComparison ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-            {showComparison && (
-              <div className="px-4 pb-4">
-                <FactorComparison savedExpressions={Array.from(savedExpressions)} />
-              </div>
-            )}
-          </div>
-
-          {showProgress && (
-            <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
-          )}
-
-          {showError && activeTask && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-700">回测失败</p>
-              <p className="mt-1 text-sm text-red-600">{activeTask.error}</p>
-              {activeTask.expression && (
-                <p className="mt-2 text-xs text-red-500 font-mono">表达式: {activeTask.expression}</p>
+              {showProgress && (
+                <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
               )}
-              <p className="mt-3 text-xs text-red-400">如果问题持续出现，欢迎点击右下角「反馈」按钮告诉我们，我们会尽快修复。</p>
-            </div>
+
+              {showError && activeTask && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-medium text-red-700">回测失败</p>
+                  <p className="mt-1 text-sm text-red-600">{activeTask.error}</p>
+                  {activeTask.expression && (
+                    <p className="mt-2 text-xs text-red-500 font-mono">表达式: {activeTask.expression}</p>
+                  )}
+                  <p className="mt-3 text-xs text-red-400">如果问题持续出现，欢迎点击右下角「反馈」按钮告诉我们，我们会尽快修复。</p>
+                </div>
+              )}
+
+              {showResults && activeTask.result && (
+                <ResultsDashboard
+                  result={activeTask.result}
+                  onSaveFactor={handleSaveFactor}
+                  isSaving={saving}
+                  isSaved={savedExpressions.has(activeTask.result.params.expression)}
+                  iterationSlot={
+                    <IterationPanel
+                      parentTaskId={activeTask.task_id}
+                      iterationTask={iterationTask}
+                      isIterating={isIterating}
+                      onIterate={iterate}
+                      onSelectCandidate={handleSelectCandidate}
+                    />
+                  }
+                />
+              )}
+            </>
           )}
 
-          {showResults && activeTask.result && (
-            <ResultsDashboard
-              result={activeTask.result}
-              onSaveFactor={handleSaveFactor}
-              isSaving={saving}
-              isSaved={savedExpressions.has(activeTask.result.params.expression)}
-              iterationSlot={
-                <IterationPanel
-                  parentTaskId={activeTask.task_id}
-                  iterationTask={iterationTask}
-                  isIterating={isIterating}
-                  onIterate={iterate}
-                  onSelectCandidate={handleSelectCandidate}
-                />
-              }
+          {activeTab === "templates" && (
+            <TemplateGallery onUseTemplate={handleUseTemplate} />
+          )}
+
+          {activeTab === "composite" && (
+            <CompositeBuilder
+              onSubmit={handleCompositeSubmit}
+              isLoading={isLoading}
+              savedExpressions={Array.from(savedExpressions)}
             />
+          )}
+
+          {activeTab === "comparison" && (
+            <FactorComparison savedExpressions={Array.from(savedExpressions)} />
           )}
         </main>
 
-        <aside className="w-72 shrink-0 hidden lg:block">
-          <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
-            <div className="flex gap-1 mb-3 shrink-0">
-              <button
-                onClick={() => setSidebarTab("sessions")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
-                }`}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                会话
-              </button>
-              <button
-                onClick={() => setSidebarTab("factors")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
-                }`}
-              >
-                <Star className="h-3.5 w-3.5" />
-                因子库
-              </button>
+        {/* Sidebar — only visible on backtest tab */}
+        {activeTab === "backtest" && (
+          <aside className="w-72 shrink-0 hidden lg:block">
+            <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
+              <div className="flex gap-1 mb-3 shrink-0">
+                <button
+                  onClick={() => setSidebarTab("sessions")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  会话
+                </button>
+                <button
+                  onClick={() => setSidebarTab("factors")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  因子库
+                </button>
+              </div>
+              <div className="overflow-y-auto min-h-0">
+                {sidebarTab === "sessions" ? (
+                  <SessionSidebar
+                    sessions={sessions}
+                    activeSessionId={activeSessionId}
+                    tasks={tasks}
+                    activeTaskId={activeTask?.task_id}
+                    onCreateSession={handleCreateSession}
+                    onSwitchSession={handleSwitchSession}
+                    onRenameSession={renameSession}
+                    onDeleteSession={deleteSession}
+                    onSelectTask={(task) => setActiveTask(task)}
+                  />
+                ) : (
+                  <FactorLibrary key={factorLibKey} />
+                )}
+              </div>
             </div>
-            <div className="overflow-y-auto min-h-0">
-              {sidebarTab === "sessions" ? (
-                <SessionSidebar
-                  sessions={sessions}
-                  activeSessionId={activeSessionId}
-                  tasks={tasks}
-                  activeTaskId={activeTask?.task_id}
-                  onCreateSession={handleCreateSession}
-                  onSwitchSession={handleSwitchSession}
-                  onRenameSession={renameSession}
-                  onDeleteSession={deleteSession}
-                  onSelectTask={(task) => setActiveTask(task)}
-                />
-              ) : (
-                <FactorLibrary key={factorLibKey} />
-              )}
-            </div>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
       <FeedbackButton />
     </div>
