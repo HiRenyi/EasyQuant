@@ -43,6 +43,8 @@ def list_universes() -> str:
         "small_scale": f"5 只蓝筹股（快速测试）: {UNIVERSES['small_scale']}",
         "hs300": "沪深300成分股（动态获取）",
         "csi500": "中证500成分股（动态获取）",
+        "csi1000": "中证1000成分股（派生: 全A - HS300 - CSI500, 取前1000）",
+        "csi2000": "中证2000成分股（派生: 全A - HS300 - CSI500 - CSI1000, 取前2000）",
     }
     benchmarks = {k: v["name"] for k, v in BENCHMARK_CODES.items()}
     return json.dumps({"universes": info, "benchmarks": benchmarks}, ensure_ascii=False, indent=2)
@@ -96,7 +98,7 @@ def run_backtest(
 
     Args:
         expression: 因子表达式,如 "rank(close/ts_mean(close, 20))"
-        universe: 股票池名称 (small_scale / hs300 / csi500)
+        universe: 股票池名称 (small_scale / hs300 / csi500 / csi1000 / csi2000)
         start_date: 回测起始日期 YYYY-MM-DD
         end_date: 回测结束日期 YYYY-MM-DD
         n_groups: 分组数量
@@ -195,7 +197,7 @@ def score_factor(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500)
+        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
         start_date: 起始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         n_groups: 分组数量
@@ -330,7 +332,7 @@ def run_anti_overfit(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500)
+        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
         start_date: 起始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         holding_period: 持仓周期(交易日)
@@ -375,7 +377,7 @@ def run_rolling_validation(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500)
+        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
         start_date: 起始日期(建议≥5年数据)
         end_date: 结束日期
         holding_period: 持仓周期(交易日)

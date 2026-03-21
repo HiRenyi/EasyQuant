@@ -79,8 +79,8 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     """Return stock code list for a named universe.
 
     Supports: small_scale (static), hs300, csi500/zz500 (dynamic via baostock),
-              csi1000 (derived: hs300+csi500 excluded from all A),
-              full_a (all tradable A-share stocks).
+              csi1000 (derived: all A - HS300 - CSI500, top 1000),
+              csi2000 (derived: all A - HS300 - CSI500 - CSI1000, next 2000).
     """
     if name in UNIVERSES:
         return UNIVERSES[name]
@@ -91,10 +91,10 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     if name == "csi1000":
         return _fetch_csi1000(date)
 
-    if name == "full_a":
-        return _fetch_full_a(date)
+    if name == "csi2000":
+        return _fetch_csi2000(date)
 
-    raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500', 'csi1000', 'full_a']}")
+    raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500', 'csi1000', 'csi2000']}")
 
 
 def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
@@ -155,11 +155,41 @@ def _fetch_csi1000(date: Optional[str] = None) -> List[str]:
     return result
 
 
-def _fetch_full_a(date: Optional[str] = None) -> List[str]:
-    """Fetch all tradable A-share stock codes."""
+def _fetch_csi2000(date: Optional[str] = None) -> List[str]:
+    """Fetch CSI 2000 constituents (derived: all A - HS300 - CSI500 - CSI1000).
+
+    Since baostock has no direct CSI2000 API, we derive it by excluding
+    HS300 + CSI500 + CSI1000 from all A-share stocks, then taking
+    the next 2000 stocks by code order.
+    """
     date = date or datetime.now().strftime("%Y-%m-%d")
-    all_codes = _fetch_all_stock_codes(date)
-    return all_codes
+
+    # Cache path
+    cache_dir = _PROJECT_ROOT / "data" / "universe"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"csi2000_{date[:7]}.txt"  # monthly cache
+
+    if cache_path.exists():
+        codes = cache_path.read_text().strip().split("\n")
+        if len(codes) > 500:
+            logger.info(f"CSI2000 loaded from cache: {len(codes)} stocks")
+            return codes
+
+    # Get CSI1000 (which already excludes HS300 + CSI500)
+    csi1000 = set(_fetch_csi1000(date))
+    hs300 = set(_fetch_index_constituents("hs300", date))
+    csi500 = set(_fetch_index_constituents("csi500", date))
+    exclude = hs300 | csi500 | csi1000
+
+    all_stocks = _fetch_all_stock_codes(date)
+    remaining = [c for c in all_stocks if c not in exclude]
+
+    result = remaining[:2000]
+    logger.info(f"CSI2000 derived: {len(result)} stocks (all_a={len(all_stocks)}, excluded={len(exclude)})")
+
+    if len(result) > 100:
+        cache_path.write_text("\n".join(result))
+    return result
 
 
 def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:

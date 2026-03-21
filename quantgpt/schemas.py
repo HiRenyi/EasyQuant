@@ -11,7 +11,7 @@ from pydantic import field_validator
 
 # ---- Constants ----
 
-VALID_UNIVERSES = {"small_scale", "hs300", "csi500", "csi1000", "full_a"}
+VALID_UNIVERSES = {"small_scale", "hs300", "csi500", "csi1000", "csi2000"}
 VALID_BENCHMARKS = {"hs300", "zz500", "csi1000", "sz50"}
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
