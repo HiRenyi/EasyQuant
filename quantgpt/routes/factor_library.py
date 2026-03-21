@@ -177,6 +177,8 @@ async def factor_wall(
                     "cagr": (f.metrics or {}).get("cagr"),
                     "max_drawdown": (f.metrics or {}).get("max_drawdown"),
                     "ic_mean": (f.metrics or {}).get("ic_mean"),
+                    "score": (f.metrics or {}).get("score"),
+                    "grade": (f.metrics or {}).get("grade"),
                 },
                 "params": {
                     "universe": (f.params or {}).get("universe"),

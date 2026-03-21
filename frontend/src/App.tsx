@@ -16,16 +16,17 @@ import FactorWall from "./components/FactorWall";
 import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3 } from "lucide-react";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "templates" | "composite" | "comparison";
+type MainTab = "backtest" | "templates" | "leaderboard" | "composite" | "comparison";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
   { id: "templates", label: "策略模板库", icon: BookOpen, color: "indigo" },
+  { id: "leaderboard", label: "因子榜", icon: Trophy, color: "amber" },
   { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
   { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
 ];
@@ -201,10 +202,12 @@ export default function App() {
                   style={isActive ? {
                     borderBottomColor: tab.color === "blue" ? "#2563eb"
                       : tab.color === "indigo" ? "#4f46e5"
+                      : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
                       : "#059669",
                     color: tab.color === "blue" ? "#2563eb"
                       : tab.color === "indigo" ? "#4f46e5"
+                      : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
                       : "#059669",
                   } : undefined}
@@ -224,11 +227,6 @@ export default function App() {
           {activeTab === "backtest" && (
             <>
               <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
-
-              {/* Factor wall — show when idle */}
-              {!activeTask && (
-                <FactorWall onTryFactor={(expr) => handleSubmit({ prompt: expr })} />
-              )}
 
               {showProgress && (
                 <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
@@ -268,6 +266,10 @@ export default function App() {
 
           {activeTab === "templates" && (
             <TemplateGallery onUseTemplate={handleUseTemplate} />
+          )}
+
+          {activeTab === "leaderboard" && (
+            <FactorWall onTryFactor={(expr) => { setActiveTab("backtest"); handleSubmit({ prompt: expr }); }} />
           )}
 
           {activeTab === "composite" && (
