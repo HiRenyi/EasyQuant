@@ -3,6 +3,7 @@ import type { Task } from "./types/backtest";
 import { useBacktest } from "./hooks/useBacktest";
 import { useTaskHistory } from "./hooks/useTaskHistory";
 import { useSession } from "./hooks/useSession";
+import { useAuth } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import BacktestForm from "./components/BacktestForm";
 import ProgressTracker from "./components/ProgressTracker";
@@ -11,6 +12,7 @@ import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
 import FeedbackButton from "./components/FeedbackButton";
 import FactorLibrary from "./components/FactorLibrary";
+import FactorWall from "./components/FactorWall";
 import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
@@ -29,18 +31,20 @@ const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: stri
 ];
 
 export default function App() {
+  const { isGuest } = useAuth();
   const [activeTab, setActiveTab] = useState<MainTab>("backtest");
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedExpressions, setSavedExpressions] = useState<Set<string>>(new Set());
 
-  // Load saved expressions on mount
+  // Load saved expressions on mount (skip for guests)
   useEffect(() => {
+    if (isGuest) return;
     fetchFactors().then((factors) => {
       setSavedExpressions(new Set(factors.map((f) => f.expression)));
     }).catch(() => {});
-  }, [factorLibKey]);
+  }, [factorLibKey, isGuest]);
 
   const {
     sessions,
@@ -221,6 +225,11 @@ export default function App() {
             <>
               <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
 
+              {/* Factor wall — show when idle */}
+              {!activeTask && (
+                <FactorWall onTryFactor={(expr) => handleSubmit({ prompt: expr })} />
+              )}
+
               {showProgress && (
                 <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
               )}
@@ -239,10 +248,11 @@ export default function App() {
               {showResults && activeTask.result && (
                 <ResultsDashboard
                   result={activeTask.result}
-                  onSaveFactor={handleSaveFactor}
+                  onSaveFactor={isGuest ? undefined : handleSaveFactor}
                   isSaving={saving}
                   isSaved={savedExpressions.has(activeTask.result.params.expression)}
-                  iterationSlot={
+                  showSubmitToWall={!isGuest}
+                  iterationSlot={isGuest ? undefined :
                     <IterationPanel
                       parentTaskId={activeTask.task_id}
                       iterationTask={iterationTask}
@@ -273,8 +283,8 @@ export default function App() {
           )}
         </main>
 
-        {/* Sidebar — only visible on backtest tab */}
-        {activeTab === "backtest" && (
+        {/* Sidebar — only visible on backtest tab for logged-in users */}
+        {activeTab === "backtest" && !isGuest && (
           <aside className="w-72 shrink-0 hidden lg:block">
             <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
               <div className="flex gap-1 mb-3 shrink-0">

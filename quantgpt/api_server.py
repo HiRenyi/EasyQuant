@@ -50,7 +50,7 @@ from .report import generate_report
 from .iteration import compute_factor_score, generate_iteration_candidates
 from .db import get_db, init_db, close_db
 from .models import User, Task as TaskModel, Report as ReportModel, Feedback as FeedbackModel, Session as SessionModel
-from .auth import get_current_user, decode_token
+from .auth import get_current_user, get_optional_user, decode_token, GUEST_USER_ID
 from .routes.auth import router as auth_router
 from .routes.sessions import router as sessions_router
 from .routes.admin import router as admin_router
@@ -797,11 +797,12 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         task["status"] = "failed"
         task["error"] = "回测过程中发生内部错误，请稍后重试"
     finally:
-        # Persist to DB when task finishes
-        try:
-            _persist_task_to_db(task_id, user_id, task, report_filename)
-        except Exception as e:
-            logger.error(f"[{task_id}] DB persist error: {e}")
+        # Persist to DB when task finishes (skip for guest tasks)
+        if not task.get("is_guest"):
+            try:
+                _persist_task_to_db(task_id, user_id, task, report_filename)
+            except Exception as e:
+                logger.error(f"[{task_id}] DB persist error: {e}")
 
 
 # ---- Routes ----
@@ -820,7 +821,7 @@ def health():
 async def auto_backtest(
     req: AutoBacktestRequest,
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_optional_user),
 ):
     """提交回测任务，立即返回 task_id，后台异步执行。"""
     client_ip = request.client.host if request.client else "unknown"
@@ -833,9 +834,16 @@ async def auto_backtest(
 
     _cleanup_tasks()
 
+    is_guest = user is None
     task_id = uuid.uuid4().hex[:12]
-    user_id = str(user.id)
+    user_id = str(user.id) if user else GUEST_USER_ID
     session_id = req.session_id
+
+    # Guest restrictions: force small_scale, limit params
+    if is_guest:
+        req.universe = "small_scale"
+        session_id = None
+
     with _tasks_lock:
         _tasks[task_id] = {
             "task_id": task_id,
@@ -844,8 +852,9 @@ async def auto_backtest(
             "status": "pending",
             "params": req.model_dump(exclude={"session_id"}),
             "created_at": time.time(),
+            "is_guest": is_guest,
         }
-    logger.info(f"task {task_id} created for user {user.email}")
+    logger.info(f"task {task_id} created for {'guest' if is_guest else user.email}")
 
     thread = threading.Thread(
         target=_run_backtest_task, args=(task_id, req, user_id), daemon=True
@@ -951,12 +960,18 @@ async def stream_task(task_id: str, request: Request):
     """SSE 实时推送任务状态变化，直到 completed/failed 后关闭连接。"""
     # Authenticate via query param (EventSource can't set headers)
     token = request.query_params.get("token")
-    if not token:
-        raise HTTPException(status_code=401, detail="未提供认证信息")
-    payload = decode_token(token)
-    if payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="无效的 Token")
-    user_id = payload.get("sub")
+    is_guest = False
+    user_id: str | None = None
+
+    if not token or token.startswith("guest_"):
+        # Guest access — only allow access to guest tasks
+        is_guest = True
+        user_id = GUEST_USER_ID
+    else:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="无效的 Token")
+        user_id = payload.get("sub")
 
     task = _tasks.get(task_id)
     if not task:
@@ -1143,10 +1158,11 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
         task["status"] = "failed"
         task["error"] = f"迭代过程中发生错误: {str(e)}"
     finally:
-        try:
-            _persist_task_to_db(task_id, user_id, task)
-        except Exception as e:
-            logger.error(f"[{task_id}] DB persist error: {e}")
+        if not task.get("is_guest"):
+            try:
+                _persist_task_to_db(task_id, user_id, task)
+            except Exception as e:
+                logger.error(f"[{task_id}] DB persist error: {e}")
 
 
 def _persist_report_to_db(task_id: str, user_id: str, report_filename: str):

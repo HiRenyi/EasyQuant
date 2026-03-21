@@ -1,11 +1,13 @@
 import type { BacktestResult } from "../types/backtest";
-import type { ReactNode } from "react";
-import { Star } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Star, Trophy } from "lucide-react";
 import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
 import StockFactorPanel from "./StockFactorPanel";
 import FactorInterpretationCard from "./FactorInterpretationCard";
+import ShareCardButton from "./ShareCardButton";
+import { authFetch, parseError } from "../api/client";
 
 interface Props {
   result: BacktestResult;
@@ -13,6 +15,7 @@ interface Props {
   onSaveFactor?: () => void;
   isSaving?: boolean;
   isSaved?: boolean;
+  showSubmitToWall?: boolean;
 }
 
 function pct(n: number): string {
@@ -23,14 +26,59 @@ function num(n: number): string {
   return n.toFixed(4);
 }
 
-export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved }: Props) {
+export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved, showSubmitToWall }: Props) {
   const { metrics, backtest_summary, report_url, params } = result;
+  const [wallStatus, setWallStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
+
+  const handleSubmitToWall = async () => {
+    setWallStatus("submitting");
+    try {
+      const res = await authFetch("/api/v1/factor-library/wall/submit", {
+        method: "POST",
+        body: JSON.stringify({
+          expression: params.expression,
+          title: params.expression.slice(0, 60),
+          metrics: metrics,
+          backtest_summary: backtest_summary,
+          params: params,
+          report_url: report_url,
+        }),
+      });
+      if (!res.ok) {
+        const msg = await parseError(res);
+        if (msg.includes("已投稿")) setWallStatus("submitted");
+        else throw new Error(msg);
+      } else {
+        setWallStatus("submitted");
+      }
+    } catch {
+      setWallStatus("error");
+      setTimeout(() => setWallStatus("idle"), 2000);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-700">回测结果</h3>
         <div className="flex items-center gap-3">
+          <ShareCardButton result={result} />
+          {showSubmitToWall && (
+            <button
+              onClick={handleSubmitToWall}
+              disabled={wallStatus !== "idle"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                wallStatus === "submitted"
+                  ? "text-emerald-600 bg-emerald-50 cursor-default"
+                  : wallStatus === "error"
+                  ? "text-red-600 bg-red-50"
+                  : "text-blue-600 bg-blue-50 hover:bg-blue-100"
+              }`}
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              {wallStatus === "submitted" ? "已投稿" : wallStatus === "submitting" ? "投稿中..." : wallStatus === "error" ? "投稿失败" : "投稿因子墙"}
+            </button>
+          )}
           {onSaveFactor && (
             <button
               onClick={onSaveFactor}

@@ -1,10 +1,22 @@
 import { useState } from "react";
-import { BarChart3, LogOut, X } from "lucide-react";
+import { BarChart3, LogOut, X, UserCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.5.1";
+export const APP_VERSION = "v1.6.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.6.0",
+    date: "2026-03-22",
+    items: [
+      "新增游客模式：免登录即可体验回测（小样本股票池）",
+      "新增精选因子墙：首页展示高分因子策略",
+      "新增分享卡片：回测结果一键生成图片",
+      "登录页重设计：展示产品核心功能",
+      "SEO 优化：结构化数据、Open Graph 标签",
+    ],
+  },
   {
     version: "v1.5.1",
     date: "2026-03-21",
@@ -79,7 +91,8 @@ const CHANGELOG = [
 ];
 
 export default function Header() {
-  const { user, logout } = useAuth();
+  const { user, isGuest, logout } = useAuth();
+  const navigate = useNavigate();
   const [showChangelog, setShowChangelog] = useState(false);
 
   return (
@@ -101,7 +114,20 @@ export default function Header() {
               <p className="text-sm text-gray-500">用自然语言描述你的因子策略，一键回测</p>
             </div>
           </div>
-          {user && (
+          {isGuest ? (
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-sm text-amber-600">
+                <UserCircle className="h-4 w-4" />
+                游客模式
+              </span>
+              <button
+                onClick={() => { logout(); navigate("/login"); }}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                注册 / 登录
+              </button>
+            </div>
+          ) : user ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-600">{user.email}</span>
               <button
@@ -112,7 +138,7 @@ export default function Header() {
                 退出
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </header>
 

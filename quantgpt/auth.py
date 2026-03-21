@@ -107,6 +107,37 @@ async def get_current_user(
     return user
 
 
+GUEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
+async def get_optional_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Like get_current_user but returns None for guest/anonymous requests."""
+    try:
+        token = _extract_token(request)
+    except HTTPException:
+        return None  # No token = guest
+    # Guest token marker
+    if token.startswith("guest_"):
+        return None
+    try:
+        payload = decode_token(token)
+    except HTTPException:
+        return None
+    if payload.get("type") != "access":
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        return None
+    return user
+
+
 def create_admin_token() -> str:
     """Create JWT for admin with type='admin', 24h expiry."""
     payload = {

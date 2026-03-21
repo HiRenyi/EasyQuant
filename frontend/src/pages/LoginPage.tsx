@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { BarChart3, Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
+import { BarChart3, Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff, FlaskConical, Layers, TrendingUp, Sparkles } from "lucide-react";
 import { sendCode, verifyCode, loginWithPassword, resetPassword } from "../api/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 type Mode = "password" | "code-email" | "code-verify" | "register-email" | "register-verify" | "forgot-email" | "forgot-verify";
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, enterGuestMode } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
@@ -143,12 +143,43 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <BarChart3 className="h-7 w-7 text-blue-600" />
-          <span className="text-xl font-semibold text-gray-900">QuantGPT</span>
+      <div className="w-full max-w-4xl flex gap-12 items-center">
+        {/* Left: Feature showcase (hidden on small screens) */}
+        <div className="hidden lg:block flex-1">
+          <div className="flex items-center gap-2 mb-6">
+            <BarChart3 className="h-8 w-8 text-blue-600" />
+            <span className="text-2xl font-bold text-gray-900">QuantGPT</span>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">AI 驱动的 A 股因子回测</h2>
+          <p className="text-gray-500 mb-8">用自然语言描述你的因子策略，一键回测。</p>
+
+          <div className="space-y-4">
+            {[
+              { icon: Sparkles, color: "text-blue-500", bg: "bg-blue-50", title: "自然语言输入", desc: "用中文描述因子逻辑，AI 自动生成量化表达式" },
+              { icon: FlaskConical, color: "text-emerald-500", bg: "bg-emerald-50", title: "完整指标体系", desc: "Sharpe、IC、IR、单调性、换手率等 20+ 指标" },
+              { icon: Layers, color: "text-purple-500", bg: "bg-purple-50", title: "多因子组合", desc: "等权/IC加权组合 + 因子归因分析" },
+              { icon: TrendingUp, color: "text-amber-500", bg: "bg-amber-50", title: "AI 迭代优化", desc: "一键生成候选改进因子，反过拟合检测" },
+            ].map((f, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className={`${f.bg} rounded-lg p-2 shrink-0`}>
+                  <f.icon className={`h-4 w-4 ${f.color}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{f.title}</p>
+                  <p className="text-xs text-gray-500">{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+
+        {/* Right: Login form */}
+        <div className="w-full max-w-sm shrink-0">
+          {/* Logo (mobile only) */}
+          <div className="flex items-center justify-center gap-2 mb-8 lg:hidden">
+            <BarChart3 className="h-7 w-7 text-blue-600" />
+            <span className="text-xl font-semibold text-gray-900">QuantGPT</span>
+          </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">{title[mode]}</h2>
@@ -390,6 +421,16 @@ export default function LoginPage() {
               </button>
             </form>
           )}
+        </div>
+
+        {/* Guest mode */}
+        <button
+          onClick={() => { enterGuestMode(); navigate("/", { replace: true }); }}
+          className="mt-4 w-full py-2.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          免登录体验
+          <span className="text-xs text-gray-400 ml-1.5">(仅限小样本股票池)</span>
+        </button>
         </div>
       </div>
     </div>

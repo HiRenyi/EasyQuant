@@ -3,11 +3,71 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QuantGPT — A 股因子回测</title>
+    <title>QuantGPT — AI 驱动的 A 股因子回测工具</title>
+    <meta name="description" content="用自然语言描述你的因子策略，AI 自动生成因子表达式并执行分组回测。支持沪深300、中证500、中证1000股票池，提供 Sharpe、IC、单调性等完整指标分析。" />
+    <meta name="keywords" content="量化投资,因子回测,A股,量化策略,AI量化,因子模型,沪深300,中证500,Sharpe,IC,alpha因子,多因子模型" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="QuantGPT — AI 驱动的 A 股因子回测工具" />
+    <meta property="og:description" content="用自然语言描述你的因子策略，一键回测。支持多股票池、多因子组合、因子对比、AI 迭代优化。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "QuantGPT",
+      "description": "AI 驱动的 A 股因子回测工具。用自然语言描述因子策略，自动生成表达式并执行分组回测。",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "featureList": [
+        "自然语言因子描述",
+        "A股因子回测",
+        "沪深300/中证500/中证1000股票池",
+        "多因子组合回测",
+        "因子对比分析",
+        "AI 因子迭代优化",
+        "反过拟合检测",
+        "滚动验证"
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- SEO content for crawlers (hidden by React mount) -->
+    <noscript>
+      <div style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,sans-serif">
+        <h1>QuantGPT — AI 驱动的 A 股因子回测工具</h1>
+        <p>用自然语言描述你的因子策略，AI 自动生成因子表达式并执行分组回测。</p>
+        <h2>核心功能</h2>
+        <ul>
+          <li><strong>自然语言输入</strong>：用中文描述因子逻辑，AI 自动转为量化表达式</li>
+          <li><strong>多股票池支持</strong>：沪深300、中证500、中证1000、全A市场</li>
+          <li><strong>完整指标体系</strong>：Sharpe、IC、IR、单调性、换手率等</li>
+          <li><strong>多因子组合</strong>：等权/IC加权/优化权重，支持因子归因</li>
+          <li><strong>因子对比</strong>：多因子并排比较，含相关性矩阵</li>
+          <li><strong>AI 迭代优化</strong>：一键生成候选改进因子</li>
+          <li><strong>反过拟合检测</strong>：IC稳定性、子样本压力、安慰剂检验</li>
+          <li><strong>策略模板库</strong>：18个经典因子策略一键回测</li>
+        </ul>
+        <h2>适用人群</h2>
+        <ul>
+          <li>量化研究员：快速验证因子想法</li>
+          <li>金融工程学生：学习因子模型和回测方法</li>
+          <li>个人投资者：探索量化策略</li>
+        </ul>
+      </div>
+    </noscript>
   </body>
 </html>

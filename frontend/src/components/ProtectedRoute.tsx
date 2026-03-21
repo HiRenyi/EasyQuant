@@ -13,6 +13,7 @@ export default function ProtectedRoute() {
     );
   }
 
+  // isAuthenticated is true for both logged-in users and guests
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
