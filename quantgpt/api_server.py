@@ -835,7 +835,7 @@ async def get_task(
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return {
+    resp = {
         "task_id": db_task.id,
         "status": db_task.status,
         "params": db_task.params,
@@ -843,6 +843,14 @@ async def get_task(
         "result": db_task.result,
         "error": db_task.error,
     }
+    # 迭代任务：把 result.candidates 提升到顶层，前端依赖此字段
+    if db_task.status == "iteration_completed" and isinstance(db_task.result, dict):
+        resp["candidates"] = db_task.result.get("candidates", [])
+        resp["candidates_done"] = len(resp["candidates"])
+        resp["candidates_total"] = len(resp["candidates"])
+        resp["task_type"] = "iteration"
+        resp["parent_task_id"] = db_task.result.get("parent_task_id")
+    return resp
 
 
 @app.get("/api/v1/tasks/{task_id}/stream")
