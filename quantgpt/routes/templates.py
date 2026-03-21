@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/api/v1", tags=["templates"])
 
-_TEMPLATES_FILE = Path(__file__).resolve().parent / "templates" / "factors.json"
+_TEMPLATES_FILE = Path(__file__).resolve().parent.parent / "templates" / "factors.json"
 _templates: list[dict] | None = None
 
 
