@@ -449,6 +449,81 @@ def _call_fix_expression(expression: str, error: str, prompt: str) -> str:
     return _clean_expression(resp.choices[0].message.content)
 
 
+_INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语言解读因子表达式的经济含义。
+
+你的任务是解读一个 A 股因子表达式，输出 JSON，格式如下：
+{
+  "logic": "因子的核心逻辑（1-2句，说明该因子捕捉了什么市场现象）",
+  "source": "收益来源（1-2句，说明为什么这个因子能产生超额收益，背后的行为金融或基本面逻辑）",
+  "guidance": "交易指导（2-4句，从经济含义角度指导用户如何利用该因子思路交易，禁止推荐具体股票，聚焦行为规律和风险提示）",
+  "risk": "主要风险（1句，说明该因子在什么市场环境下容易失效）"
+}
+
+交易指导要求：
+- 禁止推荐任何具体股票或行业
+- 从行为金融角度出发，指出市场参与者的非理性行为
+- 结合回测指标（如换手率、IC、单调性）给出实操建议
+- 语言简洁，面向普通投资者
+
+只输出 JSON，不要任何额外文字。"""
+
+
+def _call_interpret_factor(
+    expression: str,
+    prompt: str,
+    metrics: dict,
+    backtest_summary: dict,
+) -> dict:
+    """Call LLM to interpret factor economic meaning."""
+    from openai import OpenAI
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return {}
+    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
+    client = OpenAI(api_key=api_key, base_url=base_url)
+
+    sharpe = metrics.get("sharpe", 0)
+    cagr = metrics.get("cagr", 0)
+    max_dd = metrics.get("max_drawdown", 0)
+    ic = backtest_summary.get("ic_mean", 0)
+    rank_ic = backtest_summary.get("rank_ic_mean", 0)
+    mono = backtest_summary.get("monotonicity_score", 0)
+    turnover = backtest_summary.get("turnover", 0)
+
+    user_msg = (
+        f"用户需求：{prompt}\n"
+        f"因子表达式：{expression}\n\n"
+        f"回测指标（供参考）：\n"
+        f"- 年化收益：{cagr*100:.1f}%，Sharpe：{sharpe:.2f}，最大回撤：{max_dd*100:.1f}%\n"
+        f"- IC均值：{ic:.4f}，Rank IC：{rank_ic:.4f}，单调性：{mono:.2f}，换手率：{turnover*100:.1f}%\n"
+    )
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _INTERPRET_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=600,
+            timeout=30,
+        )
+        raw = resp.choices[0].message.content.strip()
+        # Strip markdown code block if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning(f"Factor interpretation failed: {e}")
+        return {}
+
+
 # ---- DB persistence helper ----
 
 # Reference to the main asyncio event loop (set during lifespan startup)
@@ -660,6 +735,23 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         )
         report_filename = Path(report_result["report_path"]).name
 
+        # 5b. Factor interpretation (non-blocking, best-effort)
+        interpretation = {}
+        try:
+            interpretation = _call_interpret_factor(
+                expression=expression,
+                prompt=req.prompt,
+                metrics=report_result["metrics"],
+                backtest_summary={
+                    "ic_mean": result.get("ic_mean", 0),
+                    "rank_ic_mean": result.get("rank_ic_mean", 0),
+                    "monotonicity_score": result["monotonicity_score"],
+                    "turnover": result.get("turnover", 0),
+                },
+            )
+        except Exception as e:
+            logger.warning(f"[{task_id}] interpretation failed: {e}")
+
         # Done
         task["status"] = "completed"
         task["result"] = {
@@ -682,6 +774,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "total_cost_drag": result.get("total_cost_drag", 0),
             },
             "anti_overfit": anti_overfit_result,
+            "interpretation": interpretation,
             "stock_factor_data": result.get("_stock_factor_data"),
             "params": {
                 "expression": expression,

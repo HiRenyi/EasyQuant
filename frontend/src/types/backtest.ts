@@ -81,6 +81,13 @@ export interface StockFactorData {
   stocks: StockFactorInfo[];
 }
 
+export interface FactorInterpretation {
+  logic: string;
+  source: string;
+  guidance: string;
+  risk: string;
+}
+
 export interface BacktestResult {
   report_url: string;
   metrics: BacktestMetrics;
@@ -111,6 +118,7 @@ export interface BacktestResult {
     prompt: string;
     generated_expression: string;
   };
+  interpretation?: FactorInterpretation;
   stock_factor_data?: StockFactorData | null;
 }
 

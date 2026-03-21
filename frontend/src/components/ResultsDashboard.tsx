@@ -5,6 +5,7 @@ import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
 import StockFactorPanel from "./StockFactorPanel";
+import FactorInterpretationCard from "./FactorInterpretationCard";
 
 interface Props {
   result: BacktestResult;
@@ -54,6 +55,10 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
         <p className="text-xs font-medium text-gray-500 mb-1">因子表达式</p>
         <code className="text-sm text-blue-700 font-mono break-all leading-relaxed">{params.expression}</code>
       </div>
+
+      {result.interpretation && Object.keys(result.interpretation).length > 0 && (
+        <FactorInterpretationCard interpretation={result.interpretation} />
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="总收益" value={pct(metrics.total_return)} color={metrics.total_return >= 0 ? "green" : "red"} sub={metrics.benchmark_total_return != null ? pct(metrics.benchmark_total_return) : undefined} />
