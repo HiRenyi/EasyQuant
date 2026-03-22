@@ -428,20 +428,28 @@ class ExpressionParser:
         except ValueError:
             pass
 
-        # Special variables (vwap, returns, cap)
-        if expression in self._SPECIAL_VARS:
-            var_fn = self._SPECIAL_VARS[expression]
+        # Special variables (vwap, returns, cap) — case-insensitive
+        expr_lower = expression.lower()
+        if expr_lower in self._SPECIAL_VARS:
+            var_fn = self._SPECIAL_VARS[expr_lower]
             return lambda df, _fn=var_fn: _fn(df)
 
-        # Average daily volume: adv{N} (e.g., adv20, adv60)
-        if expression.startswith('adv') and expression[3:].isdigit():
-            window = self._validate_window(int(expression[3:]), 'adv')
+        # Average daily volume: adv{N} (e.g., adv20, adv60) — case-insensitive
+        if expr_lower.startswith('adv') and expr_lower[3:].isdigit():
+            window = self._validate_window(int(expr_lower[3:]), 'adv')
             return lambda df, _w=window: df['volume'].rolling(_w, min_periods=1).mean()
 
-        # Column reference — only allow known columns
-        col_name = expression.strip()
+        # Column reference — only allow known columns (case-insensitive)
+        col_name = expr_lower.strip()
         from .fundamental_data import ALL_FUNDAMENTAL_NAMES
         _ALLOWED_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'} | ALL_FUNDAMENTAL_NAMES
+        # Common LLM alias mapping — redirect invalid names to valid ones
+        _ALIAS_MAP = {
+            'pe_ratio': 'pe', 'pe_ttm': 'pe', 'pb_ratio': 'pb', 'ps_ratio': 'ps',
+            'eps': 'eps_ttm', 'roe_avg': 'roe', 'roa': 'roe',
+            'div_yield': 'cfo_to_np', 'dividend_yield': 'cfo_to_np',
+        }
+        col_name = _ALIAS_MAP.get(col_name, col_name)
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")
         return lambda df, _c=col_name: df[_c]

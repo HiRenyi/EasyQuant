@@ -246,7 +246,8 @@ Fundamental (精确变量名，不可用其他别名):
   运营: asset_turnover, inv_turnover, dupont_roe, dupont_asset_turn
   现金流: cfo_to_np
   估值(衍生): pe, pb, ps
-  ⚠️ 不存在的变量(禁止使用): pe_ratio, pe_ttm, pb_ratio, ps_ratio, dividend_yield, div_yield, roa, bps, nav, market_cap
+  ⚠️ 禁止使用的变量(会导致报错): pe_ratio, pe_ttm, pb_ratio, ps_ratio, dividend_yield, div_yield, roa, bps, nav, market_cap, eps, roe_avg
+  ⚠️ 系统不支持股息率(dividend_yield)，如用户要求股息相关因子，请用 cfo_to_np(经营现金流/净利润) 替代
 Aliases: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
 
 ================================================================================
@@ -304,7 +305,8 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 ⚠️ 关键注意事项
 ================================================================================
 - 🚨 只能使用上面 SUPPORTED OPERATORS 中列出的函数，禁止使用 rsi, macd, ema, sma, bbands, atr, obv, adx 等未列出的技术指标函数
-- 🚨 基本面变量名必须严格使用上面列出的名称，不可自创别名：pe_ratio→用pe, pe_ttm→用pe, pb_ratio→用pb, dividend_yield→不支持, roa→不支持
+- 🚨 变量名必须严格匹配：pe_ratio→pe, pe_ttm→pe, pb_ratio→pb, eps→eps_ttm, dividend_yield→不支持(用cfo_to_np替代), roa→不支持(用roe替代)
+- 🚨 如果用户要求的指标不在支持列表中，用最接近的已支持变量替代，并在表达式中注释说明
 - ts_rank(col, N) 返回百分位排名，范围 0~1（不是 0~100），与之比较时用 0.3 而非 30
 - where() 条件会使因子值变成离散值（如 -1, 0, 1），可能导致分组失败，尽量避免使用
 - 优先使用连续值因子表达式（如 rank(), zscore(), ts_mean() 等），分组效果更好
