@@ -840,6 +840,24 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         # Done
         task["status"] = "completed"
+
+        # Build NAV series for share card (downsample to ~50 points)
+        nav_series = []
+        try:
+            strat_ret = result["strategy_returns"]
+            if hasattr(strat_ret, "index") and len(strat_ret) > 0:
+                cum = (1 + strat_ret).cumprod()
+                step = max(1, len(cum) // 50)
+                sampled = cum.iloc[::step]
+                if sampled.index[-1] != cum.index[-1]:
+                    sampled = pd.concat([sampled, cum.iloc[[-1]]])
+                nav_series = [
+                    {"date": d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d), "value": round(float(v), 4)}
+                    for d, v in sampled.items()
+                ]
+        except Exception:
+            pass
+
         task["result"] = {
             "report_url": f"/api/v1/reports/{report_filename}",
             "metrics": report_result["metrics"],
@@ -862,6 +880,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             "anti_overfit": anti_overfit_result,
             "interpretation": interpretation,
             "stock_factor_data": result.get("_stock_factor_data"),
+            "nav_series": nav_series,
             "params": {
                 "expression": expression,
                 "universe": req.universe,
@@ -1217,6 +1236,28 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
             task["status"] = "failed"
             task["error"] = "无法获取行情数据"
             return
+
+        # 3a. Enrich with fundamental data if parent expression uses fundamental vars
+        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+        fund_vars = detect_fundamental_vars(parent_expression)
+        if fund_vars:
+            logger.info(f"[{task_id}] iteration: enriching market_df with fundamentals: {fund_vars}")
+            fund_fetcher = FundamentalDataFetcher()
+            non_div_vars = fund_vars - {"dividend_yield"}
+            if non_div_vars:
+                qdf = fund_fetcher.fetch_fundamentals(
+                    stock_codes, parent_params.get("start_date", "2023-01-01"),
+                    parent_params.get("end_date", "2025-12-31"), non_div_vars
+                )
+                if qdf is not None and len(qdf) > 0:
+                    market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
+            if "dividend_yield" in fund_vars:
+                div_df = fund_fetcher.fetch_dividend_data(
+                    stock_codes, parent_params.get("start_date", "2023-01-01"),
+                    parent_params.get("end_date", "2025-12-31")
+                )
+                if div_df is not None and len(div_df) > 0:
+                    market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
 
         # 4. Score parent factor
         parent_backtest_summary = parent_result.get("backtest_summary", {})

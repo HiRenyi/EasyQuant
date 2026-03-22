@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, TrendingDown, Pause, Play, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, Pause, Play, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import type { PaperStrategy, PaperOrder } from "../api/paper";
 import { fetchPaperStrategies, fetchPaperStrategy, fetchPaperOrders, updatePaperStrategy } from "../api/paper";
 

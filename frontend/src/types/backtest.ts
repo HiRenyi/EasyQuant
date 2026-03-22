@@ -128,6 +128,7 @@ export interface BacktestResult {
   };
   interpretation?: FactorInterpretation;
   stock_factor_data?: StockFactorData | null;
+  nav_series?: { date: string; value: number }[];
 }
 
 export interface Session {
