@@ -1,6 +1,6 @@
 import type { BacktestResult } from "../types/backtest";
 import { useState, type ReactNode } from "react";
-import { Star, Trophy } from "lucide-react";
+import { Star, Trophy, LineChart } from "lucide-react";
 import MetricCard from "./MetricCard";
 import GroupReturnsTable from "./GroupReturnsTable";
 import ReportViewer from "./ReportViewer";
@@ -8,6 +8,7 @@ import StockFactorPanel from "./StockFactorPanel";
 import FactorInterpretationCard from "./FactorInterpretationCard";
 import ShareCardButton from "./ShareCardButton";
 import { authFetch, parseError } from "../api/client";
+import { createPaperStrategy } from "../api/paper";
 
 interface Props {
   result: BacktestResult;
@@ -16,6 +17,7 @@ interface Props {
   isSaving?: boolean;
   isSaved?: boolean;
   showSubmitToWall?: boolean;
+  onGoToPaper?: () => void;
 }
 
 function pct(n: number): string {
@@ -26,9 +28,27 @@ function num(n: number): string {
   return n.toFixed(4);
 }
 
-export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved, showSubmitToWall }: Props) {
+export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved, showSubmitToWall, onGoToPaper }: Props) {
   const { metrics, backtest_summary, report_url, params } = result;
   const [wallStatus, setWallStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
+  const [paperStatus, setPaperStatus] = useState<"idle" | "creating" | "created" | "error">("idle");
+
+  const handleCreatePaper = async () => {
+    setPaperStatus("creating");
+    try {
+      await createPaperStrategy({
+        expression: params.expression,
+        name: params.expression.slice(0, 40),
+        universe: params.universe,
+        holding_period: params.holding_period,
+        n_groups: params.n_groups,
+      });
+      setPaperStatus("created");
+      if (onGoToPaper) setTimeout(onGoToPaper, 1000);
+    } catch {
+      setPaperStatus("error");
+    }
+  };
 
   const handleSubmitToWall = async () => {
     setWallStatus("submitting");
@@ -93,6 +113,20 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
               {isSaved ? "已收藏" : isSaving ? "保存中..." : "收藏因子"}
             </button>
           )}
+          <button
+            onClick={handleCreatePaper}
+            disabled={paperStatus === "creating" || paperStatus === "created"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+              paperStatus === "created"
+                ? "text-teal-600 bg-teal-50 cursor-default"
+                : paperStatus === "error"
+                ? "text-red-600 bg-red-50"
+                : "text-teal-700 bg-teal-50 hover:bg-teal-100"
+            }`}
+          >
+            <LineChart className="h-3.5 w-3.5" />
+            {paperStatus === "created" ? "已上模拟盘 ✓" : paperStatus === "creating" ? "创建中..." : paperStatus === "error" ? "创建失败" : "上模拟盘"}
+          </button>
           <span className="text-xs text-gray-400">
             {params.universe} · {params.start_date} ~ {params.end_date} · {params.stock_count} 只股票
           </span>

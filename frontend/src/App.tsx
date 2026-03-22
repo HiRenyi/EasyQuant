@@ -17,12 +17,13 @@ import FactorWall from "./components/FactorWall";
 import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy } from "lucide-react";
+import PaperTrading from "./components/PaperTrading";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "templates" | "leaderboard" | "composite" | "comparison";
+type MainTab = "backtest" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
@@ -30,6 +31,7 @@ const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: stri
   { id: "leaderboard", label: "因子榜", icon: Trophy, color: "amber" },
   { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
   { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
+  { id: "paper", label: "模拟盘", icon: LineChart, color: "teal" },
 ];
 
 export default function App() {
@@ -206,11 +208,13 @@ export default function App() {
                       : tab.color === "indigo" ? "#4f46e5"
                       : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
+                      : tab.color === "teal" ? "#0d9488"
                       : "#059669",
                     color: tab.color === "blue" ? "#2563eb"
                       : tab.color === "indigo" ? "#4f46e5"
                       : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
+                      : tab.color === "teal" ? "#0d9488"
                       : "#059669",
                   } : undefined}
                 >
@@ -264,6 +268,7 @@ export default function App() {
                   isSaving={saving}
                   isSaved={savedExpressions.has(activeTask.result.params.expression)}
                   showSubmitToWall={!isGuest}
+                  onGoToPaper={isGuest ? undefined : () => setActiveTab("paper")}
                   iterationSlot={isGuest ? undefined :
                     <IterationPanel
                       parentTaskId={activeTask.task_id}
@@ -297,6 +302,10 @@ export default function App() {
 
           {activeTab === "comparison" && (
             <FactorComparison savedExpressions={Array.from(savedExpressions)} />
+          )}
+
+          {activeTab === "paper" && !isGuest && (
+            <PaperTrading />
           )}
         </main>
 

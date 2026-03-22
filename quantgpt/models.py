@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Index,
+    Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Index, Float,
 )
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -154,3 +154,61 @@ class Feedback(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     user = relationship("User")
+
+
+class PaperStrategy(Base):
+    __tablename__ = "paper_strategies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    expression = Column(Text, nullable=False)
+    universe = Column(String(20), nullable=False, default="hs300")
+    holding_period = Column(Integer, nullable=False, default=5)
+    n_groups = Column(Integer, nullable=False, default=5)
+    initial_capital = Column(Float, nullable=False, default=1_000_000.0)
+    current_value = Column(Float, nullable=False, default=1_000_000.0)
+    status = Column(String(20), nullable=False, default="active")  # active | paused | stopped
+    last_rebalance_date = Column(String(10), nullable=True)
+    next_rebalance_date = Column(String(10), nullable=True)
+    source_task_id = Column(String(12), ForeignKey("tasks.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    user = relationship("User")
+    snapshots = relationship("PaperSnapshot", back_populates="strategy", lazy="selectin",
+                             order_by="PaperSnapshot.date")
+    orders = relationship("PaperOrder", back_populates="strategy", lazy="selectin")
+
+
+class PaperSnapshot(Base):
+    __tablename__ = "paper_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("paper_strategies.id"), nullable=False, index=True)
+    date = Column(String(10), nullable=False)
+    portfolio_value = Column(Float, nullable=False)
+    daily_return = Column(Float, nullable=True)
+    positions = Column(JSON, nullable=True)  # {stock_code: shares}
+
+    strategy = relationship("PaperStrategy", back_populates="snapshots")
+
+    __table_args__ = (
+        Index("ix_paper_snapshots_strategy_date", "strategy_id", "date", unique=True),
+    )
+
+
+class PaperOrder(Base):
+    __tablename__ = "paper_orders"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("paper_strategies.id"), nullable=False, index=True)
+    date = Column(String(10), nullable=False)
+    stock_code = Column(String(20), nullable=False)
+    direction = Column(String(4), nullable=False)  # buy | sell
+    shares = Column(Float, nullable=False)
+    price = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False)
+    commission = Column(Float, nullable=False, default=0.0)
+
+    strategy = relationship("PaperStrategy", back_populates="orders")

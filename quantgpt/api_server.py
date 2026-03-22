@@ -49,7 +49,7 @@ from .backtest import run_factor_backtest
 from .report import generate_report
 from .iteration import compute_factor_score, generate_iteration_candidates
 from .db import get_db, init_db, close_db
-from .models import User, Task as TaskModel, Report as ReportModel, Feedback as FeedbackModel, Session as SessionModel
+from .models import User, Task as TaskModel, Report as ReportModel, Feedback as FeedbackModel, Session as SessionModel, PaperStrategy
 from .auth import get_current_user, get_optional_user, decode_token, GUEST_USER_ID
 from .routes.auth import router as auth_router
 from .routes.sessions import router as sessions_router
@@ -58,6 +58,7 @@ from .routes.factor_library import router as factor_library_router
 from .routes.templates import router as templates_router
 from .routes.composite import router as composite_router
 from .routes.comparison import router as comparison_router
+from .routes.paper import router as paper_router
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,29 @@ async def lifespan(app: FastAPI):
     _main_loop = asyncio.get_running_loop()
     await init_db()
     logger.info("Database initialized")
+
+    # Start paper trading scheduler
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    scheduler = AsyncIOScheduler()
+
+    async def _paper_settlement_job():
+        from .paper_engine import run_daily_settlement
+        from .db import _get_session_factory
+        async with _get_session_factory()() as db:
+            try:
+                await run_daily_settlement(db)
+            except Exception as e:
+                logger.error(f"Paper settlement job failed: {e}")
+
+    # Run at 16:30 Beijing time (UTC+8) = 08:30 UTC on weekdays
+    scheduler.add_job(_paper_settlement_job, CronTrigger(hour=8, minute=30, day_of_week="mon-fri"))
+    scheduler.start()
+    logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
+
     yield
+
+    scheduler.shutdown(wait=False)
     await close_db()
     _main_loop = None
     logger.info("Database connection closed")
@@ -118,6 +141,7 @@ app.include_router(factor_library_router)
 app.include_router(templates_router)
 app.include_router(composite_router)
 app.include_router(comparison_router)
+app.include_router(paper_router)
 
 
 # ---- Rate limiter (in-memory, per IP) ----
