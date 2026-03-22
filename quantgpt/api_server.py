@@ -245,9 +245,8 @@ Fundamental (精确变量名，不可用其他别名):
   偿债: current_ratio, debt_ratio, equity_multiplier
   运营: asset_turnover, inv_turnover, dupont_roe, dupont_asset_turn
   现金流: cfo_to_np
-  估值(衍生): pe, pb, ps, roa, bps, nav
-  ⚠️ 禁止使用的变量(会导致报错): pe_ratio, pe_ttm, pb_ratio, ps_ratio, dividend_yield, div_yield, roe_avg
-  ⚠️ 系统不支持股息率(dividend_yield)，如用户要求股息相关因子，请用 cfo_to_np(经营现金流/净利润) 替代
+  估值(衍生): pe, pb, ps, roa, bps, nav, dividend_yield
+  ⚠️ 禁止使用的变量(会导致报错): pe_ratio, pe_ttm, pb_ratio, ps_ratio, roe_avg
 Aliases: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
 
 ================================================================================
@@ -292,6 +291,7 @@ EXAMPLES:
 质量因子: rank(roe * asset_turnover)
 成长因子: rank(yoy_ni)
 基本面+动量: rank(roe) * rank(ts_delta(close, 20) / ts_shift(close, 20))
+高股息: rank(dividend_yield) * rank(-1 * ts_std(returns, 20))
 ================================================================================
 """
 
@@ -305,7 +305,7 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 ⚠️ 关键注意事项
 ================================================================================
 - 🚨 只能使用上面 SUPPORTED OPERATORS 中列出的函数，禁止使用 rsi, macd, ema, sma, bbands, atr, obv, adx 等未列出的技术指标函数
-- 🚨 变量名必须严格匹配：pe_ratio→pe, pe_ttm→pe, pb_ratio→pb, eps→eps_ttm, dividend_yield→不支持(用cfo_to_np替代)
+- 🚨 变量名必须严格匹配：pe_ratio→pe, pe_ttm→pe, pb_ratio→pb, eps→eps_ttm, div_yield→dividend_yield
 - 🚨 如果用户要求的指标不在支持列表中，用最接近的已支持变量替代，并在表达式中注释说明
 - ts_rank(col, N) 返回百分位排名，范围 0~1（不是 0~100），与之比较时用 0.3 而非 30
 - where() 条件会使因子值变成离散值（如 -1, 0, 1），可能导致分组失败，尽量避免使用
@@ -728,12 +728,21 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             task["status"] = "fetching_fundamentals"
             logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
             fund_fetcher = FundamentalDataFetcher()
-            qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, fund_vars)
-            if qdf is not None and len(qdf) > 0:
-                market_df = fund_fetcher.align_to_daily(qdf, market_df, fund_vars)
-                logger.info(f"[{task_id}] fundamental data merged")
-            else:
-                logger.warning(f"[{task_id}] no fundamental data fetched")
+            # Quarterly financial data (non-dividend vars)
+            non_div_vars = fund_vars - {"dividend_yield"}
+            if non_div_vars:
+                qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div_vars)
+                if qdf is not None and len(qdf) > 0:
+                    market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
+                    logger.info(f"[{task_id}] fundamental data merged")
+            # Dividend data
+            if "dividend_yield" in fund_vars:
+                div_df = fund_fetcher.fetch_dividend_data(stock_codes, req.start_date, req.end_date)
+                if div_df is not None and len(div_df) > 0:
+                    market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
+                    logger.info(f"[{task_id}] dividend data merged")
+                else:
+                    logger.warning(f"[{task_id}] no dividend data fetched")
 
         # 4. Run backtest
         task["status"] = "backtesting"

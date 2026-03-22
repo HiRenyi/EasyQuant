@@ -40,12 +40,23 @@ def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, sta
         return market_df
     logger.info(f"Detected fundamental vars: {fund_vars}, fetching financial data...")
     fetcher = FundamentalDataFetcher()
-    qdf = fetcher.fetch_fundamentals(stock_codes, start_date, end_date, fund_vars)
-    if qdf is not None and len(qdf) > 0:
-        market_df = fetcher.align_to_daily(qdf, market_df, fund_vars)
-        logger.info(f"Fundamental data merged, market_df columns: {list(market_df.columns)}")
-    else:
-        logger.warning("No fundamental data fetched, fundamental vars will be NaN")
+    # Quarterly financial data (non-dividend vars)
+    non_div_vars = fund_vars - {"dividend_yield"}
+    if non_div_vars:
+        qdf = fetcher.fetch_fundamentals(stock_codes, start_date, end_date, non_div_vars)
+        if qdf is not None and len(qdf) > 0:
+            market_df = fetcher.align_to_daily(qdf, market_df, non_div_vars)
+            logger.info(f"Fundamental data merged, columns: {list(market_df.columns)}")
+        else:
+            logger.warning("No fundamental data fetched, fundamental vars will be NaN")
+    # Dividend data
+    if "dividend_yield" in fund_vars:
+        div_df = fetcher.fetch_dividend_data(stock_codes, start_date, end_date)
+        if div_df is not None and len(div_df) > 0:
+            market_df = fetcher.align_dividends_to_daily(div_df, market_df)
+            logger.info("Dividend data merged")
+        else:
+            logger.warning("No dividend data fetched, dividend_yield will be NaN")
     return market_df
 
 

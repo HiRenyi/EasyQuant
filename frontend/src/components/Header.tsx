@@ -3,9 +3,19 @@ import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink }
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.7.1";
+export const APP_VERSION = "v1.8.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.8.0",
+    date: "2026-03-22",
+    items: [
+      "新增 dividend_yield（股息率）变量，对接 baostock 分红数据 API",
+      "股息率按 TTM（滚动12个月）累计分红 / 收盘价计算",
+      "使用除权日做时点对齐，避免未来数据偏差",
+      "基本面变量总数增至 27 个",
+    ],
+  },
   {
     version: "v1.7.1",
     date: "2026-03-22",

@@ -446,12 +446,10 @@ class ExpressionParser:
         # Common LLM alias mapping — redirect invalid names to valid ones
         _ALIAS_MAP = {
             'pe_ratio': 'pe', 'pe_ttm': 'pe', 'pb_ratio': 'pb', 'ps_ratio': 'ps',
-            'eps': 'eps_ttm', 'roe_avg': 'roe',
+            'eps': 'eps_ttm', 'roe_avg': 'roe', 'div_yield': 'dividend_yield',
         }
         # Unsupported variables — give clear error with suggestion
         _UNSUPPORTED = {
-            'dividend_yield': '系统不支持股息率(dividend_yield)，可用 eps_ttm(每股收益) 或 cfo_to_np(现金流/净利润) 替代',
-            'div_yield': '系统不支持股息率(div_yield)，可用 eps_ttm(每股收益) 或 cfo_to_np(现金流/净利润) 替代',
         }
         if col_name in _UNSUPPORTED:
             raise ValueError(_UNSUPPORTED[col_name])

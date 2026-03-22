@@ -60,7 +60,7 @@ DERIVED_VARIABLES: Dict[str, List[str]] = {
     "nav": ["net_profit", "roe"],                 # net_profit / roe (净资产)
 }
 
-ALL_FUNDAMENTAL_NAMES: frozenset = frozenset(FUNDAMENTAL_VARIABLES.keys()) | frozenset(DERIVED_VARIABLES.keys())
+ALL_FUNDAMENTAL_NAMES: frozenset = frozenset(FUNDAMENTAL_VARIABLES.keys()) | frozenset(DERIVED_VARIABLES.keys()) | frozenset(["dividend_yield"])
 
 # Reverse map: baostock field -> user-facing name
 _BS_TO_USER: Dict[str, str] = {v[1]: k for k, v in FUNDAMENTAL_VARIABLES.items()}
@@ -437,3 +437,162 @@ class FundamentalDataFetcher:
             merged = merged.drop(columns=["pub_date"])
 
         return merged
+
+    # ------------------------------------------------------------------
+    # Dividend data (event-based, separate from quarterly financials)
+    # ------------------------------------------------------------------
+
+    def _dividend_cache_dir(self) -> Path:
+        d = _PROJECT_ROOT / "data" / "dividends"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _dividend_cache_path(self, stock_code: str) -> Path:
+        normalized = stock_code.replace(".", "_")
+        return self._dividend_cache_dir() / f"{normalized}.parquet"
+
+    def _load_dividend_cache(self, stock_code: str) -> Optional[pd.DataFrame]:
+        path = self._dividend_cache_path(stock_code)
+        if not path.exists():
+            return None
+        try:
+            df = pd.read_parquet(path)
+            if "ex_date" in df.columns:
+                df["ex_date"] = pd.to_datetime(df["ex_date"])
+            return df
+        except Exception:
+            return None
+
+    def _save_dividend_cache(self, stock_code: str, df: pd.DataFrame):
+        if df is None or len(df) == 0:
+            return
+        try:
+            df.to_parquet(self._dividend_cache_path(stock_code), index=False)
+        except Exception as e:
+            logger.warning(f"Failed to save dividend cache for {stock_code}: {e}")
+
+    def _fetch_stock_dividends(self, code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+        """Fetch dividend events for one stock across years."""
+        try:
+            import baostock as bs
+        except ImportError:
+            return None
+        from datetime import datetime as dt
+        start_year = dt.strptime(start_date[:10], "%Y-%m-%d").year - 1
+        end_year = dt.strptime(end_date[:10], "%Y-%m-%d").year
+
+        rows = []
+        for year in range(start_year, end_year + 1):
+            rs = bs.query_dividend_data(code=code, year=str(year), yearType="report")
+            if rs.error_code != "0":
+                continue
+            while rs.next():
+                row = rs.get_row_data()
+                ex_date_str = row[6]  # dividOperateDate
+                cash_ps_str = row[9]  # dividCashPsBeforeTax
+                if not ex_date_str or not cash_ps_str:
+                    continue
+                try:
+                    cash_ps = float(cash_ps_str)
+                except (ValueError, TypeError):
+                    continue
+                if cash_ps <= 0:
+                    continue
+                rows.append({
+                    "stock_code": code,
+                    "ex_date": pd.Timestamp(ex_date_str),
+                    "cash_per_share": cash_ps,
+                })
+
+        if not rows:
+            return None
+        df = pd.DataFrame(rows)
+        df = df.drop_duplicates(subset=["stock_code", "ex_date", "cash_per_share"])
+        # Same ex_date may appear from different report years; keep one with highest amount
+        df = df.sort_values("cash_per_share", ascending=False).drop_duplicates(
+            subset=["stock_code", "ex_date"], keep="first"
+        )
+        return df
+
+    def fetch_dividend_data(
+        self,
+        stock_codes: List[str],
+        start_date: str,
+        end_date: str,
+    ) -> Optional[pd.DataFrame]:
+        """Fetch dividend data for multiple stocks with caching."""
+        from .market_data import _bs_lock, _baostock_login, _baostock_logout
+
+        all_dfs = []
+        with _bs_lock:
+            _baostock_login()
+            try:
+                for i, code in enumerate(stock_codes):
+                    if (i + 1) % 50 == 0:
+                        logger.info(f"Fetching dividends: {i+1}/{len(stock_codes)}")
+
+                    cached = self._load_dividend_cache(code)
+                    if cached is not None and len(cached) > 0:
+                        all_dfs.append(cached)
+                        continue
+
+                    try:
+                        div_df = self._fetch_stock_dividends(code, start_date, end_date)
+                        if div_df is not None and len(div_df) > 0:
+                            self._save_dividend_cache(code, div_df)
+                            all_dfs.append(div_df)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch dividends for {code}: {e}")
+            finally:
+                _baostock_logout()
+
+        if not all_dfs:
+            return None
+        return pd.concat(all_dfs, ignore_index=True)
+
+    def align_dividends_to_daily(
+        self,
+        div_df: pd.DataFrame,
+        market_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Align dividend events to daily, compute TTM dividend yield.
+
+        For each trading day, sum all dividends with ex_date in the past 365 days,
+        then dividend_yield = ttm_cash_per_share / close.
+        """
+        market_df = market_df.copy()
+
+        result_parts = []
+        for code, mkt_group in market_df.groupby("stock_code", sort=False):
+            stock_divs = div_df[div_df["stock_code"] == code].sort_values("ex_date")
+            if len(stock_divs) == 0:
+                mkt_group = mkt_group.copy()
+                mkt_group["dividend_yield"] = np.nan
+                result_parts.append(mkt_group)
+                continue
+
+            mkt_sorted = mkt_group.sort_values("trade_date").copy()
+            # For each trade_date, compute TTM dividend (sum of cash_per_share
+            # where ex_date is within [trade_date - 365d, trade_date])
+            ttm_divs = []
+            div_dates = stock_divs["ex_date"].values
+            div_cash = stock_divs["cash_per_share"].values
+            for td in mkt_sorted["trade_date"].values:
+                td_ts = pd.Timestamp(td)
+                cutoff = td_ts - pd.Timedelta(days=365)
+                mask = (div_dates >= cutoff.to_numpy()) & (div_dates <= td_ts.to_numpy())
+                ttm_divs.append(div_cash[mask].sum() if mask.any() else np.nan)
+
+            mkt_sorted["_ttm_div"] = ttm_divs
+            with np.errstate(divide="ignore", invalid="ignore"):
+                mkt_sorted["dividend_yield"] = np.where(
+                    (mkt_sorted["close"] != 0) & mkt_sorted["_ttm_div"].notna(),
+                    mkt_sorted["_ttm_div"] / mkt_sorted["close"],
+                    np.nan,
+                )
+            mkt_sorted.drop(columns=["_ttm_div"], inplace=True)
+            result_parts.append(mkt_sorted)
+
+        if not result_parts:
+            return market_df
+        return pd.concat(result_parts, ignore_index=True)
