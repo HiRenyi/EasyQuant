@@ -447,8 +447,16 @@ class ExpressionParser:
         _ALIAS_MAP = {
             'pe_ratio': 'pe', 'pe_ttm': 'pe', 'pb_ratio': 'pb', 'ps_ratio': 'ps',
             'eps': 'eps_ttm', 'roe_avg': 'roe', 'roa': 'roe',
-            'div_yield': 'cfo_to_np', 'dividend_yield': 'cfo_to_np',
         }
+        # Unsupported variables — give clear error with suggestion
+        _UNSUPPORTED = {
+            'dividend_yield': '系统不支持股息率(dividend_yield)，可用 eps_ttm(每股收益) 或 cfo_to_np(现金流/净利润) 替代',
+            'div_yield': '系统不支持股息率(div_yield)，可用 eps_ttm(每股收益) 或 cfo_to_np(现金流/净利润) 替代',
+            'bps': '系统不支持每股净资产(bps)，可用 pb(市净率) 替代',
+            'nav': '系统不支持净资产(nav)，可用 pb(市净率) 替代',
+        }
+        if col_name in _UNSUPPORTED:
+            raise ValueError(_UNSUPPORTED[col_name])
         col_name = _ALIAS_MAP.get(col_name, col_name)
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")
