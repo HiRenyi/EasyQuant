@@ -1553,6 +1553,18 @@ async def submit_feedback(
 
     await db.commit()
 
+    # Send confirmation email (fire-and-forget)
+    import asyncio
+    from .email_service import send_feedback_received_email
+
+    async def _safe_send():
+        try:
+            await send_feedback_received_email(user.email, feedback_id, req.description)
+        except Exception as e:
+            logger.warning(f"Failed to send feedback confirmation email to {user.email}: {e}")
+
+    asyncio.create_task(_safe_send())
+
     logger.info(f"Feedback {feedback_id} from {user.email} (webhook={'OK' if webhook_sent else 'skip/fail'})")
 
     return {

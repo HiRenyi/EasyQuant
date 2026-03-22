@@ -281,6 +281,22 @@ async def resolve_feedback(
     fb.resolved = True
     fb.resolved_at = datetime.now(timezone.utc)
     await db.flush()
+
+    # Send resolved notification email (fire-and-forget)
+    if fb.user_id:
+        user = await db.get(User, fb.user_id)
+        if user and user.email:
+            import asyncio
+            from ..email_service import send_feedback_resolved_email
+
+            async def _safe_send():
+                try:
+                    await send_feedback_resolved_email(user.email, str(fb.id), fb.description)
+                except Exception as e:
+                    logger.warning(f"Failed to send feedback resolved email to {user.email}: {e}")
+
+            asyncio.create_task(_safe_send())
+
     return {"id": str(fb.id), "resolved": True, "resolved_at": fb.resolved_at.isoformat()}
 
 
