@@ -238,12 +238,15 @@ Comparison: >, <, >=, <=, ==, !=
 Logical: and, or (combine conditions in where())
 Columns: open, high, low, close, volume, amount, pct_change
 Special vars: vwap, adv{N} (e.g. adv20), returns, cap
-Fundamental: roe, np_margin, gp_margin, net_profit, eps_ttm, revenue, total_share, float_share
-Growth: yoy_ni, yoy_equity, yoy_asset, yoy_pni
-Balance: current_ratio, debt_ratio, equity_multiplier
-Operations: asset_turnover, inv_turnover, dupont_roe, dupont_asset_turn
-Cash flow: cfo_to_np
-Valuation (derived): pe, pb, ps
+Fundamental (精确变量名，不可用其他别名):
+  盈利: roe, np_margin, gp_margin, net_profit, eps_ttm, revenue
+  股本: total_share, float_share
+  成长: yoy_ni, yoy_equity, yoy_asset, yoy_pni
+  偿债: current_ratio, debt_ratio, equity_multiplier
+  运营: asset_turnover, inv_turnover, dupont_roe, dupont_asset_turn
+  现金流: cfo_to_np
+  估值(衍生): pe, pb, ps
+  ⚠️ 不存在的变量(禁止使用): pe_ratio, pe_ttm, pb_ratio, ps_ratio, dividend_yield, div_yield, roa, bps, nav, market_cap
 Aliases: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
 
 ================================================================================
@@ -301,10 +304,11 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 ⚠️ 关键注意事项
 ================================================================================
 - 🚨 只能使用上面 SUPPORTED OPERATORS 中列出的函数，禁止使用 rsi, macd, ema, sma, bbands, atr, obv, adx 等未列出的技术指标函数
+- 🚨 基本面变量名必须严格使用上面列出的名称，不可自创别名：pe_ratio→用pe, pe_ttm→用pe, pb_ratio→用pb, dividend_yield→不支持, roa→不支持
 - ts_rank(col, N) 返回百分位排名，范围 0~1（不是 0~100），与之比较时用 0.3 而非 30
 - where() 条件会使因子值变成离散值（如 -1, 0, 1），可能导致分组失败，尽量避免使用
 - 优先使用连续值因子表达式（如 rank(), zscore(), ts_mean() 等），分组效果更好
-- returns 是日收益率（如 0.02 代表 2%），close 是收盘价
+- returns 是日收益率（等同于 pct_change，如 0.02 代表 2%），close 是收盘价
 - day/weekday/month 是日期特殊变量，仅在用户明确要求日历效应时使用
 - 基本面变量(roe, pe, yoy_ni 等)是季度财报按发布日对齐到日频的，变化较慢
 - 估值因子通常取负值排序(低估值更好)：rank(-1 * pe)
