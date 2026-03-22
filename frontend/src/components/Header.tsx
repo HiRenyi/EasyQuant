@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { BarChart3, LogOut, X, UserCircle } from "lucide-react";
+import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.6.0";
+export const APP_VERSION = "v1.6.1";
 
 const CHANGELOG = [
+  {
+    version: "v1.6.1",
+    date: "2026-03-22",
+    items: [
+      "新增 MCP 集成指南：Header 一键查看 Claude Code / OpenClaw 配置教程",
+      "支持 Claude Code 本地 stdio 和远程 HTTP 两种接入方式",
+      "支持 OpenClaw Agent 通过 MCP 协议调用 8 个回测工具",
+    ],
+  },
   {
     version: "v1.6.0",
     date: "2026-03-22",
@@ -90,10 +99,321 @@ const CHANGELOG = [
   },
 ];
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      className="absolute top-2 right-2 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+      title="复制"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+function McpGuideModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"claude" | "openclaw">("claude");
+
+  const stdioConfig = `{
+  "mcpServers": {
+    "quantgpt": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-m", "quantgpt"],
+      "env": {
+        "PYTHONPATH": "/path/to/quantgpt"
+      }
+    }
+  }
+}`;
+
+  const httpConfig = `{
+  "mcpServers": {
+    "quantgpt": {
+      "url": "https://your-server.com/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}`;
+
+  const openclawNativeCode = `from openclaw.tools.mcp import MCPClient
+
+client = MCPClient(
+    server_url="http://localhost:8000"
+)
+
+agent = Agent(
+    tools=client.get_tools()
+)`;
+
+  const openclawManualCode = `import requests
+
+def backtest_tool(expression: str, **kwargs):
+    return requests.post(
+        "http://localhost:8000/tools/backtest_factor",
+        json={"expression": expression, **kwargs}
+    ).json()
+
+agent.register_tool(backtest_tool)`;
+
+  const mcpServerStartCmd = `python -m quantgpt --transport streamable-http --host 0.0.0.0 --port 8000`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+              <Terminal className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">MCP 集成指南</h2>
+              <p className="text-xs text-gray-400">通过 MCP 协议接入 QuantGPT 回测能力</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Tab switcher */}
+        <div className="px-5 pt-3 flex gap-1 border-b border-gray-100">
+          <button
+            onClick={() => setTab("claude")}
+            className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              tab === "claude"
+                ? "text-orange-600 border-b-2 border-orange-500 bg-orange-50/50"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Claude Code
+          </button>
+          <button
+            onClick={() => setTab("openclaw")}
+            className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              tab === "openclaw"
+                ? "text-blue-600 border-b-2 border-blue-500 bg-blue-50/50"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            OpenClaw / Agent
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4 space-y-5">
+          {tab === "claude" ? (
+            <>
+              {/* What is MCP */}
+              <div className="bg-blue-50 rounded-lg p-3.5">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">什么是 MCP？</span>{" "}
+                  MCP (Model Context Protocol) 让 Claude 直接调用 QuantGPT 的回测工具。
+                  配置后，你可以在 Claude Code 终端中用自然语言执行因子回测。
+                </p>
+              </div>
+
+              {/* Step 1 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
+                  <h3 className="text-sm font-medium text-gray-900">安装 QuantGPT</h3>
+                </div>
+                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
+                  <CopyButton text="git clone https://github.com/Miasyster/QuantGPT.git && cd QuantGPT && pip install -e ." />
+                  <div>
+                    <span className="text-green-400">$</span> git clone https://github.com/Miasyster/QuantGPT.git<br/>
+                    <span className="text-green-400">$</span> cd QuantGPT<br/>
+                    <span className="text-green-400">$</span> pip install -e .
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
+                  <h3 className="text-sm font-medium text-gray-900">配置 MCP（二选一）</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5 font-medium">本地模式 — 在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code></p>
+                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                      <CopyButton text={stdioConfig} />
+                      <pre className="whitespace-pre-wrap">{stdioConfig}</pre>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5 font-medium">远程模式 — 连接已部署的服务</p>
+                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                      <CopyButton text={httpConfig} />
+                      <pre className="whitespace-pre-wrap">{httpConfig}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
+                  <h3 className="text-sm font-medium text-gray-900">开始使用</h3>
+                </div>
+                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
+                  <CopyButton text="claude mcp list" />
+                  <div>
+                    <span className="text-green-400">$</span> claude mcp list<br/>
+                    <span className="text-gray-400"># quantgpt: ✓ Connected</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  验证连接后，直接用自然语言对话即可：「帮我测试一个低波动率因子，在沪深300上回测」
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* OpenClaw intro */}
+              <div className="bg-blue-50 rounded-lg p-3.5">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">架构说明</span>{" "}
+                  OpenClaw 是 Agent 调度框架，通过 MCP 协议动态调用 QuantGPT 的回测能力。
+                  QuantGPT 作为 MCP Server 暴露标准化工具接口。
+                </p>
+              </div>
+
+              {/* Architecture diagram */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <pre className="text-xs text-gray-600 leading-relaxed font-mono">{`[OpenClaw Agent]
+      ↓
+[MCP Client]
+      ↓  Streamable HTTP
+[QuantGPT MCP Server :8000]
+      ↓
+[回测 / 评分 / 诊断 / 验证]`}</pre>
+              </div>
+
+              {/* Step 1: Start server */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
+                  <h3 className="text-sm font-medium text-gray-900">启动 MCP Server</h3>
+                </div>
+                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
+                  <CopyButton text={mcpServerStartCmd} />
+                  <div>
+                    <span className="text-green-400">$</span> {mcpServerStartCmd}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">端点地址：<code className="bg-gray-100 px-1 rounded">http://localhost:8000/mcp</code></p>
+              </div>
+
+              {/* Step 2: Connect */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
+                  <h3 className="text-sm font-medium text-gray-900">在 Agent 中接入</h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5 font-medium">方式 A：原生 MCP Client（推荐）</p>
+                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                      <CopyButton text={openclawNativeCode} />
+                      <pre className="whitespace-pre-wrap">{openclawNativeCode}</pre>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1.5 font-medium">方式 B：手动封装（兼容旧版本）</p>
+                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                      <CopyButton text={openclawManualCode} />
+                      <pre className="whitespace-pre-wrap">{openclawManualCode}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
+                  <h3 className="text-sm font-medium text-gray-900">注意事项</h3>
+                </div>
+                <div className="space-y-1.5">
+                  {[
+                    "Tool 描述必须清晰，LLM 依赖描述决定是否调用",
+                    "输入参数要结构化（expression, start_date, end_date）",
+                    "返回值保持精简，避免大 JSON",
+                    "工具数量建议 ≤ 10 个，过多会导致调用混乱",
+                  ].map((tip, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                      <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                      {tip}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Available tools - shared */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 mb-2">可用工具（8 个）</h3>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { name: "list_operators", desc: "查看算子列表" },
+                { name: "list_universes", desc: "查看股票池" },
+                { name: "validate_expression", desc: "验证表达式" },
+                { name: "run_backtest", desc: "执行回测" },
+                { name: "score_factor", desc: "因子评分" },
+                { name: "diagnose_factor", desc: "诊断因子" },
+                { name: "run_anti_overfit", desc: "抗过拟合检测" },
+                { name: "run_rolling_validation", desc: "滚动验证" },
+              ].map((tool) => (
+                <div key={tool.name} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-50">
+                  <code className="text-xs text-orange-600 font-medium">{tool.name}</code>
+                  <span className="text-xs text-gray-400">{tool.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+          <a
+            href="https://github.com/Miasyster/QuantGPT"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            GitHub
+          </a>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Header() {
   const { user, isGuest, logout } = useAuth();
   const navigate = useNavigate();
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showMcpGuide, setShowMcpGuide] = useState(false);
 
   return (
     <>
@@ -116,6 +436,14 @@ export default function Header() {
           </div>
           {isGuest ? (
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowMcpGuide(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+                title="MCP 集成指南"
+              >
+                <Terminal className="h-4 w-4" />
+                <span className="hidden sm:inline">MCP</span>
+              </button>
               <span className="flex items-center gap-1.5 text-sm text-amber-600">
                 <UserCircle className="h-4 w-4" />
                 游客模式
@@ -129,6 +457,14 @@ export default function Header() {
             </div>
           ) : user ? (
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowMcpGuide(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+                title="MCP 集成指南"
+              >
+                <Terminal className="h-4 w-4" />
+                <span className="hidden sm:inline">MCP</span>
+              </button>
               <span className="text-sm text-gray-600">{user.email}</span>
               <button
                 onClick={logout}
@@ -187,6 +523,8 @@ export default function Header() {
           </div>
         </div>
       )}
+
+      {showMcpGuide && <McpGuideModal onClose={() => setShowMcpGuide(false)} />}
     </>
   );
 }
