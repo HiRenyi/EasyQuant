@@ -3,9 +3,19 @@ import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink }
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.6.1";
+export const APP_VERSION = "v1.7.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.7.0",
+    date: "2026-03-22",
+    items: [
+      "支持 23 个基本面财务变量（ROE/PE/PB/净利润率等）",
+      "财务数据按报告发布日对齐，避免未来数据偏差",
+      "进度条新增「获取财务数据」步骤",
+      "预热沪深300/中证1000/中证2000 财务数据缓存",
+    ],
+  },
   {
     version: "v1.6.1",
     date: "2026-03-22",
