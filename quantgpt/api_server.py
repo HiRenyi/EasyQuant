@@ -720,7 +720,6 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         fund_vars = detect_fundamental_vars(expression)
         if fund_vars:
             task["status"] = "fetching_fundamentals"
-            _emit(task_id, task)
             logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
             fund_fetcher = FundamentalDataFetcher()
             qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, fund_vars)
