@@ -268,5 +268,140 @@
       "n_groups": 5
     },
     "reference": "Alpha101 #6"
+  },
+  {
+    "id": "fundamental_value_pe",
+    "name": "低市盈率",
+    "category": "value",
+    "description": "买入市盈率最低的股票，经典价值投资策略",
+    "expression": "rank(-1 * pe)",
+    "tags": ["价值", "估值", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama & French (1992)"
+  },
+  {
+    "id": "fundamental_value_pb",
+    "name": "低市净率",
+    "category": "value",
+    "description": "买入市净率最低的股票，偏好资产折价标的",
+    "expression": "rank(-1 * pb)",
+    "tags": ["价值", "估值", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama & French (1993)"
+  },
+  {
+    "id": "fundamental_quality_roe",
+    "name": "高ROE质量因子",
+    "category": "value",
+    "description": "买入净资产收益率最高的公司，筛选盈利能力强的优质企业",
+    "expression": "rank(roe)",
+    "tags": ["质量", "盈利", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Novy-Marx (2013)"
+  },
+  {
+    "id": "fundamental_growth",
+    "name": "净利润增速",
+    "category": "momentum",
+    "description": "买入净利润同比增长最快的公司，捕捉业绩加速信号",
+    "expression": "rank(yoy_ni)",
+    "tags": ["成长", "业绩", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Chan et al. (1991)"
+  },
+  {
+    "id": "fundamental_dividend",
+    "name": "高股息率",
+    "category": "value",
+    "description": "买入股息率最高的股票，稳定现金流回报策略",
+    "expression": "rank(dividend_yield)",
+    "tags": ["股息", "收益", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama & French (1988)"
+  },
+  {
+    "id": "fundamental_roe_momentum",
+    "name": "质量+动量复合",
+    "category": "composite",
+    "description": "高ROE且近期价格走强的股票——基本面与技术面共振",
+    "expression": "rank(roe) * rank(ts_delta(close, 20) / ts_shift(close, 20))",
+    "tags": ["复合", "质量", "动量", "基本面"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "Asness et al. (2019)"
+  },
+  {
+    "id": "fundamental_value_lowvol",
+    "name": "低估值+低波动",
+    "category": "composite",
+    "description": "低PE且低波动的股票——攻守兼备的防御型策略",
+    "expression": "rank(-1 * pe) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
+    "tags": ["复合", "价值", "低波", "基本面"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Fama-French + Low-Vol"
+  },
+  {
+    "id": "fundamental_growth_value",
+    "name": "GARP策略",
+    "category": "composite",
+    "description": "合理价格买成长——高增速但估值不贵的股票",
+    "expression": "rank(yoy_ni) * rank(-1 * pe)",
+    "tags": ["复合", "成长", "价值", "基本面"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Peter Lynch GARP"
+  },
+  {
+    "id": "fundamental_dupont",
+    "name": "杜邦分析因子",
+    "category": "composite",
+    "description": "结合杜邦ROE和资产周转率，筛选经营效率高的公司",
+    "expression": "rank(dupont_roe) * rank(asset_turnover)",
+    "tags": ["复合", "质量", "运营", "基本面"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "DuPont Analysis"
   }
 ]
