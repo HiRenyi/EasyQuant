@@ -9,7 +9,7 @@ interface Props {
 function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
   const ctx = canvas.getContext("2d")!;
   const W = 640;
-  const H = 400;
+  const H = 340;
   const dpr = 2;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
@@ -52,18 +52,20 @@ function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
   ctx.lineTo(W - 24, 86);
   ctx.stroke();
 
-  // Metrics grid
+  // Core metrics — strategy performance focused
   const m = result.metrics;
-  const bs = result.backtest_summary;
+  const benchCagr = m.benchmark_cagr ?? null;
+  const excessReturn = benchCagr != null ? m.cagr - benchCagr : null;
+
   const metrics = [
-    { label: "总收益", value: (m.total_return * 100).toFixed(2) + "%", color: m.total_return >= 0 ? "#4ade80" : "#f87171" },
-    { label: "年化收益", value: (m.cagr * 100).toFixed(2) + "%", color: m.cagr >= 0 ? "#4ade80" : "#f87171" },
-    { label: "Sharpe", value: m.sharpe.toFixed(2), color: m.sharpe >= 1 ? "#4ade80" : "#e2e8f0" },
+    { label: "策略总收益", value: (m.total_return * 100).toFixed(2) + "%", color: m.total_return >= 0 ? "#4ade80" : "#f87171" },
+    { label: "策略年化", value: (m.cagr * 100).toFixed(2) + "%", color: m.cagr >= 0 ? "#4ade80" : "#f87171" },
+    { label: "Sharpe", value: m.sharpe.toFixed(2), color: m.sharpe >= 1 ? "#4ade80" : m.sharpe >= 0.5 ? "#fbbf24" : "#e2e8f0" },
     { label: "最大回撤", value: (m.max_drawdown * 100).toFixed(2) + "%", color: "#f87171" },
-    { label: "多头Sharpe", value: (bs.top_group_sharpe ?? bs.long_short_sharpe ?? 0).toFixed(2), color: "#e2e8f0" },
-    { label: "单调性", value: (bs.monotonicity_score ?? 0).toFixed(2), color: (bs.monotonicity_score ?? 0) >= 0.8 ? "#4ade80" : "#e2e8f0" },
-    { label: "IC均值", value: (bs.ic_mean ?? 0).toFixed(4), color: (bs.ic_mean ?? 0) > 0.03 ? "#4ade80" : "#e2e8f0" },
-    { label: "IC_IR", value: (bs.ic_ir ?? 0).toFixed(2), color: Math.abs(bs.ic_ir ?? 0) >= 0.5 ? "#4ade80" : "#e2e8f0" },
+    { label: "Sortino", value: m.sortino.toFixed(2), color: m.sortino >= 1.5 ? "#4ade80" : "#e2e8f0" },
+    { label: "胜率", value: (m.win_rate * 100).toFixed(1) + "%", color: m.win_rate >= 0.55 ? "#4ade80" : "#e2e8f0" },
+    { label: "波动率", value: (m.volatility * 100).toFixed(2) + "%", color: "#e2e8f0" },
+    { label: "盈亏比", value: m.profit_factor.toFixed(2), color: m.profit_factor >= 1.5 ? "#4ade80" : "#e2e8f0" },
   ];
 
   const cols = 4;
@@ -86,62 +88,40 @@ function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
     ctx.fillText(metric.value, x, y + 28);
   });
 
-  // Group returns bar chart
-  const barY = startY + 2 * cellH + 20;
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "11px -apple-system, system-ui, sans-serif";
-  ctx.fillText("分组收益", 24, barY);
+  // Excess return highlight
+  const excessY = startY + 2 * cellH + 16;
+  if (excessReturn != null && benchCagr != null) {
+    // Benchmark line
+    ctx.fillStyle = "#64748b";
+    ctx.font = "11px -apple-system, system-ui, sans-serif";
+    ctx.fillText(`基准年化 ${(benchCagr * 100).toFixed(2)}%`, 24, excessY);
 
-  const groups = Object.entries(bs.group_returns ?? {});
-  if (groups.length > 0) {
-    const barW = Math.min(60, (W - 80) / groups.length);
-    const maxReturn = Math.max(...groups.map(([, g]) => Math.abs((g as { annual_return: number }).annual_return)), 0.01);
-    const barMaxH = 80;
-    const barStartX = 24;
-    const barBottom = barY + 16 + barMaxH;
+    // Excess badge
+    const badgeX = 200;
+    const badgeText = `超额收益 ${excessReturn >= 0 ? "+" : ""}${(excessReturn * 100).toFixed(2)}%`;
+    const badgeColor = excessReturn >= 0 ? "#22c55e" : "#ef4444";
+    const badgeBg = excessReturn >= 0 ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)";
 
-    // Zero line
-    ctx.strokeStyle = "#475569";
-    ctx.lineWidth = 0.5;
+    ctx.fillStyle = badgeBg;
+    const tw = ctx.measureText(badgeText).width;
     ctx.beginPath();
-    ctx.moveTo(barStartX, barBottom);
-    ctx.lineTo(barStartX + groups.length * barW, barBottom);
-    ctx.stroke();
+    ctx.roundRect(badgeX, excessY - 12, tw + 16, 18, 4);
+    ctx.fill();
 
-    groups.forEach(([name, g], i) => {
-      const ret = (g as { annual_return: number }).annual_return;
-      const h = (Math.abs(ret) / maxReturn) * barMaxH;
-      const x = barStartX + i * barW + 4;
-      const w = barW - 8;
-
-      ctx.fillStyle = ret >= 0 ? "#22c55e" : "#ef4444";
-      ctx.globalAlpha = 0.8;
-      ctx.fillRect(x, barBottom - h, w, h);
-      ctx.globalAlpha = 1;
-
-      // Label
-      ctx.fillStyle = "#64748b";
-      ctx.font = "9px -apple-system, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(name.replace("group_", "G"), x + w / 2, barBottom + 12);
-
-      // Value
-      ctx.fillStyle = ret >= 0 ? "#86efac" : "#fca5a5";
-      ctx.font = "9px -apple-system, system-ui, sans-serif";
-      ctx.fillText((ret * 100).toFixed(1) + "%", x + w / 2, barBottom - h - 4);
-      ctx.textAlign = "left";
-    });
+    ctx.fillStyle = badgeColor;
+    ctx.font = "bold 12px -apple-system, system-ui, sans-serif";
+    ctx.fillText(badgeText, badgeX + 8, excessY);
   }
 
   // Footer
   ctx.fillStyle = "#475569";
   ctx.font = "10px -apple-system, system-ui, sans-serif";
-  const footer = `${result.params.universe} · ${result.params.start_date} ~ ${result.params.end_date} · ${result.params.holding_period}天持仓`;
+  const footer = `${result.params.universe.toUpperCase()} · ${result.params.start_date} ~ ${result.params.end_date} · ${result.params.holding_period}天持仓 · ${result.params.stock_count}只股票`;
   ctx.fillText(footer, 24, H - 20);
 
   ctx.fillStyle = "#64748b";
   ctx.textAlign = "right";
-  ctx.fillText("quantgpt.com", W - 24, H - 20);
+  ctx.fillText("quantgpt.online", W - 24, H - 20);
   ctx.textAlign = "left";
 }
 
