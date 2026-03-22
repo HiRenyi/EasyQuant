@@ -3,6 +3,7 @@ export type TaskStatus =
   | "generating_expression"
   | "validating"
   | "fetching_data"
+  | "fetching_fundamentals"
   | "backtesting"
   | "analyzing"
   | "generating_report"
