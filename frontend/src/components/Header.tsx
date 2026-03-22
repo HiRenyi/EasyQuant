@@ -3,9 +3,19 @@ import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink }
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.7.0";
+export const APP_VERSION = "v1.7.1";
 
 const CHANGELOG = [
+  {
+    version: "v1.7.1",
+    date: "2026-03-22",
+    items: [
+      "新增 roa(总资产收益率)、bps(每股净资产)、nav(净资产) 3 个衍生变量",
+      "表达式变量名支持大小写不敏感（ROE/roe/Roe 均可）",
+      "LLM 常见错误变量名自动修正（pe_ratio→pe, eps→eps_ttm 等）",
+      "不支持的变量给出清晰中文提示和替代建议",
+    ],
+  },
   {
     version: "v1.7.0",
     date: "2026-03-22",

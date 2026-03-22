@@ -55,6 +55,9 @@ DERIVED_VARIABLES: Dict[str, List[str]] = {
     "pe": ["net_profit", "total_share"],         # close * total_share / net_profit
     "pb": ["net_profit", "total_share", "roe"],   # close * total_share / (net_profit / roe)
     "ps": ["revenue", "total_share"],             # close * total_share / revenue
+    "roa": ["roe", "equity_multiplier"],          # roe / equity_multiplier
+    "bps": ["net_profit", "total_share", "roe"],  # (net_profit / roe) / total_share
+    "nav": ["net_profit", "roe"],                 # net_profit / roe (净资产)
 }
 
 ALL_FUNDAMENTAL_NAMES: frozenset = frozenset(FUNDAMENTAL_VARIABLES.keys()) | frozenset(DERIVED_VARIABLES.keys())
@@ -394,6 +397,38 @@ class FundamentalDataFetcher:
                 merged["ps"] = np.where(
                     (merged.get("revenue", 0) != 0) & merged.get("revenue", pd.Series(dtype=float)).notna(),
                     merged["close"] * merged.get("total_share", np.nan) / merged.get("revenue", np.nan),
+                    np.nan,
+                )
+        if "roa" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                eq_mult = merged.get("equity_multiplier", pd.Series(dtype=float))
+                merged["roa"] = np.where(
+                    (eq_mult != 0) & eq_mult.notna(),
+                    merged.get("roe", np.nan) / eq_mult,
+                    np.nan,
+                )
+        if "bps" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                roe_val = merged.get("roe", pd.Series(dtype=float))
+                net_profit_val = merged.get("net_profit", pd.Series(dtype=float))
+                total_share_val = merged.get("total_share", pd.Series(dtype=float))
+                book_value = np.where(
+                    (roe_val != 0) & roe_val.notna(),
+                    net_profit_val / roe_val,
+                    np.nan,
+                )
+                merged["bps"] = np.where(
+                    (total_share_val != 0) & pd.notna(total_share_val) & pd.notna(book_value),
+                    book_value / total_share_val,
+                    np.nan,
+                )
+        if "nav" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                roe_val = merged.get("roe", pd.Series(dtype=float))
+                net_profit_val = merged.get("net_profit", pd.Series(dtype=float))
+                merged["nav"] = np.where(
+                    (roe_val != 0) & roe_val.notna(),
+                    net_profit_val / roe_val,
                     np.nan,
                 )
 
