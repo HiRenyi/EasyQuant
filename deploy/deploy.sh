@@ -47,7 +47,7 @@ else
         --name quantgpt-pg \
         --restart always \
         -e POSTGRES_USER=quantgpt \
-        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme} \
         -e POSTGRES_DB=quantgpt \
         -p 5433:5432 \
         -v pgdata:/var/lib/postgresql/data \
