@@ -3,9 +3,20 @@ import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink }
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.8.0";
+export const APP_VERSION = "v1.9.0";
 
 const CHANGELOG = [
+  {
+    version: "v1.9.0",
+    date: "2026-03-23",
+    items: [
+      "新增模拟盘：回测结果一键上模拟盘，每日自动结算净值",
+      "新增任务取消：回测运行中随时中止",
+      "策略模板库新增「基本面」分类（PE/PB/ROE/ROA/PS/股息/现金流/营收增速）",
+      "分享卡片改版：展示策略收益、超额收益等核心指标",
+      "修复迭代优化对基本面因子（dupont_roe 等）验证失败的问题",
+    ],
+  },
   {
     version: "v1.8.0",
     date: "2026-03-22",
