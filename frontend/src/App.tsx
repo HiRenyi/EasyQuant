@@ -11,6 +11,7 @@ import ResultsDashboard from "./components/ResultsDashboard";
 import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
 import FeedbackButton from "./components/FeedbackButton";
+import SatisfactionRating from "./components/SatisfactionRating";
 import FactorLibrary from "./components/FactorLibrary";
 import FactorWall from "./components/FactorWall";
 import TemplateGallery from "./components/TemplateGallery";
@@ -239,11 +240,23 @@ export default function App() {
                   {activeTask.expression && (
                     <p className="mt-2 text-xs text-red-500 font-mono">表达式: {activeTask.expression}</p>
                   )}
-                  <p className="mt-3 text-xs text-red-400">如果问题持续出现，欢迎点击右下角「反馈」按钮告诉我们，我们会尽快修复。</p>
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent("open-feedback", {
+                      detail: {
+                        task_id: activeTask.task_id,
+                        prefill: `回测失败: ${activeTask.error || "未知错误"}${activeTask.expression ? `\n表达式: ${activeTask.expression}` : ""}`,
+                      },
+                    }))}
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                  >
+                    一键反馈此问题
+                  </button>
                 </div>
               )}
 
               {showResults && activeTask.result && (
+                <>
+                <SatisfactionRating taskId={activeTask.task_id} expression={activeTask.result.params.expression} />
                 <ResultsDashboard
                   result={activeTask.result}
                   onSaveFactor={isGuest ? undefined : handleSaveFactor}
@@ -260,6 +273,7 @@ export default function App() {
                     />
                   }
                 />
+                </>
               )}
             </>
           )}
