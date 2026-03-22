@@ -9,6 +9,7 @@ export type TaskStatus =
   | "generating_report"
   | "completed"
   | "failed"
+  | "cancelled"
   | "iterating"
   | "iteration_completed";
 

@@ -70,6 +70,13 @@ export async function submitBacktest(req: BacktestRequest, sessionId?: string): 
   return res.json();
 }
 
+export async function cancelTask(taskId: string): Promise<void> {
+  const res = await authFetch(`${BASE}/api/v1/tasks/${taskId}/cancel`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export async function getTask(taskId: string): Promise<Task> {
   const res = await authFetch(`${BASE}/api/v1/tasks/${taskId}`);
   if (!res.ok) throw new Error(`Task fetch failed: ${res.status}`);
@@ -101,7 +108,7 @@ export function streamTask(
       try {
         const task = await getTask(taskId);
         onUpdate(task);
-        if (task.status === "completed" || task.status === "failed" || task.status === "iteration_completed") {
+        if (task.status === "completed" || task.status === "failed" || task.status === "cancelled" || task.status === "iteration_completed") {
           cleanup();
           onDone();
         }

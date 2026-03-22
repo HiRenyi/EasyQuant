@@ -72,6 +72,7 @@ export default function App() {
     activeTask,
     isLoading,
     submit,
+    cancel,
     setActiveTask,
     iterationTask,
     isIterating,
@@ -230,7 +231,7 @@ export default function App() {
               <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
 
               {showProgress && (
-                <ProgressTracker status={activeTask.status} expression={activeTask.expression} />
+                <ProgressTracker status={activeTask.status} expression={activeTask.expression} onCancel={cancel} />
               )}
 
               {showError && activeTask && (

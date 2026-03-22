@@ -148,11 +148,23 @@ _sse_lock = threading.Lock()
 
 
 def _active_task_count() -> int:
-    """Count tasks that are still running (not completed/failed/iteration_completed)."""
+    """Count tasks that are still running (not completed/failed/cancelled/iteration_completed)."""
     return sum(
         1 for t in _tasks.values()
-        if t.get("status") not in ("completed", "failed", "iteration_completed")
+        if t.get("status") not in ("completed", "failed", "cancelled", "iteration_completed")
     )
+
+
+class _CancelledException(Exception):
+    """Raised when a task is cancelled by the user."""
+    pass
+
+
+def _check_cancelled(task_id: str):
+    """Check if task has been cancelled; raise if so."""
+    task = _tasks.get(task_id)
+    if task and task.get("cancelled"):
+        raise _CancelledException()
 
 
 def _cleanup_tasks():
@@ -712,6 +724,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 return
 
         # 3. Fetch data
+        _check_cancelled(task_id)
         task["status"] = "fetching_data"
         stock_codes = get_universe(req.universe, date=req.start_date)
         fetcher = MarketDataFetcher()
@@ -725,6 +738,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
         fund_vars = detect_fundamental_vars(expression)
         if fund_vars:
+            _check_cancelled(task_id)
             task["status"] = "fetching_fundamentals"
             logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
             fund_fetcher = FundamentalDataFetcher()
@@ -745,12 +759,14 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                     logger.warning(f"[{task_id}] no dividend data fetched")
 
         # 4. Run backtest
+        _check_cancelled(task_id)
         task["status"] = "backtesting"
         result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
                                      neutralize_industry=req.neutralize_industry,
                                      neutralize_cap=req.neutralize_cap)
 
         # 4a. Anti-overfit analysis
+        _check_cancelled(task_id)
         anti_overfit_result = None
         factor_df = result.get("_factor_df")
         if factor_df is not None and len(factor_df) > 100:
@@ -762,6 +778,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 logger.warning(f"[{task_id}] anti-overfit analysis failed: {e}")
 
         # 5. Generate report (into user-specific directory)
+        _check_cancelled(task_id)
         task["status"] = "generating_report"
         bm_returns = None
         try:
@@ -839,6 +856,9 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         logger.info(f"[{task_id}] completed")
         _cleanup_reports(user_id)
 
+    except _CancelledException:
+        logger.info(f"[{task_id}] cancelled by user")
+        task["status"] = "cancelled"
     except Exception as e:
         logger.error(f"[{task_id}] failed: {traceback.format_exc()}")
         task["status"] = "failed"
@@ -862,6 +882,33 @@ def health():
         "active_tasks": _active_task_count(),
         "total_tasks": len(_tasks),
     }
+
+
+@app.post("/api/v1/tasks/{task_id}/cancel")
+async def cancel_task(
+    task_id: str,
+    user: User | None = Depends(get_optional_user),
+):
+    """取消正在运行的回测任务。"""
+    task = _tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    # Check ownership
+    user_id = str(user.id) if user else GUEST_USER_ID
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="无权操作此任务")
+
+    # Only running tasks can be cancelled
+    if task["status"] in ("completed", "failed", "cancelled", "iteration_completed"):
+        raise HTTPException(status_code=400, detail="任务已结束，无法取消")
+
+    with _tasks_lock:
+        task["cancelled"] = True
+        task["status"] = "cancelled"
+
+    logger.info(f"[{task_id}] cancel requested by user")
+    return {"task_id": task_id, "status": "cancelled"}
 
 
 @app.post("/api/v1/auto_backtest", status_code=202)
@@ -897,6 +944,7 @@ async def auto_backtest(
             "user_id": user_id,
             "session_id": session_id,
             "status": "pending",
+            "cancelled": False,
             "params": req.model_dump(exclude={"session_id"}),
             "created_at": time.time(),
             "is_guest": is_guest,

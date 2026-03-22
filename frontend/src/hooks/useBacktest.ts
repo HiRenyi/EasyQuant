@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import type { Task, BacktestRequest } from "../types/backtest";
-import { submitBacktest, streamTask, submitIteration, selectCandidate } from "../api/client";
+import { submitBacktest, streamTask, submitIteration, selectCandidate, cancelTask } from "../api/client";
 
 export function useBacktest(onComplete?: (task: Task) => void, sessionId?: string | null) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -32,7 +32,7 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
           task_id,
           (task) => {
             setActiveTask(task);
-            if (task.status === "completed" || task.status === "failed") {
+            if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
               setIsLoading(false);
               onComplete?.(task);
             }
@@ -135,10 +135,21 @@ export function useBacktest(onComplete?: (task: Task) => void, sessionId?: strin
     []
   );
 
+  const cancel = useCallback(async () => {
+    if (!activeTask || !activeTask.task_id || activeTask.task_id === "error") return;
+    try {
+      await cancelTask(activeTask.task_id);
+    } catch { /* ignore — task may already be done */ }
+    stopStream();
+    setIsLoading(false);
+    setActiveTask((prev) => prev ? { ...prev, status: "cancelled" } : prev);
+  }, [activeTask, stopStream]);
+
   return {
     activeTask,
     isLoading,
     submit,
+    cancel,
     setActiveTask,
     iterationTask,
     isIterating,
