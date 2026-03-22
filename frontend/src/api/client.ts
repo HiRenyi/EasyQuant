@@ -80,28 +80,74 @@ export function streamTask(
   taskId: string,
   onUpdate: (task: Task) => void,
   onDone: () => void,
-  onError: (err: Event) => void,
+  _onError?: (err: Event) => void,
 ): () => void {
   const token = getAccessToken();
   const url = `${BASE}/api/v1/tasks/${taskId}/stream${token ? `?token=${token}` : ""}`;
-  const es = new EventSource(url);
+  let closed = false;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
 
-  es.addEventListener("update", (e) => {
-    const task: Task = JSON.parse(e.data);
-    onUpdate(task);
-  });
+  function cleanup() {
+    closed = true;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
 
-  es.addEventListener("done", () => {
-    es.close();
-    onDone();
-  });
+  function startPolling() {
+    if (closed || pollTimer) return;
+    pollTimer = setInterval(async () => {
+      if (closed) { cleanup(); return; }
+      try {
+        const task = await getTask(taskId);
+        onUpdate(task);
+        if (task.status === "completed" || task.status === "failed" || task.status === "iteration_completed") {
+          cleanup();
+          onDone();
+        }
+      } catch {
+        // keep polling
+      }
+    }, 3000);
+  }
 
-  es.addEventListener("error", (e) => {
-    es.close();
-    onError(e);
-  });
+  function connect() {
+    if (closed) return;
+    const es = new EventSource(url);
 
-  return () => es.close();
+    es.addEventListener("update", (e) => {
+      retryCount = 0;
+      const task: Task = JSON.parse(e.data);
+      onUpdate(task);
+    });
+
+    es.addEventListener("done", () => {
+      es.close();
+      cleanup();
+      onDone();
+    });
+
+    es.addEventListener("error", () => {
+      es.close();
+      if (closed) return;
+      retryCount++;
+      if (retryCount <= MAX_RETRIES) {
+        // Retry SSE after a short delay
+        setTimeout(connect, 2000 * retryCount);
+      } else {
+        // Fall back to polling
+        startPolling();
+      }
+    });
+
+    // Store close function
+    closeFn = () => { es.close(); cleanup(); };
+  }
+
+  let closeFn = () => { cleanup(); };
+  connect();
+
+  return () => closeFn();
 }
 
 export function getReportUrl(reportUrl: string): string {
