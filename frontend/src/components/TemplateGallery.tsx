@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Zap, TrendingUp, BarChart3, Activity, LineChart, Layers, ChevronRight } from "lucide-react";
+import { Zap, TrendingUp, BarChart3, Activity, LineChart, Layers, ChevronRight, PieChart } from "lucide-react";
 import type { FactorTemplate } from "../api/templates";
 import { fetchTemplates } from "../api/templates";
 
@@ -9,6 +9,7 @@ const CATEGORIES = [
   { key: "value", label: "价值", icon: BarChart3 },
   { key: "volume", label: "量价", icon: Activity },
   { key: "volatility", label: "波动", icon: LineChart },
+  { key: "fundamental", label: "基本面", icon: PieChart },
   { key: "technical", label: "技术", icon: Zap },
   { key: "composite", label: "复合", icon: Layers },
 ];

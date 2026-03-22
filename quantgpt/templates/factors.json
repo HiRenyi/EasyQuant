@@ -272,7 +272,7 @@
   {
     "id": "fundamental_value_pe",
     "name": "低市盈率",
-    "category": "value",
+    "category": "fundamental",
     "description": "买入市盈率最低的股票，经典价值投资策略",
     "expression": "rank(-1 * pe)",
     "tags": ["价值", "估值", "基本面"],
@@ -287,7 +287,7 @@
   {
     "id": "fundamental_value_pb",
     "name": "低市净率",
-    "category": "value",
+    "category": "fundamental",
     "description": "买入市净率最低的股票，偏好资产折价标的",
     "expression": "rank(-1 * pb)",
     "tags": ["价值", "估值", "基本面"],
@@ -302,7 +302,7 @@
   {
     "id": "fundamental_quality_roe",
     "name": "高ROE质量因子",
-    "category": "value",
+    "category": "fundamental",
     "description": "买入净资产收益率最高的公司，筛选盈利能力强的优质企业",
     "expression": "rank(roe)",
     "tags": ["质量", "盈利", "基本面"],
@@ -317,7 +317,7 @@
   {
     "id": "fundamental_growth",
     "name": "净利润增速",
-    "category": "momentum",
+    "category": "fundamental",
     "description": "买入净利润同比增长最快的公司，捕捉业绩加速信号",
     "expression": "rank(yoy_ni)",
     "tags": ["成长", "业绩", "基本面"],
@@ -332,7 +332,7 @@
   {
     "id": "fundamental_dividend",
     "name": "高股息率",
-    "category": "value",
+    "category": "fundamental",
     "description": "买入股息率最高的股票，稳定现金流回报策略",
     "expression": "rank(dividend_yield)",
     "tags": ["股息", "收益", "基本面"],
@@ -403,5 +403,65 @@
       "n_groups": 5
     },
     "reference": "DuPont Analysis"
+  },
+  {
+    "id": "fundamental_value_ps",
+    "name": "低市销率",
+    "category": "fundamental",
+    "description": "买入市销率最低的股票，适合高增长但尚未盈利的行业",
+    "expression": "rank(-1 * ps)",
+    "tags": ["价值", "估值", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "O'Shaughnessy (2005)"
+  },
+  {
+    "id": "fundamental_quality_roa",
+    "name": "高ROA资产回报",
+    "category": "fundamental",
+    "description": "买入总资产收益率最高的公司，衡量资产利用效率",
+    "expression": "rank(roa)",
+    "tags": ["质量", "盈利", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Novy-Marx (2013)"
+  },
+  {
+    "id": "fundamental_cashflow",
+    "name": "现金流质量",
+    "category": "fundamental",
+    "description": "经营现金流与净利润之比越高，盈利质量越好",
+    "expression": "rank(cfo_to_np)",
+    "tags": ["质量", "现金流", "基本面"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Sloan (1996)"
+  },
+  {
+    "id": "fundamental_revenue_growth",
+    "name": "营收增速",
+    "category": "fundamental",
+    "description": "买入营业收入同比增长最快的公司，捕捉收入端扩张信号",
+    "expression": "rank(yoy_or)",
+    "tags": ["成长", "营收", "基本面"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "Lakonishok et al. (1994)"
   }
 ]
