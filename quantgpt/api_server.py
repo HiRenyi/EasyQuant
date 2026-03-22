@@ -759,28 +759,33 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             return
 
         # 3a. Fetch fundamental data if expression uses fundamental vars
-        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
         fund_vars = detect_fundamental_vars(expression)
         if fund_vars:
             _check_cancelled(task_id)
             task["status"] = "fetching_fundamentals"
             logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
-            fund_fetcher = FundamentalDataFetcher()
-            # Quarterly financial data (non-dividend vars)
-            non_div_vars = fund_vars - {"dividend_yield"}
-            if non_div_vars:
-                qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div_vars)
-                if qdf is not None and len(qdf) > 0:
-                    market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
-                    logger.info(f"[{task_id}] fundamental data merged")
-            # Dividend data
-            if "dividend_yield" in fund_vars:
-                div_df = fund_fetcher.fetch_dividend_data(stock_codes, req.start_date, req.end_date)
-                if div_df is not None and len(div_df) > 0:
-                    market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
-                    logger.info(f"[{task_id}] dividend data merged")
-                else:
-                    logger.warning(f"[{task_id}] no dividend data fetched")
+            # Try rqdatac first (daily frequency, no alignment needed)
+            rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, req.start_date, req.end_date)
+            if rq_result is not None:
+                market_df = rq_result
+                logger.info(f"[{task_id}] fundamental data merged via rqdatac")
+            else:
+                # Fallback: baostock quarterly
+                fund_fetcher = FundamentalDataFetcher()
+                non_div_vars = fund_vars - {"dividend_yield"}
+                if non_div_vars:
+                    qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div_vars)
+                    if qdf is not None and len(qdf) > 0:
+                        market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
+                        logger.info(f"[{task_id}] fundamental data merged")
+                if "dividend_yield" in fund_vars:
+                    div_df = fund_fetcher.fetch_dividend_data(stock_codes, req.start_date, req.end_date)
+                    if div_df is not None and len(div_df) > 0:
+                        market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
+                        logger.info(f"[{task_id}] dividend data merged")
+                    else:
+                        logger.warning(f"[{task_id}] no dividend data fetched")
 
         # 4. Run backtest
         _check_cancelled(task_id)
@@ -1238,26 +1243,26 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
             return
 
         # 3a. Enrich with fundamental data if parent expression uses fundamental vars
-        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
         fund_vars = detect_fundamental_vars(parent_expression)
         if fund_vars:
             logger.info(f"[{task_id}] iteration: enriching market_df with fundamentals: {fund_vars}")
-            fund_fetcher = FundamentalDataFetcher()
-            non_div_vars = fund_vars - {"dividend_yield"}
-            if non_div_vars:
-                qdf = fund_fetcher.fetch_fundamentals(
-                    stock_codes, parent_params.get("start_date", "2023-01-01"),
-                    parent_params.get("end_date", "2025-12-31"), non_div_vars
-                )
-                if qdf is not None and len(qdf) > 0:
-                    market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
-            if "dividend_yield" in fund_vars:
-                div_df = fund_fetcher.fetch_dividend_data(
-                    stock_codes, parent_params.get("start_date", "2023-01-01"),
-                    parent_params.get("end_date", "2025-12-31")
-                )
-                if div_df is not None and len(div_df) > 0:
-                    market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
+            sd = parent_params.get("start_date", "2023-01-01")
+            ed = parent_params.get("end_date", "2025-12-31")
+            rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, sd, ed)
+            if rq_result is not None:
+                market_df = rq_result
+            else:
+                fund_fetcher = FundamentalDataFetcher()
+                non_div_vars = fund_vars - {"dividend_yield"}
+                if non_div_vars:
+                    qdf = fund_fetcher.fetch_fundamentals(stock_codes, sd, ed, non_div_vars)
+                    if qdf is not None and len(qdf) > 0:
+                        market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div_vars)
+                if "dividend_yield" in fund_vars:
+                    div_df = fund_fetcher.fetch_dividend_data(stock_codes, sd, ed)
+                    if div_df is not None and len(div_df) > 0:
+                        market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
 
         # 4. Score parent factor
         parent_backtest_summary = parent_result.get("backtest_summary", {})

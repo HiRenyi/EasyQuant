@@ -1,7 +1,7 @@
-"""Fundamental (financial statement) data fetcher with baostock + Parquet caching.
+"""Fundamental data fetcher with rqdatac (primary) + baostock (fallback) + Parquet caching.
 
-Fetches quarterly financial data from 6 baostock APIs, caches per-stock as Parquet,
-and aligns quarterly data to daily frequency using pubDate for point-in-time correctness.
+rqdatac path: uses get_factor() for daily-frequency financial indicators (no alignment needed).
+baostock path: fetches quarterly data from 6 APIs, aligns to daily via pubDate merge_asof.
 """
 
 import re
@@ -607,3 +607,286 @@ class FundamentalDataFetcher:
         if not result_parts:
             return market_df
         return pd.concat(result_parts, ignore_index=True)
+
+
+# ─── rqdatac daily factor enrichment + Parquet caching ─────────────
+
+# Map project variable names → rqdatac factor names
+_RQ_FACTOR_MAP: Dict[str, str] = {
+    # Profitability
+    "roe":              "return_on_equity",
+    "np_margin":        "net_profit_margin",
+    "gp_margin":        "gross_profit_margin",
+    "eps_ttm":          "earnings_per_share",
+    # Growth
+    "yoy_ni":           "inc_net_profit_annual",
+    "yoy_equity":       "inc_total_equity_annual",
+    "yoy_asset":        "inc_total_assets_annual",
+    "yoy_pni":          "inc_net_profit_annual",  # closest match
+    # Balance
+    "current_ratio":    "current_ratio",
+    "debt_ratio":       "debt_to_asset_ratio",
+    "equity_multiplier": "equity_multiplier",
+    # Operation
+    "asset_turnover":   "total_asset_turnover_rate",
+    "inv_turnover":     "inventory_turnover_rate",
+    # Dupont
+    "dupont_roe":       "du_pont_roe",
+    "dupont_asset_turn": "du_pont_asset_turnover",
+    # Cash flow
+    "cfo_to_np":        "operating_cashflow_to_net_profit",
+    # Valuation (rqdatac computes these directly as daily factors)
+    "pe":               "pe_ratio",
+    "pb":               "pb_ratio",
+    "ps":               "ps_ratio",
+    # Dividend
+    "dividend_yield":   "dividend_yield",
+    # Raw financials (for derived calculations)
+    "net_profit":       "net_profit",
+    "revenue":          "revenue",
+    "total_share":      "total_shares",
+    "float_share":      "circulation_a_shares",
+}
+
+# All unique rqdatac factor names (for prewarming)
+ALL_RQ_FACTORS: List[str] = sorted(set(_RQ_FACTOR_MAP.values()))
+
+# Reverse map: rqdatac name → project name(s)
+_RQ_TO_VAR: Dict[str, str] = {}
+for _var, _rq in _RQ_FACTOR_MAP.items():
+    if _rq not in _RQ_TO_VAR:
+        _RQ_TO_VAR[_rq] = _var
+
+# Factor cache directory
+_FACTOR_CACHE_DIR = _PROJECT_ROOT / "data" / "factors"
+
+
+def _factor_cache_path(stock_code: str) -> Path:
+    """Per-stock factor cache file path."""
+    normalized = stock_code.replace(".", "_")
+    return _FACTOR_CACHE_DIR / f"{normalized}.parquet"
+
+
+def _load_factor_cache(stock_code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+    """Load cached factor data for a stock if it covers the requested range."""
+    path = _factor_cache_path(stock_code)
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_parquet(path)
+        df["trade_date"] = pd.to_datetime(df["trade_date"])
+        cache_min = df["trade_date"].min()
+        cache_max = df["trade_date"].max()
+        req_start = pd.Timestamp(start_date)
+        req_end = pd.Timestamp(end_date)
+        if cache_min <= req_start + pd.Timedelta(days=5) and cache_max >= req_end - pd.Timedelta(days=5):
+            filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
+            if len(filtered) > 0:
+                return filtered
+    except Exception as e:
+        logger.warning(f"Factor cache load failed for {stock_code}: {e}")
+    return None
+
+
+def _save_factor_cache(stock_code: str, df: pd.DataFrame):
+    """Save factor data to per-stock Parquet cache, merging with existing data."""
+    if df is None or len(df) == 0:
+        return
+    _FACTOR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = _factor_cache_path(stock_code)
+    try:
+        if path.exists():
+            existing = pd.read_parquet(path)
+            existing["trade_date"] = pd.to_datetime(existing["trade_date"])
+            # Merge: new data takes precedence
+            df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+        df.to_parquet(path, index=False)
+    except Exception as e:
+        logger.warning(f"Factor cache save failed for {stock_code}: {e}")
+
+
+def _fetch_factors_rq(
+    stock_codes: List[str],
+    start_date: str,
+    end_date: str,
+    rq_factors: Optional[List[str]] = None,
+) -> Optional[pd.DataFrame]:
+    """Fetch daily factor data from rqdatac for multiple stocks. Returns DataFrame with stock_code, trade_date, + factor columns."""
+    from .market_data import _rqdatac_init, _to_rq_code, _from_rq_code
+
+    if not _rqdatac_init():
+        return None
+
+    import rqdatac
+
+    rq_factors = rq_factors or ALL_RQ_FACTORS
+    rq_codes = [_to_rq_code(c) for c in stock_codes]
+
+    try:
+        raw = rqdatac.get_factor(
+            order_book_ids=rq_codes,
+            factor=rq_factors,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if raw is None or len(raw) == 0:
+            return None
+    except Exception as e:
+        logger.warning(f"rqdatac get_factor failed: {e}")
+        return None
+
+    df = raw.reset_index()
+    df["stock_code"] = df["order_book_id"].apply(_from_rq_code)
+    df["trade_date"] = pd.to_datetime(df["date"])
+
+    # Rename rqdatac columns → project variable names
+    rename_map = {rq: var for rq, var in _RQ_TO_VAR.items() if rq in df.columns}
+    df = df.rename(columns=rename_map)
+
+    # Keep only stock_code, trade_date, + variable columns
+    var_cols = [c for c in df.columns if c not in ("order_book_id", "date")]
+    return df[var_cols]
+
+
+def prewarm_factors_rq(
+    stock_codes: List[str],
+    start_date: str = "2015-01-01",
+    end_date: str = "2025-12-31",
+    batch_size: int = 200,
+):
+    """Pre-warm factor cache: fetch all factors from rqdatac and save per-stock Parquet files.
+
+    Called by scripts/prewarm.py. Skips stocks already cached for the full date range.
+    """
+    from .market_data import CACHE_ONLY
+
+    if CACHE_ONLY:
+        logger.warning("Cache-only mode: skipping factor prewarm")
+        return
+
+    _FACTOR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Filter out already-cached stocks
+    to_fetch = []
+    for code in stock_codes:
+        cached = _load_factor_cache(code, start_date, end_date)
+        if cached is not None and len(cached) > 10:
+            continue
+        to_fetch.append(code)
+
+    if not to_fetch:
+        logger.info(f"Factor prewarm: all {len(stock_codes)} stocks already cached")
+        return
+
+    logger.info(f"Factor prewarm: {len(to_fetch)} stocks to fetch ({len(stock_codes) - len(to_fetch)} cached)")
+
+    for i in range(0, len(to_fetch), batch_size):
+        batch = to_fetch[i:i + batch_size]
+        df = _fetch_factors_rq(batch, start_date, end_date)
+        if df is not None and len(df) > 0:
+            for code, group in df.groupby("stock_code"):
+                _save_factor_cache(code, group)
+            logger.info(f"Factor batch {i // batch_size + 1}: {df['stock_code'].nunique()}/{len(batch)} stocks ({i + len(batch)}/{len(to_fetch)} total)")
+        else:
+            logger.warning(f"Factor batch {i // batch_size + 1}: no data returned")
+
+
+def enrich_with_fundamentals_rq(
+    market_df: pd.DataFrame,
+    needed_vars: Set[str],
+    stock_codes: List[str],
+    start_date: str,
+    end_date: str,
+) -> Optional[pd.DataFrame]:
+    """Enrich market_df with fundamental data: local cache → rqdatac → None.
+
+    Returns enriched market_df with fundamental columns added, or None if unavailable.
+    """
+    from .market_data import _rqdatac_init, _to_rq_code, _from_rq_code
+
+    # Determine which rqdatac factors we need
+    rq_factors = []
+    var_to_rq = {}
+    for var in needed_vars:
+        rq_name = _RQ_FACTOR_MAP.get(var)
+        if rq_name and rq_name not in rq_factors:
+            rq_factors.append(rq_name)
+            var_to_rq[var] = rq_name
+
+    if not rq_factors:
+        return None
+
+    # Step 1: Try loading from per-stock Parquet cache
+    cached_parts = []
+    uncached_codes = []
+    for code in stock_codes:
+        cached = _load_factor_cache(code, start_date, end_date)
+        if cached is not None:
+            # Check if cache has the needed variable columns
+            needed_cols = set(var_to_rq.keys()) & set(cached.columns)
+            if needed_cols:
+                cached_parts.append(cached)
+                continue
+        uncached_codes.append(code)
+
+    # Step 2: Fetch uncached stocks from rqdatac
+    if uncached_codes:
+        if _rqdatac_init():
+            for i in range(0, len(uncached_codes), 200):
+                batch = uncached_codes[i:i + 200]
+                fetched = _fetch_factors_rq(batch, start_date, end_date, rq_factors)
+                if fetched is not None and len(fetched) > 0:
+                    for code, group in fetched.groupby("stock_code"):
+                        _save_factor_cache(code, group)
+                    cached_parts.append(fetched)
+                    logger.info(f"[rqdatac] Fetched factors for {fetched['stock_code'].nunique()} stocks, cached")
+        else:
+            logger.warning("rqdatac unavailable and factor cache miss, fundamental data will be incomplete")
+
+    if not cached_parts:
+        return None
+
+    factor_df = pd.concat(cached_parts, ignore_index=True)
+
+    # Rename any remaining rqdatac column names → project variable names
+    rename_map = {rq_name: var_name for var_name, rq_name in var_to_rq.items() if rq_name in factor_df.columns}
+    factor_df = factor_df.rename(columns=rename_map)
+
+    # Select only the columns we need
+    keep_cols = ["stock_code", "trade_date"] + [v for v in var_to_rq.keys() if v in factor_df.columns]
+    factor_df = factor_df[keep_cols]
+
+    # Compute derived variables
+    if "roa" in needed_vars and "roa" not in factor_df.columns:
+        if "roe" in factor_df.columns and "equity_multiplier" in factor_df.columns:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                factor_df["roa"] = np.where(
+                    factor_df["equity_multiplier"] != 0,
+                    factor_df["roe"] / factor_df["equity_multiplier"],
+                    np.nan,
+                )
+    if "bps" in needed_vars and "bps" not in factor_df.columns:
+        if "net_profit" in factor_df.columns and "roe" in factor_df.columns and "total_share" in factor_df.columns:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                book = np.where(factor_df["roe"] != 0, factor_df["net_profit"] / factor_df["roe"], np.nan)
+                factor_df["bps"] = np.where(factor_df["total_share"] != 0, book / factor_df["total_share"], np.nan)
+    if "nav" in needed_vars and "nav" not in factor_df.columns:
+        if "net_profit" in factor_df.columns and "roe" in factor_df.columns:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                factor_df["nav"] = np.where(factor_df["roe"] != 0, factor_df["net_profit"] / factor_df["roe"], np.nan)
+
+    # Merge into market_df
+    market_df = market_df.copy()
+    merge_cols = [c for c in factor_df.columns if c not in ("stock_code", "trade_date")]
+    for col in merge_cols:
+        if col in market_df.columns:
+            market_df = market_df.drop(columns=[col])
+
+    merged = market_df.merge(
+        factor_df,
+        on=["stock_code", "trade_date"],
+        how="left",
+    )
+
+    logger.info(f"[rqdatac] Enriched market_df with {len(merge_cols)} fundamental factors ({len(cached_parts)} sources)")
+    return merged

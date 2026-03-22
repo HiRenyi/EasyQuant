@@ -1,4 +1,4 @@
-"""Simplified market data fetcher with baostock + Parquet caching."""
+"""Market data fetcher with rqdatac (primary) + baostock (fallback) + Parquet caching."""
 
 import os
 import time
@@ -22,18 +22,37 @@ try:
 except ImportError:
     HAS_BAOSTOCK = False
 
+try:
+    import rqdatac
+    HAS_RQDATAC = True
+except ImportError:
+    HAS_RQDATAC = False
+
+# rqdatac lazy initialization
+_rq_lock = threading.Lock()
+_rq_initialized = False
+
 # Project root for default paths
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Cache-only mode: when set, never fetch from baostock, only use cached data
+# Cache-only mode: when set, never fetch from remote, only use cached data
 CACHE_ONLY = os.environ.get("QUANTGPT_CACHE_ONLY", "").lower() in ("1", "true", "yes")
 
 BENCHMARK_CODES = {
-    "hs300": {"baostock": "sh.000300", "name": "沪深300"},
-    "zz500": {"baostock": "sh.000905", "name": "中证500"},
-    "csi500": {"baostock": "sh.000905", "name": "中证500"},  # alias
-    "csi1000": {"baostock": "sh.000852", "name": "中证1000"},
-    "sz50": {"baostock": "sh.000016", "name": "上证50"},
+    "hs300":  {"baostock": "sh.000300", "rqdatac": "000300.XSHG", "name": "沪深300"},
+    "zz500":  {"baostock": "sh.000905", "rqdatac": "000905.XSHG", "name": "中证500"},
+    "csi500": {"baostock": "sh.000905", "rqdatac": "000905.XSHG", "name": "中证500"},  # alias
+    "csi1000": {"baostock": "sh.000852", "rqdatac": "000852.XSHG", "name": "中证1000"},
+    "sz50":   {"baostock": "sh.000016", "rqdatac": "000016.XSHG", "name": "上证50"},
+}
+
+# rqdatac index codes for universe fetching
+_RQ_INDEX_CODES = {
+    "hs300": "000300.XSHG",
+    "csi500": "000905.XSHG",
+    "zz500": "000905.XSHG",
+    "csi1000": "000852.XSHG",
+    # csi2000: no direct rqdatac index, derived from exclusion
 }
 
 # Pre-defined stock universes
@@ -45,6 +64,52 @@ UNIVERSES = {
 
 # --- PLACEHOLDER_MARKET_DATA ---
 
+
+# ─── Code conversion helpers ───────────────────────────────────────
+
+def _to_rq_code(bs_code: str) -> str:
+    """Convert baostock code to rqdatac code: sh.600519 → 600519.XSHG"""
+    prefix, num = bs_code.split(".")
+    suffix = "XSHG" if prefix == "sh" else "XSHE"
+    return f"{num}.{suffix}"
+
+
+def _from_rq_code(rq_code: str) -> str:
+    """Convert rqdatac code to baostock code: 600519.XSHG → sh.600519"""
+    num, suffix = rq_code.split(".")
+    prefix = "sh" if suffix == "XSHG" else "sz"
+    return f"{prefix}.{num}"
+
+
+# ─── rqdatac initialization ────────────────────────────────────────
+
+def _rqdatac_init() -> bool:
+    """Lazy-init rqdatac session. Returns True if ready to use."""
+    global _rq_initialized
+    if not HAS_RQDATAC:
+        return False
+    if _rq_initialized:
+        return True
+
+    username = os.environ.get("RQDATAC_USERNAME", "")
+    password = os.environ.get("RQDATAC_PASSWORD", "")
+    if not username or not password:
+        return False
+
+    with _rq_lock:
+        if _rq_initialized:
+            return True
+        try:
+            rqdatac.init(username, password)
+            _rq_initialized = True
+            logger.info("rqdatac initialized successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"rqdatac init failed: {e}")
+            return False
+
+
+# ─── baostock helpers (unchanged) ──────────────────────────────────
 
 def _baostock_login():
     """Login to baostock, return True on success. Retries on network errors."""
@@ -78,30 +143,25 @@ def _baostock_logout():
         pass
 
 
+# ─── Universe functions ────────────────────────────────────────────
+
 def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     """Return stock code list for a named universe.
 
-    Supports: small_scale (static), hs300, csi500/zz500 (dynamic via baostock),
-              csi1000 (derived: all A - HS300 - CSI500, top 1000),
-              csi2000 (derived: all A - HS300 - CSI500 - CSI1000, next 2000).
+    Supports: small_scale (static), hs300, csi500/zz500, csi1000, csi2000.
+    Uses rqdatac as primary source, baostock as fallback.
     """
     if name in UNIVERSES:
         return UNIVERSES[name]
 
-    if name in ("hs300", "csi500", "zz500"):
+    if name in ("hs300", "csi500", "zz500", "csi1000", "csi2000"):
         return _fetch_index_constituents(name, date)
-
-    if name == "csi1000":
-        return _fetch_csi1000(date)
-
-    if name == "csi2000":
-        return _fetch_csi2000(date)
 
     raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500', 'csi1000', 'csi2000']}")
 
 
 def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
-    """Fetch index constituents from baostock, with monthly file cache."""
+    """Fetch index constituents: cache → rqdatac → baostock."""
     date = date or datetime.now().strftime("%Y-%m-%d")
 
     # Monthly file cache
@@ -119,6 +179,34 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
         logger.warning(f"Cache-only mode: {name} constituents not cached for {date[:7]}, returning empty list")
         return []
 
+    # Try rqdatac
+    rq_index = _RQ_INDEX_CODES.get(name)
+    if rq_index and _rqdatac_init():
+        try:
+            rq_codes = rqdatac.index_components(rq_index, date=date)
+            if rq_codes and len(rq_codes) > 10:
+                codes = [_from_rq_code(c) for c in rq_codes]
+                cache_path.write_text("\n".join(codes))
+                logger.info(f"[rqdatac] Fetched {len(codes)} constituents for {name}")
+                return codes
+        except Exception as e:
+            logger.warning(f"rqdatac index_components({name}) failed: {e}, falling back to baostock")
+
+    # Fallback: baostock (only supports hs300 / csi500)
+    if name in ("hs300", "csi500", "zz500"):
+        return _fetch_index_constituents_bs(name, date, cache_path)
+
+    # For csi1000/csi2000 without rqdatac, use derivation
+    if name == "csi1000":
+        return _derive_csi1000(date, cache_path)
+    if name == "csi2000":
+        return _derive_csi2000(date, cache_path)
+
+    return []
+
+
+def _fetch_index_constituents_bs(name: str, date: str, cache_path: Path) -> List[str]:
+    """Fetch index constituents from baostock."""
     with _bs_lock:
         _baostock_login()
         try:
@@ -131,7 +219,7 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
             while rs.error_code == "0" and rs.next():
                 row = rs.get_row_data()
                 codes.append(row[1])  # code column
-            logger.info(f"Fetched {len(codes)} constituents for {name}")
+            logger.info(f"[baostock] Fetched {len(codes)} constituents for {name}")
             if codes:
                 cache_path.write_text("\n".join(codes))
             return codes
@@ -139,35 +227,14 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
             _baostock_logout()
 
 
-def _fetch_csi1000(date: Optional[str] = None) -> List[str]:
-    """Fetch CSI 1000 constituents (derived: all A - HS300 - CSI500).
-
-    Since baostock has no direct CSI1000 API, we get all A-share stocks
-    and exclude HS300 + CSI500 constituents, then take the top 1000 by
-    average daily trading volume (proxy for liquidity/market-cap ranking).
-    """
-    date = date or datetime.now().strftime("%Y-%m-%d")
-
-    # Cache path
-    cache_dir = _PROJECT_ROOT / "data" / "universe"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"csi1000_{date[:7]}.txt"  # monthly cache
-
-    if cache_path.exists():
-        codes = cache_path.read_text().strip().split("\n")
-        if len(codes) > 500:
-            logger.info(f"CSI1000 loaded from cache: {len(codes)} stocks")
-            return codes
-
+def _derive_csi1000(date: str, cache_path: Path) -> List[str]:
+    """Derive CSI 1000 = all A - HS300 - CSI500 (baostock fallback)."""
     hs300 = set(_fetch_index_constituents("hs300", date))
     csi500 = set(_fetch_index_constituents("csi500", date))
     exclude = hs300 | csi500
 
     all_stocks = _fetch_all_stock_codes(date)
     remaining = [c for c in all_stocks if c not in exclude]
-
-    # Take first 1000 (baostock returns them sorted by code; better would be
-    # by market cap, but code order is a reasonable proxy for established stocks)
     result = remaining[:1000]
     logger.info(f"CSI1000 derived: {len(result)} stocks (all_a={len(all_stocks)}, excluded={len(exclude)})")
 
@@ -176,35 +243,15 @@ def _fetch_csi1000(date: Optional[str] = None) -> List[str]:
     return result
 
 
-def _fetch_csi2000(date: Optional[str] = None) -> List[str]:
-    """Fetch CSI 2000 constituents (derived: all A - HS300 - CSI500 - CSI1000).
-
-    Since baostock has no direct CSI2000 API, we derive it by excluding
-    HS300 + CSI500 + CSI1000 from all A-share stocks, then taking
-    the next 2000 stocks by code order.
-    """
-    date = date or datetime.now().strftime("%Y-%m-%d")
-
-    # Cache path
-    cache_dir = _PROJECT_ROOT / "data" / "universe"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"csi2000_{date[:7]}.txt"  # monthly cache
-
-    if cache_path.exists():
-        codes = cache_path.read_text().strip().split("\n")
-        if len(codes) > 500:
-            logger.info(f"CSI2000 loaded from cache: {len(codes)} stocks")
-            return codes
-
-    # Get CSI1000 (which already excludes HS300 + CSI500)
-    csi1000 = set(_fetch_csi1000(date))
+def _derive_csi2000(date: str, cache_path: Path) -> List[str]:
+    """Derive CSI 2000 = all A - HS300 - CSI500 - CSI1000 (baostock fallback)."""
+    csi1000 = set(_fetch_index_constituents("csi1000", date))
     hs300 = set(_fetch_index_constituents("hs300", date))
     csi500 = set(_fetch_index_constituents("csi500", date))
     exclude = hs300 | csi500 | csi1000
 
     all_stocks = _fetch_all_stock_codes(date)
     remaining = [c for c in all_stocks if c not in exclude]
-
     result = remaining[:2000]
     logger.info(f"CSI2000 derived: {len(result)} stocks (all_a={len(all_stocks)}, excluded={len(exclude)})")
 
@@ -214,7 +261,7 @@ def _fetch_csi2000(date: Optional[str] = None) -> List[str]:
 
 
 def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
-    """Fetch all A-share stock codes from baostock."""
+    """Fetch all A-share stock codes: rqdatac → baostock."""
     date = date or datetime.now().strftime("%Y-%m-%d")
 
     # Monthly cache
@@ -227,13 +274,32 @@ def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
         if len(codes) > 100:
             return codes
 
+    if CACHE_ONLY:
+        logger.warning(f"Cache-only mode: all_a stocks not cached, returning empty")
+        return []
+
+    # Try rqdatac
+    if _rqdatac_init():
+        try:
+            df = rqdatac.all_instruments(type='CS', date=date)
+            if df is not None and len(df) > 100:
+                rq_codes = df['order_book_id'].tolist()
+                codes = [_from_rq_code(c) for c in rq_codes
+                         if c.endswith('.XSHG') or c.endswith('.XSHE')]
+                # Exclude index-like codes (sh.000xxx)
+                codes = [c for c in codes if not c.startswith("sh.000")]
+                if len(codes) > 100:
+                    logger.info(f"[rqdatac] All A-share stocks: {len(codes)}")
+                    cache_path.write_text("\n".join(codes))
+                    return codes
+        except Exception as e:
+            logger.warning(f"rqdatac all_instruments failed: {e}, falling back to baostock")
+
+    # Fallback: baostock
     with _bs_lock:
         _baostock_login()
         try:
-            # Try the given date first; if it returns nothing (e.g. holiday),
-            # retry with a few nearby dates
             for offset in range(0, 10):
-                from datetime import timedelta
                 try_date = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=offset)).strftime("%Y-%m-%d")
                 rs = bs.query_all_stock(day=try_date)
                 codes = []
@@ -248,7 +314,7 @@ def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
                         continue
                     codes.append(code)
                 if len(codes) > 100:
-                    logger.info(f"All A-share stocks on {try_date}: {len(codes)}")
+                    logger.info(f"[baostock] All A-share stocks on {try_date}: {len(codes)}")
                     break
 
             if len(codes) > 100:
@@ -261,6 +327,45 @@ def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
 
 
 # --- PLACEHOLDER_FETCHER ---
+
+
+def _transform_rq_to_schema(rq_df: pd.DataFrame, bs_code: str) -> pd.DataFrame:
+    """Transform a single-stock rqdatac DataFrame to the standard schema.
+
+    Input: rqdatac get_price output (MultiIndex or single-index) for ONE stock.
+    Output: DataFrame with columns: trade_date, stock_code, open, high, low, close,
+            volume, amount, pct_change.
+    """
+    df = rq_df.reset_index()
+
+    # Handle MultiIndex (order_book_id, date) or single-index (date)
+    if "date" in df.columns:
+        df = df.rename(columns={"date": "trade_date"})
+    elif "index" in df.columns:
+        df = df.rename(columns={"index": "trade_date"})
+
+    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    df["stock_code"] = bs_code
+
+    # Map rqdatac columns → standard schema
+    if "total_turnover" in df.columns:
+        df["amount"] = df["total_turnover"]
+    elif "amount" not in df.columns:
+        df["amount"] = 0.0
+
+    # Compute pct_change from prev_close if available, else from close
+    if "prev_close" in df.columns:
+        df["pct_change"] = ((df["close"] / df["prev_close"]) - 1) * 100
+        df.loc[df["prev_close"].isna() | (df["prev_close"] == 0), "pct_change"] = np.nan
+    else:
+        df["pct_change"] = df["close"].pct_change() * 100
+
+    for col in ("open", "high", "low", "close", "volume", "amount", "pct_change"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    result = df[["trade_date", "stock_code", "open", "high", "low", "close", "volume", "amount", "pct_change"]].copy()
+    return result.sort_values("trade_date")
 
 
 class MarketDataFetcher:
@@ -308,7 +413,35 @@ class MarketDataFetcher:
 
     # --- PLACEHOLDER_FETCH_REMOTE ---
 
-    def _fetch_remote(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
+    def _fetch_remote_rq(self, stock_codes: List[str], start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
+        """Batch fetch stocks from rqdatac. Returns {bs_code: DataFrame} dict."""
+        if not _rqdatac_init():
+            return {}
+
+        rq_codes = [_to_rq_code(c) for c in stock_codes]
+        try:
+            rq_df = rqdatac.get_price(
+                rq_codes,
+                start_date=start_date,
+                end_date=end_date,
+                frequency='1d',
+                adjust_type='pre',
+                expect_df=True,
+            )
+            if rq_df is None or len(rq_df) == 0:
+                return {}
+
+            results = {}
+            for rq_code, group in rq_df.groupby(level=0):
+                bs_code = _from_rq_code(rq_code)
+                results[bs_code] = _transform_rq_to_schema(group, bs_code)
+            logger.info(f"[rqdatac] Batch fetched {len(results)} stocks")
+            return results
+        except Exception as e:
+            logger.warning(f"rqdatac batch fetch failed: {e}")
+            return {}
+
+    def _fetch_remote_bs(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
         """Fetch single stock daily data from baostock."""
         code = self._normalize_stock_code(stock_code)
         logged_in = False
@@ -346,6 +479,14 @@ class MarketDataFetcher:
             if logged_in:
                 _baostock_logout()
 
+    def _fetch_remote(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
+        """Fetch single stock: rqdatac → baostock."""
+        if not already_logged_in:
+            result = self._fetch_remote_rq([stock_code], start_date, end_date)
+            if result:
+                return result.get(self._normalize_stock_code(stock_code))
+        return self._fetch_remote_bs(stock_code, start_date, end_date, already_logged_in)
+
     # --- PLACEHOLDER_FETCH_STOCKS ---
 
     def fetch_stocks(
@@ -354,7 +495,7 @@ class MarketDataFetcher:
         start_date: str,
         end_date: str,
     ) -> Optional[pd.DataFrame]:
-        """Fetch multiple stocks with caching. Missing stocks fetched from baostock."""
+        """Fetch multiple stocks with caching. rqdatac batch → baostock fallback."""
         all_data: List[pd.DataFrame] = []
         to_fetch: List[str] = []
 
@@ -378,22 +519,43 @@ class MarketDataFetcher:
             if CACHE_ONLY:
                 logger.warning(f"Cache-only mode: {len(to_fetch)} stocks not cached, skipping fetch")
             else:
-                logger.info(f"Fetching {len(to_fetch)} stocks from baostock...")
-                with _bs_lock:
-                    _baostock_login()
-                    try:
-                        for code in to_fetch:
-                            df = self._fetch_remote(code, start_date, end_date, already_logged_in=True)
+                # Try rqdatac batch fetch first
+                rq_fetched = set()
+                if _rqdatac_init():
+                    # Batch in chunks of 200 to avoid API limits
+                    for i in range(0, len(to_fetch), 200):
+                        chunk = to_fetch[i:i+200]
+                        rq_results = self._fetch_remote_rq(chunk, start_date, end_date)
+                        for bs_code, df in rq_results.items():
                             if df is not None and len(df) > 0:
-                                existing = self._load_cache(code)
+                                existing = self._load_cache(bs_code)
                                 if existing is not None:
                                     df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
-                                self._save_cache(code, df)
+                                self._save_cache(bs_code, df)
                                 filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
                                 if len(filtered) > 0:
                                     all_data.append(filtered)
-                    finally:
-                        _baostock_logout()
+                                rq_fetched.add(bs_code)
+
+                # Fallback: fetch remaining stocks from baostock
+                bs_remaining = [c for c in to_fetch if self._normalize_stock_code(c) not in rq_fetched]
+                if bs_remaining:
+                    logger.info(f"[baostock] Fetching {len(bs_remaining)} remaining stocks...")
+                    with _bs_lock:
+                        _baostock_login()
+                        try:
+                            for code in bs_remaining:
+                                df = self._fetch_remote_bs(code, start_date, end_date, already_logged_in=True)
+                                if df is not None and len(df) > 0:
+                                    existing = self._load_cache(code)
+                                    if existing is not None:
+                                        df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                                    self._save_cache(code, df)
+                                    filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
+                                    if len(filtered) > 0:
+                                        all_data.append(filtered)
+                        finally:
+                            _baostock_logout()
 
         if all_data:
             result = pd.concat(all_data, ignore_index=True)
@@ -421,9 +583,8 @@ def fetch_benchmark_returns(
     end_date: Optional[str] = None,
     cache_dir: Optional[str] = None,
 ) -> Optional[pd.Series]:
-    """Fetch benchmark index daily returns as a Series indexed by date."""
+    """Fetch benchmark index daily returns: cache → rqdatac → baostock."""
     info = BENCHMARK_CODES.get(benchmark, BENCHMARK_CODES["hs300"])
-    code = info["baostock"]
     cache_dir = cache_dir or str(_PROJECT_ROOT / "data" / "benchmark")
     os.makedirs(cache_dir, exist_ok=True)
 
@@ -452,18 +613,48 @@ def fetch_benchmark_returns(
         except Exception:
             pass
 
-    # Fetch from baostock
     if CACHE_ONLY:
         logger.warning(f"Cache-only mode: benchmark {benchmark} not cached, returning None")
         return None
+
     start_date = start_date or (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
     end_date = end_date or datetime.now().strftime("%Y-%m-%d")
 
+    # Try rqdatac
+    rq_code = info.get("rqdatac")
+    if rq_code and _rqdatac_init():
+        try:
+            rq_df = rqdatac.get_price(
+                rq_code,
+                start_date=start_date,
+                end_date=end_date,
+                frequency='1d',
+                adjust_type='pre',
+                expect_df=True,
+            )
+            if rq_df is not None and len(rq_df) > 0:
+                rq_df = rq_df.reset_index()
+                if "date" in rq_df.columns:
+                    rq_df = rq_df.rename(columns={"date": "trade_date"})
+                rq_df["trade_date"] = pd.to_datetime(rq_df["trade_date"])
+                rq_df["close"] = pd.to_numeric(rq_df["close"], errors="coerce")
+                rq_df = rq_df.sort_values("trade_date")
+                rq_df["daily_return"] = rq_df["close"].pct_change()
+                rq_df[["trade_date", "close", "daily_return"]].to_parquet(cache_path, index=False)
+                ret = rq_df.set_index("trade_date")["daily_return"].dropna()
+                ret.name = info["name"]
+                logger.info(f"[rqdatac] Benchmark {benchmark}: {len(ret)} days")
+                return ret
+        except Exception as e:
+            logger.warning(f"rqdatac benchmark fetch failed: {e}, falling back to baostock")
+
+    # Fallback: baostock
+    bs_code = info["baostock"]
     with _bs_lock:
         _baostock_login()
         try:
             rs = bs.query_history_k_data_plus(
-                code,
+                bs_code,
                 "date,close",
                 start_date=start_date,
                 end_date=end_date,
@@ -483,6 +674,7 @@ def fetch_benchmark_returns(
             df[["trade_date", "close", "daily_return"]].to_parquet(cache_path, index=False)
             ret = df.set_index("trade_date")["daily_return"].dropna()
             ret.name = info["name"]
+            logger.info(f"[baostock] Benchmark {benchmark}: {len(ret)} days")
             return ret
         finally:
             _baostock_logout()

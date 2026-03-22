@@ -130,19 +130,24 @@ async def _rebalance(
         return {}
 
     # Enrich with fundamentals if needed
-    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
     fund_vars = detect_fundamental_vars(strategy.expression)
     if fund_vars:
-        fund_fetcher = FundamentalDataFetcher()
-        non_div = fund_vars - {"dividend_yield"}
-        if non_div:
-            qdf = fund_fetcher.fetch_fundamentals(stock_codes, lookback_start.strftime("%Y-%m-%d"), today, non_div)
-            if qdf is not None and len(qdf) > 0:
-                market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div)
-        if "dividend_yield" in fund_vars:
-            div_df = fund_fetcher.fetch_dividend_data(stock_codes, lookback_start.strftime("%Y-%m-%d"), today)
-            if div_df is not None and len(div_df) > 0:
-                market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
+        sd, ed = lookback_start.strftime("%Y-%m-%d"), today
+        rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, sd, ed)
+        if rq_result is not None:
+            market_df = rq_result
+        else:
+            fund_fetcher = FundamentalDataFetcher()
+            non_div = fund_vars - {"dividend_yield"}
+            if non_div:
+                qdf = fund_fetcher.fetch_fundamentals(stock_codes, sd, ed, non_div)
+                if qdf is not None and len(qdf) > 0:
+                    market_df = fund_fetcher.align_to_daily(qdf, market_df, non_div)
+            if "dividend_yield" in fund_vars:
+                div_df = fund_fetcher.fetch_dividend_data(stock_codes, sd, ed)
+                if div_df is not None and len(div_df) > 0:
+                    market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
 
     # Compute factor on latest date
     func = parse_expression(strategy.expression)

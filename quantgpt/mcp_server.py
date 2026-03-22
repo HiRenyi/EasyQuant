@@ -33,12 +33,23 @@ mcp = FastMCP("quantgpt", instructions="QuantGPT — A 股因子回测服务。�
 
 
 def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, start_date: str, end_date: str):
-    """Conditionally fetch and merge fundamental data if the expression uses fundamental vars."""
-    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+    """Conditionally fetch and merge fundamental data if the expression uses fundamental vars.
+
+    Uses rqdatac get_factor (daily frequency) as primary source, baostock quarterly as fallback.
+    """
+    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
     fund_vars = detect_fundamental_vars(expression)
     if not fund_vars:
         return market_df
     logger.info(f"Detected fundamental vars: {fund_vars}, fetching financial data...")
+
+    # Try rqdatac first (returns daily-frequency data, no alignment needed)
+    rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, start_date, end_date)
+    if rq_result is not None:
+        return rq_result
+
+    # Fallback: baostock quarterly + align_to_daily
+    logger.info("rqdatac unavailable, falling back to baostock for fundamentals...")
     fetcher = FundamentalDataFetcher()
     # Quarterly financial data (non-dividend vars)
     non_div_vars = fund_vars - {"dividend_yield"}

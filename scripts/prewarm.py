@@ -59,7 +59,7 @@ def prewarm_benchmarks():
             logger.error(f"Benchmark {bm} failed: {e}")
 
 
-def prewarm_market_data(stock_codes: list, batch_size: int = 100):
+def prewarm_market_data(stock_codes: list, batch_size: int = 200):
     """Cache OHLCV data for all stocks in batches."""
     from quantgpt.market_data import MarketDataFetcher
     fetcher = MarketDataFetcher()
@@ -113,6 +113,7 @@ def prewarm_dividends(stock_codes: list, batch_size: int = 50):
 
 
 def main():
+    global START_DATE, END_DATE
     parser = argparse.ArgumentParser(description="Pre-warm QuantGPT data caches")
     parser.add_argument("--universe", default="all", help="Universe to warm: all|hs300|csi500|csi1000|csi2000")
     parser.add_argument("--start", default=START_DATE)
@@ -120,9 +121,9 @@ def main():
     parser.add_argument("--skip-market", action="store_true")
     parser.add_argument("--skip-fundamentals", action="store_true")
     parser.add_argument("--skip-dividends", action="store_true")
+    parser.add_argument("--skip-factors", action="store_true")
     args = parser.parse_args()
 
-    global START_DATE, END_DATE
     START_DATE = args.start
     END_DATE = args.end
 
@@ -168,19 +169,28 @@ def main():
     else:
         logger.info("--- Step 4: Market OHLCV data (SKIPPED) ---")
 
-    # Step 5: Fundamental data
+    # Step 5: Fundamental data (baostock quarterly)
     if not args.skip_fundamentals:
-        logger.info("--- Step 5: Fundamental data ---")
+        logger.info("--- Step 5: Fundamental data (baostock) ---")
         prewarm_fundamentals(stock_codes)
     else:
         logger.info("--- Step 5: Fundamental data (SKIPPED) ---")
 
-    # Step 6: Dividend data
+    # Step 6: Dividend data (baostock)
     if not args.skip_dividends:
-        logger.info("--- Step 6: Dividend data ---")
+        logger.info("--- Step 6: Dividend data (baostock) ---")
         prewarm_dividends(stock_codes)
     else:
         logger.info("--- Step 6: Dividend data (SKIPPED) ---")
+
+    # Step 7: rqdatac daily factors (ROE, PE, PB, etc.)
+    if not args.skip_factors:
+        logger.info("--- Step 7: rqdatac daily factors ---")
+        try:
+            from quantgpt.fundamental_data import prewarm_factors_rq
+            prewarm_factors_rq(stock_codes, START_DATE, END_DATE)
+        except Exception as e:
+            logger.error(f"Factor prewarm failed: {e}")
 
     logger.info("=== Pre-warm complete ===")
 
