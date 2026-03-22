@@ -15,6 +15,7 @@ import json
 import logging
 import traceback
 
+import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
 from .expression_parser import ExpressionParser, parse_expression
@@ -22,12 +23,41 @@ from .expression_parser import __doc__ as _expr_module_doc
 from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns, UNIVERSES, BENCHMARK_CODES
 from .backtest import run_factor_backtest
 from .report import generate_report
+from .fundamental_data import ALL_FUNDAMENTAL_NAMES
 
 import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("quantgpt", instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。可用 score_factor 评分、diagnose_factor 诊断、run_anti_overfit 检测过拟合、run_rolling_validation 滚动验证。")
+
+
+def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, start_date: str, end_date: str):
+    """Conditionally fetch and merge fundamental data if the expression uses fundamental vars."""
+    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+    fund_vars = detect_fundamental_vars(expression)
+    if not fund_vars:
+        return market_df
+    logger.info(f"Detected fundamental vars: {fund_vars}, fetching financial data...")
+    fetcher = FundamentalDataFetcher()
+    qdf = fetcher.fetch_fundamentals(stock_codes, start_date, end_date, fund_vars)
+    if qdf is not None and len(qdf) > 0:
+        market_df = fetcher.align_to_daily(qdf, market_df, fund_vars)
+        logger.info(f"Fundamental data merged, market_df columns: {list(market_df.columns)}")
+    else:
+        logger.warning("No fundamental data fetched, fundamental vars will be NaN")
+    return market_df
+
+
+# Dummy DataFrame for expression validation (includes fundamental columns)
+_VALIDATION_DUMMY = pd.DataFrame({
+    "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
+    "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
+    "volume": [100, 200, 300], "amount": [100, 400, 900],
+    "pct_change": [0, 100, 50],
+    "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+    **{name: [1.0, 1.1, 1.2] for name in ALL_FUNDAMENTAL_NAMES},
+})
 
 
 @mcp.tool()
@@ -68,17 +98,7 @@ def validate_expression(expression: str) -> str:
 
     try:
         func = parse_expression(expression)
-        dummy = pd.DataFrame({
-            "open": [1.0, 2.0, 3.0],
-            "high": [1.1, 2.1, 3.1],
-            "low": [0.9, 1.9, 2.9],
-            "close": [1.0, 2.0, 3.0],
-            "volume": [100, 200, 300],
-            "amount": [100, 400, 900],
-            "pct_change": [0, 100, 50],
-            "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
-        })
-        func(dummy)
+        func(_VALIDATION_DUMMY)
         return "OK: expression is valid"
     except Exception as e:
         return f"ERROR: {e}"
@@ -117,6 +137,8 @@ def run_backtest(
         market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available. Check date range and stock codes."})
+
+        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
         logger.info(f"Running backtest: {expression}")
         result = run_factor_backtest(market_df, expression, n_groups, holding_period)
@@ -215,6 +237,8 @@ def score_factor(
         market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
+
+        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
         result = run_factor_backtest(market_df, expression, n_groups, holding_period)
 
@@ -349,6 +373,8 @@ def run_anti_overfit(
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
+        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
+
         result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
@@ -393,6 +419,8 @@ def run_rolling_validation(
         market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
+
+        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
         result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
         factor_df = result.get("_factor_df")

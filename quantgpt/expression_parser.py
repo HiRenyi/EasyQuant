@@ -49,6 +49,37 @@ Special variables:
 - weekday             : day of week (0=Monday, 4=Friday)
 - month               : month (1-12)
 
+Fundamental data variables (quarterly financials, aligned to daily via pubDate):
+  Profitability:
+  - roe              : 平均净资产收益率
+  - np_margin        : 净利润率
+  - gp_margin        : 毛利率
+  - net_profit       : 净利润(元)
+  - eps_ttm          : 每股收益(TTM)
+  - revenue          : 营业收入(元)
+  - total_share      : 总股本
+  - float_share      : 流通股本
+  Growth:
+  - yoy_ni           : 净利润同比增长率
+  - yoy_equity       : 净资产同比增长率
+  - yoy_asset        : 总资产同比增长率
+  - yoy_pni          : 归母净利润同比增长率
+  Balance sheet:
+  - current_ratio    : 流动比率
+  - debt_ratio       : 资产负债率
+  - equity_multiplier: 权益乘数
+  Operations:
+  - asset_turnover   : 总资产周转率
+  - inv_turnover     : 存货周转率
+  - dupont_roe       : 杜邦分析ROE
+  - dupont_asset_turn: 杜邦资产周转率
+  Cash flow:
+  - cfo_to_np        : 经营现金流/净利润
+  Valuation (derived from close + fundamental):
+  - pe               : 市盈率 (close * total_share / net_profit)
+  - pb               : 市净率
+  - ps               : 市销率 (close * total_share / revenue)
+
 Operator aliases (for Alpha101 compatibility):
 - delta(col, N)       : alias for ts_delta
 - delay(col, N)       : alias for ts_shift
@@ -409,7 +440,8 @@ class ExpressionParser:
 
         # Column reference — only allow known columns
         col_name = expression.strip()
-        _ALLOWED_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'}
+        from .fundamental_data import ALL_FUNDAMENTAL_NAMES
+        _ALLOWED_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'} | ALL_FUNDAMENTAL_NAMES
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")
         return lambda df, _c=col_name: df[_c]

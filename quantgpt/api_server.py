@@ -238,6 +238,12 @@ Comparison: >, <, >=, <=, ==, !=
 Logical: and, or (combine conditions in where())
 Columns: open, high, low, close, volume, amount, pct_change
 Special vars: vwap, adv{N} (e.g. adv20), returns, cap
+Fundamental: roe, np_margin, gp_margin, net_profit, eps_ttm, revenue, total_share, float_share
+Growth: yoy_ni, yoy_equity, yoy_asset, yoy_pni
+Balance: current_ratio, debt_ratio, equity_multiplier
+Operations: asset_turnover, inv_turnover, dupont_roe, dupont_asset_turn
+Cash flow: cfo_to_np
+Valuation (derived): pe, pb, ps
 Aliases: delta=ts_delta, delay=ts_shift, correlation=ts_corr, covariance=ts_cov
 
 ================================================================================
@@ -278,6 +284,10 @@ EXAMPLES:
 衰减加权: decay_linear(rank(ts_corr(vwap, volume, 10)), 5)
 复合因子: sign_power(rank(volume/adv20), 2) * rank((close-vwap)/close) * rank(ts_std(returns,20))
 裁剪因子: rank(clip(ts_corr(close, volume, 20), -0.5, 0.5)) * sign_power(ts_delta(close,20)/close, 0.5)
+价值因子: rank(-1 * pe)
+质量因子: rank(roe * asset_turnover)
+成长因子: rank(yoy_ni)
+基本面+动量: rank(roe) * rank(ts_delta(close, 20) / ts_shift(close, 20))
 ================================================================================
 """
 
@@ -296,6 +306,9 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 - 优先使用连续值因子表达式（如 rank(), zscore(), ts_mean() 等），分组效果更好
 - returns 是日收益率（如 0.02 代表 2%），close 是收盘价
 - day/weekday/month 是日期特殊变量，仅在用户明确要求日历效应时使用
+- 基本面变量(roe, pe, yoy_ni 等)是季度财报按发布日对齐到日频的，变化较慢
+- 估值因子通常取负值排序(低估值更好)：rank(-1 * pe)
+- 推荐将基本面与价量信号组合：rank(roe) * rank(ts_delta(close, 20)/close)
 
 ================================================================================
 🎯 因子质量指南（非常重要）
@@ -598,7 +611,8 @@ def _looks_like_expression(text: str) -> bool:
     if _EXPR_KEYWORDS.search(text):
         return True
     # Bare column arithmetic like "close / open" or "-1 * close"
-    cols = {'open', 'high', 'low', 'close', 'volume', 'amount', 'returns', 'vwap'}
+    from .fundamental_data import ALL_FUNDAMENTAL_NAMES as _FN
+    cols = {'open', 'high', 'low', 'close', 'volume', 'amount', 'returns', 'vwap'} | _FN
     tokens = re.findall(r'[a-zA-Z_]\w*', text)
     if tokens and all(t in cols for t in tokens):
         return True
@@ -633,12 +647,14 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         user_text = req.prompt.strip()
         if _looks_like_expression(user_text):
             try:
+                from .fundamental_data import ALL_FUNDAMENTAL_NAMES as _FUND_NAMES
                 _test_dummy = pd.DataFrame({
                     "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
                     "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
                     "volume": [100, 200, 300], "amount": [100, 400, 900],
                     "pct_change": [0, 100, 50],
                     "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+                    **{name: [1.0, 1.1, 1.2] for name in _FUND_NAMES},
                 })
                 parse_expression(user_text)(_test_dummy)
                 expression = user_text
@@ -653,12 +669,14 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         # 2. Validate expression (with fix-retry)
         task["status"] = "validating"
+        from .fundamental_data import ALL_FUNDAMENTAL_NAMES as _FUND_NAMES2
         dummy = pd.DataFrame({
             "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
             "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
             "volume": [100, 200, 300], "amount": [100, 400, 900],
             "pct_change": [0, 100, 50],
             "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+            **{name: [1.0, 1.1, 1.2] for name in _FUND_NAMES2},
         })
 
         # 2a. Parentheses pre-check
@@ -696,6 +714,21 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             task["status"] = "failed"
             task["error"] = "未获取到行情数据，请检查日期范围"
             return
+
+        # 3a. Fetch fundamental data if expression uses fundamental vars
+        from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher
+        fund_vars = detect_fundamental_vars(expression)
+        if fund_vars:
+            task["status"] = "fetching_fundamentals"
+            _emit(task_id, task)
+            logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
+            fund_fetcher = FundamentalDataFetcher()
+            qdf = fund_fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, fund_vars)
+            if qdf is not None and len(qdf) > 0:
+                market_df = fund_fetcher.align_to_daily(qdf, market_df, fund_vars)
+                logger.info(f"[{task_id}] fundamental data merged")
+            else:
+                logger.warning(f"[{task_id}] no fundamental data fetched")
 
         # 4. Run backtest
         task["status"] = "backtesting"

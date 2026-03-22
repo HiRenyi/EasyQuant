@@ -1,0 +1,404 @@
+"""Fundamental (financial statement) data fetcher with baostock + Parquet caching.
+
+Fetches quarterly financial data from 6 baostock APIs, caches per-stock as Parquet,
+and aligns quarterly data to daily frequency using pubDate for point-in-time correctness.
+"""
+
+import re
+import logging
+import threading
+from typing import Dict, List, Optional, Set, Tuple
+from pathlib import Path
+
+import pandas as pd
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# ---------------------------------------------------------------------------
+# Variable registry: user-facing name -> (api_name, baostock_field)
+# ---------------------------------------------------------------------------
+
+FUNDAMENTAL_VARIABLES: Dict[str, Tuple[str, str]] = {
+    # profit API
+    "roe":              ("profit", "roeAvg"),
+    "np_margin":        ("profit", "npMargin"),
+    "gp_margin":        ("profit", "gpMargin"),
+    "net_profit":       ("profit", "netProfit"),
+    "eps_ttm":          ("profit", "epsTTM"),
+    "revenue":          ("profit", "MBRevenue"),
+    "total_share":      ("profit", "totalShare"),
+    "float_share":      ("profit", "liqaShare"),
+    # growth API
+    "yoy_ni":           ("growth", "YOYNI"),
+    "yoy_equity":       ("growth", "YOYEquity"),
+    "yoy_asset":        ("growth", "YOYAsset"),
+    "yoy_pni":          ("growth", "YOYPNI"),
+    # balance API
+    "current_ratio":    ("balance", "currentRatio"),
+    "debt_ratio":       ("balance", "liabilityToAsset"),
+    "equity_multiplier": ("balance", "assetToEquity"),
+    # operation API
+    "asset_turnover":   ("operation", "AssetTurnRatio"),
+    "inv_turnover":     ("operation", "INVTurnRatio"),
+    # dupont API
+    "dupont_roe":       ("dupont", "dupontROE"),
+    "dupont_asset_turn": ("dupont", "dupontAssetTurn"),
+    # cash_flow API
+    "cfo_to_np":        ("cash_flow", "CFOToNP"),
+}
+
+# Derived variables computed from close + fundamental columns
+DERIVED_VARIABLES: Dict[str, List[str]] = {
+    "pe": ["net_profit", "total_share"],         # close * total_share / net_profit
+    "pb": ["net_profit", "total_share", "roe"],   # close * total_share / (net_profit / roe)
+    "ps": ["revenue", "total_share"],             # close * total_share / revenue
+}
+
+ALL_FUNDAMENTAL_NAMES: frozenset = frozenset(FUNDAMENTAL_VARIABLES.keys()) | frozenset(DERIVED_VARIABLES.keys())
+
+# Reverse map: baostock field -> user-facing name
+_BS_TO_USER: Dict[str, str] = {v[1]: k for k, v in FUNDAMENTAL_VARIABLES.items()}
+
+# API name -> baostock function name
+_API_FUNC_MAP = {
+    "profit":    "query_profit_data",
+    "growth":    "query_growth_data",
+    "balance":   "query_balance_data",
+    "operation": "query_operation_data",
+    "dupont":    "query_dupont_data",
+    "cash_flow": "query_cash_flow_data",
+}
+
+# Fields to request per API (only the ones we need + pub/stat dates)
+_API_FIELDS: Dict[str, List[str]] = {
+    "profit":    ["code", "pubDate", "statDate", "roeAvg", "npMargin", "gpMargin",
+                  "netProfit", "epsTTM", "MBRevenue", "totalShare", "liqaShare"],
+    "growth":    ["code", "pubDate", "statDate", "YOYNI", "YOYEquity", "YOYAsset", "YOYPNI"],
+    "balance":   ["code", "pubDate", "statDate", "currentRatio", "liabilityToAsset", "assetToEquity"],
+    "operation": ["code", "pubDate", "statDate", "AssetTurnRatio", "INVTurnRatio"],
+    "dupont":    ["code", "pubDate", "statDate", "dupontROE", "dupontAssetTurn"],
+    "cash_flow": ["code", "pubDate", "statDate", "CFOToNP"],
+}
+
+
+def detect_fundamental_vars(expression: str) -> Set[str]:
+    """Scan expression for fundamental variable names. Returns set of matched names."""
+    tokens = set(re.findall(r'\b[a-z_]+\b', expression.lower()))
+    return tokens & ALL_FUNDAMENTAL_NAMES
+
+
+def get_needed_apis(var_names: Set[str]) -> Set[str]:
+    """Given variable names, return the set of baostock API names to call."""
+    # Expand derived variables to their dependencies
+    expanded = set()
+    for v in var_names:
+        if v in DERIVED_VARIABLES:
+            expanded.update(DERIVED_VARIABLES[v])
+        elif v in FUNDAMENTAL_VARIABLES:
+            expanded.add(v)
+    # Map to API names
+    apis = set()
+    for v in expanded:
+        if v in FUNDAMENTAL_VARIABLES:
+            apis.add(FUNDAMENTAL_VARIABLES[v][0])
+    return apis
+
+
+def _quarter_range(start_date: str, end_date: str) -> List[Tuple[int, int]]:
+    """Generate (year, quarter) pairs covering the date range.
+
+    Starts 1 year before start_date to ensure pubDate coverage
+    (Q4 reports publish in Apr of next year).
+    """
+    from datetime import datetime as dt
+    start = dt.strptime(start_date[:10], "%Y-%m-%d")
+    end = dt.strptime(end_date[:10], "%Y-%m-%d")
+    # Go back 1 year for publication lag
+    first_year = start.year - 1
+    last_year = end.year
+    quarters = []
+    for y in range(first_year, last_year + 1):
+        for q in range(1, 5):
+            quarters.append((y, q))
+    return quarters
+
+
+class FundamentalDataFetcher:
+    """Quarterly financial data fetcher with per-stock Parquet caching."""
+
+    def __init__(self):
+        self.cache_dir = _PROJECT_ROOT / "data" / "fundamentals"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _cache_path(self, stock_code: str) -> Path:
+        normalized = stock_code.replace(".", "_")
+        return self.cache_dir / f"{normalized}.parquet"
+
+    def _load_cache(self, stock_code: str) -> Optional[pd.DataFrame]:
+        path = self._cache_path(stock_code)
+        if not path.exists():
+            return None
+        try:
+            df = pd.read_parquet(path)
+            if "pub_date" in df.columns:
+                df["pub_date"] = pd.to_datetime(df["pub_date"])
+            if "stat_date" in df.columns:
+                df["stat_date"] = pd.to_datetime(df["stat_date"])
+            return df
+        except Exception:
+            return None
+
+    def _save_cache(self, stock_code: str, df: pd.DataFrame):
+        if df is None or len(df) == 0:
+            return
+        path = self._cache_path(stock_code)
+        try:
+            df.to_parquet(path, index=False)
+        except Exception as e:
+            logger.warning(f"Failed to save fundamental cache for {stock_code}: {e}")
+
+    def _fetch_single_api(self, code: str, year: int, quarter: int, api_name: str) -> Optional[pd.DataFrame]:
+        """Fetch one baostock financial API for one stock-quarter."""
+        try:
+            import baostock as bs
+        except ImportError:
+            return None
+
+        func = getattr(bs, _API_FUNC_MAP[api_name])
+        rs = func(code=code, year=year, quarter=quarter)
+        if rs.error_code != "0":
+            return None
+
+        rows = []
+        while rs.next():
+            rows.append(rs.get_row_data())
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows, columns=rs.fields)
+        return df
+
+    def _fetch_stock(
+        self,
+        stock_code: str,
+        start_date: str,
+        end_date: str,
+        needed_apis: Set[str],
+    ) -> Optional[pd.DataFrame]:
+        """Fetch all quarterly data for one stock, merge across APIs by statDate."""
+        quarters = _quarter_range(start_date, end_date)
+
+        # Fetch each API
+        api_dfs: Dict[str, List[pd.DataFrame]] = {api: [] for api in needed_apis}
+        for year, quarter in quarters:
+            for api_name in needed_apis:
+                result = self._fetch_single_api(stock_code, year, quarter, api_name)
+                if result is not None and len(result) > 0:
+                    api_dfs[api_name].append(result)
+
+        # Concat per API
+        merged_parts = []
+        for api_name, dfs in api_dfs.items():
+            if not dfs:
+                continue
+            api_df = pd.concat(dfs, ignore_index=True)
+            # Keep only our needed fields
+            keep_cols = [c for c in _API_FIELDS[api_name] if c in api_df.columns]
+            api_df = api_df[keep_cols].copy()
+            merged_parts.append(api_df)
+
+        if not merged_parts:
+            return None
+
+        # Merge all API results on (code, pubDate, statDate)
+        result = merged_parts[0]
+        for part in merged_parts[1:]:
+            # Avoid duplicate columns in merge
+            merge_on = ["code", "pubDate", "statDate"]
+            extra_cols = [c for c in part.columns if c not in result.columns]
+            if extra_cols:
+                result = result.merge(part[merge_on + extra_cols], on=merge_on, how="outer")
+
+        # Rename columns to user-facing names
+        rename_map = {"pubDate": "pub_date", "statDate": "stat_date", "code": "stock_code"}
+        for bs_field, user_name in _BS_TO_USER.items():
+            if bs_field in result.columns:
+                rename_map[bs_field] = user_name
+        result = result.rename(columns=rename_map)
+
+        # Convert numeric columns
+        for col in result.columns:
+            if col in ("stock_code", "pub_date", "stat_date"):
+                continue
+            result[col] = pd.to_numeric(result[col], errors="coerce")
+
+        # Parse dates
+        result["pub_date"] = pd.to_datetime(result["pub_date"], errors="coerce")
+        result["stat_date"] = pd.to_datetime(result["stat_date"], errors="coerce")
+
+        # Drop rows with no pub_date (unusable)
+        result = result.dropna(subset=["pub_date"])
+
+        # Deduplicate on (stock_code, stat_date), keep latest pub_date
+        result = result.sort_values("pub_date").drop_duplicates(
+            subset=["stock_code", "stat_date"], keep="last"
+        )
+
+        return result if len(result) > 0 else None
+
+    def fetch_fundamentals(
+        self,
+        stock_codes: List[str],
+        start_date: str,
+        end_date: str,
+        needed_vars: Set[str],
+    ) -> Optional[pd.DataFrame]:
+        """Fetch fundamental data for multiple stocks with caching."""
+        needed_apis = get_needed_apis(needed_vars)
+        if not needed_apis:
+            return None
+
+        from .market_data import _bs_lock, _baostock_login, _baostock_logout
+
+        all_dfs = []
+        with _bs_lock:
+            _baostock_login()
+            try:
+                for i, code in enumerate(stock_codes):
+                    if (i + 1) % 50 == 0:
+                        logger.info(f"Fetching fundamentals: {i+1}/{len(stock_codes)}")
+
+                    # Try cache first
+                    cached = self._load_cache(code)
+                    if cached is not None:
+                        # Check if cache has the needed columns
+                        raw_vars = set()
+                        for v in needed_vars:
+                            if v in DERIVED_VARIABLES:
+                                raw_vars.update(DERIVED_VARIABLES[v])
+                            elif v in FUNDAMENTAL_VARIABLES:
+                                raw_vars.add(v)
+                        has_all_cols = all(v in cached.columns for v in raw_vars)
+
+                        if has_all_cols:
+                            # Check date coverage
+                            cache_min = cached["stat_date"].min()
+                            cache_max = cached["stat_date"].max()
+                            req_start = pd.Timestamp(start_date) - pd.Timedelta(days=365)
+                            req_end = pd.Timestamp(end_date)
+                            if cache_min <= req_start + pd.Timedelta(days=100) and cache_max >= req_end - pd.Timedelta(days=100):
+                                all_dfs.append(cached)
+                                continue
+
+                    # Fetch from baostock
+                    try:
+                        stock_df = self._fetch_stock(code, start_date, end_date, needed_apis)
+                        if stock_df is not None and len(stock_df) > 0:
+                            # Merge with existing cache
+                            if cached is not None:
+                                combined = pd.concat([cached, stock_df], ignore_index=True)
+                                combined = combined.sort_values("pub_date").drop_duplicates(
+                                    subset=["stock_code", "stat_date"], keep="last"
+                                )
+                                stock_df = combined
+                            self._save_cache(code, stock_df)
+                            all_dfs.append(stock_df)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch fundamentals for {code}: {e}")
+            finally:
+                _baostock_logout()
+
+        if not all_dfs:
+            return None
+
+        result = pd.concat(all_dfs, ignore_index=True)
+        return result if len(result) > 0 else None
+
+    def align_to_daily(
+        self,
+        quarterly_df: pd.DataFrame,
+        market_df: pd.DataFrame,
+        needed_vars: Set[str],
+    ) -> pd.DataFrame:
+        """Align quarterly data to daily using pubDate (point-in-time, no look-ahead).
+
+        Uses pd.merge_asof with direction='backward': for each trading day T,
+        use the most recent quarterly data where pubDate <= T.
+        Then compute derived variables (pe, pb, ps).
+        """
+        # Determine which raw columns we need from quarterly_df
+        raw_cols = set()
+        for v in needed_vars:
+            if v in DERIVED_VARIABLES:
+                raw_cols.update(DERIVED_VARIABLES[v])
+            elif v in FUNDAMENTAL_VARIABLES:
+                raw_cols.add(v)
+
+        # Filter quarterly_df to needed columns
+        keep_cols = ["stock_code", "pub_date"] + [c for c in raw_cols if c in quarterly_df.columns]
+        qdf = quarterly_df[keep_cols].copy()
+        qdf = qdf.dropna(subset=["pub_date"])
+
+        # merge_asof requires the key column to be sorted.
+        # Since we merge by stock_code, do it per-stock to avoid cross-stock sorting issues.
+        market_df = market_df.copy()
+        result_parts = []
+        for code, mkt_group in market_df.groupby("stock_code", sort=False):
+            fund_group = qdf[qdf["stock_code"] == code].sort_values("pub_date")
+            if len(fund_group) == 0:
+                result_parts.append(mkt_group)
+                continue
+            mkt_sorted = mkt_group.sort_values("trade_date")
+            merged_group = pd.merge_asof(
+                mkt_sorted,
+                fund_group.drop(columns=["stock_code"]),
+                left_on="trade_date",
+                right_on="pub_date",
+                direction="backward",
+            )
+            result_parts.append(merged_group)
+
+        if not result_parts:
+            return market_df
+        merged = pd.concat(result_parts, ignore_index=True)
+
+        # Compute derived variables
+        if "pe" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                merged["pe"] = np.where(
+                    (merged.get("net_profit", 0) != 0) & merged.get("net_profit", pd.Series(dtype=float)).notna(),
+                    merged["close"] * merged.get("total_share", np.nan) / merged.get("net_profit", np.nan),
+                    np.nan,
+                )
+        if "pb" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                roe_val = merged.get("roe", pd.Series(dtype=float))
+                net_profit_val = merged.get("net_profit", pd.Series(dtype=float))
+                total_share_val = merged.get("total_share", pd.Series(dtype=float))
+                # book value = net_profit / roe (annualized equity approximation)
+                book_value = np.where(
+                    (roe_val != 0) & roe_val.notna(),
+                    net_profit_val / roe_val,
+                    np.nan,
+                )
+                merged["pb"] = np.where(
+                    (book_value != 0) & pd.notna(book_value),
+                    merged["close"] * total_share_val / book_value,
+                    np.nan,
+                )
+        if "ps" in needed_vars:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                merged["ps"] = np.where(
+                    (merged.get("revenue", 0) != 0) & merged.get("revenue", pd.Series(dtype=float)).notna(),
+                    merged["close"] * merged.get("total_share", np.nan) / merged.get("revenue", np.nan),
+                    np.nan,
+                )
+
+        # Drop the pub_date column (no longer needed)
+        if "pub_date" in merged.columns:
+            merged = merged.drop(columns=["pub_date"])
+
+        return merged
