@@ -264,55 +264,59 @@ class FundamentalDataFetcher:
         if not needed_apis:
             return None
 
-        from .market_data import _bs_lock, _baostock_login, _baostock_logout
+        from .market_data import _bs_lock, _baostock_login, _baostock_logout, CACHE_ONLY
 
         all_dfs = []
-        with _bs_lock:
-            _baostock_login()
-            try:
-                for i, code in enumerate(stock_codes):
-                    if (i + 1) % 50 == 0:
-                        logger.info(f"Fetching fundamentals: {i+1}/{len(stock_codes)}")
 
-                    # Try cache first
-                    cached = self._load_cache(code)
-                    if cached is not None:
-                        # Check if cache has the needed columns
-                        raw_vars = set()
-                        for v in needed_vars:
-                            if v in DERIVED_VARIABLES:
-                                raw_vars.update(DERIVED_VARIABLES[v])
-                            elif v in FUNDAMENTAL_VARIABLES:
-                                raw_vars.add(v)
-                        has_all_cols = all(v in cached.columns for v in raw_vars)
+        # First pass: load all cached data
+        to_fetch = []
+        for code in stock_codes:
+            cached = self._load_cache(code)
+            if cached is not None:
+                raw_vars = set()
+                for v in needed_vars:
+                    if v in DERIVED_VARIABLES:
+                        raw_vars.update(DERIVED_VARIABLES[v])
+                    elif v in FUNDAMENTAL_VARIABLES:
+                        raw_vars.add(v)
+                has_all_cols = all(v in cached.columns for v in raw_vars)
 
-                        if has_all_cols:
-                            # Check date coverage
-                            cache_min = cached["stat_date"].min()
-                            cache_max = cached["stat_date"].max()
-                            req_start = pd.Timestamp(start_date) - pd.Timedelta(days=365)
-                            req_end = pd.Timestamp(end_date)
-                            if cache_min <= req_start + pd.Timedelta(days=100) and cache_max >= req_end - pd.Timedelta(days=100):
-                                all_dfs.append(cached)
-                                continue
+                if has_all_cols:
+                    cache_min = cached["stat_date"].min()
+                    cache_max = cached["stat_date"].max()
+                    req_start = pd.Timestamp(start_date) - pd.Timedelta(days=365)
+                    req_end = pd.Timestamp(end_date)
+                    if cache_min <= req_start + pd.Timedelta(days=100) and cache_max >= req_end - pd.Timedelta(days=100):
+                        all_dfs.append(cached)
+                        continue
+            to_fetch.append((code, cached))
 
-                    # Fetch from baostock
+        # Second pass: fetch uncached from baostock (unless cache-only)
+        if to_fetch:
+            if CACHE_ONLY:
+                logger.warning(f"Cache-only mode: {len(to_fetch)} stocks fundamentals not cached, skipping fetch")
+            else:
+                with _bs_lock:
+                    _baostock_login()
                     try:
-                        stock_df = self._fetch_stock(code, start_date, end_date, needed_apis)
-                        if stock_df is not None and len(stock_df) > 0:
-                            # Merge with existing cache
-                            if cached is not None:
-                                combined = pd.concat([cached, stock_df], ignore_index=True)
-                                combined = combined.sort_values("pub_date").drop_duplicates(
-                                    subset=["stock_code", "stat_date"], keep="last"
-                                )
-                                stock_df = combined
-                            self._save_cache(code, stock_df)
-                            all_dfs.append(stock_df)
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch fundamentals for {code}: {e}")
-            finally:
-                _baostock_logout()
+                        for i, (code, cached) in enumerate(to_fetch):
+                            if (i + 1) % 50 == 0:
+                                logger.info(f"Fetching fundamentals: {i+1}/{len(to_fetch)}")
+                            try:
+                                stock_df = self._fetch_stock(code, start_date, end_date, needed_apis)
+                                if stock_df is not None and len(stock_df) > 0:
+                                    if cached is not None:
+                                        combined = pd.concat([cached, stock_df], ignore_index=True)
+                                        combined = combined.sort_values("pub_date").drop_duplicates(
+                                            subset=["stock_code", "stat_date"], keep="last"
+                                        )
+                                        stock_df = combined
+                                    self._save_cache(code, stock_df)
+                                    all_dfs.append(stock_df)
+                            except Exception as e:
+                                logger.warning(f"Failed to fetch fundamentals for {code}: {e}")
+                    finally:
+                        _baostock_logout()
 
         if not all_dfs:
             return None
@@ -521,30 +525,37 @@ class FundamentalDataFetcher:
         end_date: str,
     ) -> Optional[pd.DataFrame]:
         """Fetch dividend data for multiple stocks with caching."""
-        from .market_data import _bs_lock, _baostock_login, _baostock_logout
+        from .market_data import _bs_lock, _baostock_login, _baostock_logout, CACHE_ONLY
 
         all_dfs = []
-        with _bs_lock:
-            _baostock_login()
-            try:
-                for i, code in enumerate(stock_codes):
-                    if (i + 1) % 50 == 0:
-                        logger.info(f"Fetching dividends: {i+1}/{len(stock_codes)}")
+        to_fetch_codes = []
 
-                    cached = self._load_dividend_cache(code)
-                    if cached is not None and len(cached) > 0:
-                        all_dfs.append(cached)
-                        continue
+        for code in stock_codes:
+            cached = self._load_dividend_cache(code)
+            if cached is not None and len(cached) > 0:
+                all_dfs.append(cached)
+            else:
+                to_fetch_codes.append(code)
 
+        if to_fetch_codes:
+            if CACHE_ONLY:
+                logger.warning(f"Cache-only mode: {len(to_fetch_codes)} stocks dividends not cached, skipping fetch")
+            else:
+                with _bs_lock:
+                    _baostock_login()
                     try:
-                        div_df = self._fetch_stock_dividends(code, start_date, end_date)
-                        if div_df is not None and len(div_df) > 0:
-                            self._save_dividend_cache(code, div_df)
-                            all_dfs.append(div_df)
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch dividends for {code}: {e}")
-            finally:
-                _baostock_logout()
+                        for i, code in enumerate(to_fetch_codes):
+                            if (i + 1) % 50 == 0:
+                                logger.info(f"Fetching dividends: {i+1}/{len(to_fetch_codes)}")
+                            try:
+                                div_df = self._fetch_stock_dividends(code, start_date, end_date)
+                                if div_df is not None and len(div_df) > 0:
+                                    self._save_dividend_cache(code, div_df)
+                                    all_dfs.append(div_df)
+                            except Exception as e:
+                                logger.warning(f"Failed to fetch dividends for {code}: {e}")
+                    finally:
+                        _baostock_logout()
 
         if not all_dfs:
             return None

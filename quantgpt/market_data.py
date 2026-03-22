@@ -25,6 +25,9 @@ except ImportError:
 # Project root for default paths
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Cache-only mode: when set, never fetch from baostock, only use cached data
+CACHE_ONLY = os.environ.get("QUANTGPT_CACHE_ONLY", "").lower() in ("1", "true", "yes")
+
 BENCHMARK_CODES = {
     "hs300": {"baostock": "sh.000300", "name": "沪深300"},
     "zz500": {"baostock": "sh.000905", "name": "中证500"},
@@ -98,8 +101,24 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
 
 
 def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
-    """Fetch index constituents from baostock."""
+    """Fetch index constituents from baostock, with monthly file cache."""
     date = date or datetime.now().strftime("%Y-%m-%d")
+
+    # Monthly file cache
+    cache_dir = _PROJECT_ROOT / "data" / "universe"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{name}_{date[:7]}.txt"
+
+    if cache_path.exists():
+        codes = cache_path.read_text().strip().split("\n")
+        if len(codes) > 10:
+            logger.info(f"{name} loaded from cache: {len(codes)} stocks")
+            return codes
+
+    if CACHE_ONLY:
+        logger.warning(f"Cache-only mode: {name} constituents not cached for {date[:7]}, returning empty list")
+        return []
+
     with _bs_lock:
         _baostock_login()
         try:
@@ -113,6 +132,8 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
                 row = rs.get_row_data()
                 codes.append(row[1])  # code column
             logger.info(f"Fetched {len(codes)} constituents for {name}")
+            if codes:
+                cache_path.write_text("\n".join(codes))
             return codes
         finally:
             _baostock_logout()
@@ -354,22 +375,25 @@ class MarketDataFetcher:
             to_fetch.append(code)
 
         if to_fetch:
-            logger.info(f"Fetching {len(to_fetch)} stocks from baostock...")
-            with _bs_lock:
-                _baostock_login()
-                try:
-                    for code in to_fetch:
-                        df = self._fetch_remote(code, start_date, end_date, already_logged_in=True)
-                        if df is not None and len(df) > 0:
-                            existing = self._load_cache(code)
-                            if existing is not None:
-                                df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
-                            self._save_cache(code, df)
-                            filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
-                            if len(filtered) > 0:
-                                all_data.append(filtered)
-                finally:
-                    _baostock_logout()
+            if CACHE_ONLY:
+                logger.warning(f"Cache-only mode: {len(to_fetch)} stocks not cached, skipping fetch")
+            else:
+                logger.info(f"Fetching {len(to_fetch)} stocks from baostock...")
+                with _bs_lock:
+                    _baostock_login()
+                    try:
+                        for code in to_fetch:
+                            df = self._fetch_remote(code, start_date, end_date, already_logged_in=True)
+                            if df is not None and len(df) > 0:
+                                existing = self._load_cache(code)
+                                if existing is not None:
+                                    df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                                self._save_cache(code, df)
+                                filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
+                                if len(filtered) > 0:
+                                    all_data.append(filtered)
+                    finally:
+                        _baostock_logout()
 
         if all_data:
             result = pd.concat(all_data, ignore_index=True)
@@ -429,6 +453,9 @@ def fetch_benchmark_returns(
             pass
 
     # Fetch from baostock
+    if CACHE_ONLY:
+        logger.warning(f"Cache-only mode: benchmark {benchmark} not cached, returning None")
+        return None
     start_date = start_date or (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
     end_date = end_date or datetime.now().strftime("%Y-%m-%d")
 
