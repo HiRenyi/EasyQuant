@@ -185,6 +185,7 @@ async def admin_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = Query(None, description="按状态过滤"),
+    task_type: str | None = Query(None, description="按任务类型过滤"),
     user_id: str | None = Query(None, description="按用户 ID 过滤"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -195,6 +196,8 @@ async def admin_tasks(
     count_query = select(func.count(Task.id))
     if status:
         count_query = count_query.where(Task.status == status)
+    if task_type:
+        count_query = count_query.where(Task.task_type == task_type)
     if user_id:
         count_query = count_query.where(Task.user_id == user_id)
     total_q = await db.execute(count_query)
@@ -207,6 +210,8 @@ async def admin_tasks(
     )
     if status:
         query = query.where(Task.status == status)
+    if task_type:
+        query = query.where(Task.task_type == task_type)
     if user_id:
         query = query.where(Task.user_id == user_id)
     query = query.order_by(desc(Task.created_at)).offset(offset).limit(page_size)
@@ -220,6 +225,7 @@ async def admin_tasks(
             "id": task.id,
             "user_email": email,
             "user_id": str(task.user_id),
+            "task_type": task.task_type or "backtest",
             "status": task.status,
             "expression": task.expression,
             "error": task.error,

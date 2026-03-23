@@ -178,23 +178,10 @@ function CopyButton({ text }: { text: string }) {
 function McpGuideModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"claude" | "openclaw">("claude");
 
-  const stdioConfig = `{
+  const mcpConfig = `{
   "mcpServers": {
     "quantgpt": {
-      "type": "stdio",
-      "command": "python3",
-      "args": ["-m", "quantgpt"],
-      "env": {
-        "PYTHONPATH": "/path/to/quantgpt"
-      }
-    }
-  }
-}`;
-
-  const httpConfig = `{
-  "mcpServers": {
-    "quantgpt": {
-      "url": "https://your-server.com/mcp",
+      "url": "https://quantgpt.online/mcp",
       "transport": "streamable-http"
     }
   }
@@ -203,7 +190,7 @@ function McpGuideModal({ onClose }: { onClose: () => void }) {
   const openclawNativeCode = `from openclaw.tools.mcp import MCPClient
 
 client = MCPClient(
-    server_url="http://localhost:8000"
+    server_url="https://quantgpt.online/mcp"
 )
 
 agent = Agent(
@@ -214,13 +201,11 @@ agent = Agent(
 
 def backtest_tool(expression: str, **kwargs):
     return requests.post(
-        "http://localhost:8000/tools/backtest_factor",
+        "https://quantgpt.online/mcp",
         json={"expression": expression, **kwargs}
     ).json()
 
 agent.register_tool(backtest_tool)`;
-
-  const mcpServerStartCmd = `python -m quantgpt --transport streamable-http --host 0.0.0.0 --port 8000`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -286,15 +271,12 @@ agent.register_tool(backtest_tool)`;
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
-                  <h3 className="text-sm font-medium text-gray-900">安装 QuantGPT</h3>
+                  <h3 className="text-sm font-medium text-gray-900">配置 MCP</h3>
                 </div>
-                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
-                  <CopyButton text="git clone https://github.com/Miasyster/QuantGPT.git && cd QuantGPT && pip install -e ." />
-                  <div>
-                    <span className="text-green-400">$</span> git clone https://github.com/Miasyster/QuantGPT.git<br/>
-                    <span className="text-green-400">$</span> cd QuantGPT<br/>
-                    <span className="text-green-400">$</span> pip install -e .
-                  </div>
+                <p className="text-xs text-gray-500 mb-1.5 font-medium">在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code>，填入以下内容：</p>
+                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                  <CopyButton text={mcpConfig} />
+                  <pre className="whitespace-pre-wrap">{mcpConfig}</pre>
                 </div>
               </div>
 
@@ -302,39 +284,13 @@ agent.register_tool(backtest_tool)`;
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
-                  <h3 className="text-sm font-medium text-gray-900">配置 MCP（二选一）</h3>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1.5 font-medium">本地模式 — 在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code></p>
-                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
-                      <CopyButton text={stdioConfig} />
-                      <pre className="whitespace-pre-wrap">{stdioConfig}</pre>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1.5 font-medium">远程模式 — 连接已部署的服务</p>
-                    <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
-                      <CopyButton text={httpConfig} />
-                      <pre className="whitespace-pre-wrap">{httpConfig}</pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
                   <h3 className="text-sm font-medium text-gray-900">开始使用</h3>
                 </div>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
                   <CopyButton text="claude mcp list" />
                   <div>
                     <span className="text-green-400">$</span> claude mcp list<br/>
-                    <span className="text-gray-400"># quantgpt: ✓ Connected</span>
+                    <span className="text-gray-400"># quantgpt: Connected</span>
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
@@ -359,32 +315,18 @@ agent.register_tool(backtest_tool)`;
       ↓
 [MCP Client]
       ↓  Streamable HTTP
-[QuantGPT MCP Server :8000]
+[QuantGPT MCP Server (quantgpt.online)]
       ↓
 [回测 / 评分 / 诊断 / 验证]`}</pre>
               </div>
 
-              {/* Step 1: Start server */}
+              {/* Step 1: Connect */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
-                  <h3 className="text-sm font-medium text-gray-900">启动 MCP Server</h3>
-                </div>
-                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
-                  <CopyButton text={mcpServerStartCmd} />
-                  <div>
-                    <span className="text-green-400">$</span> {mcpServerStartCmd}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1.5">端点地址：<code className="bg-gray-100 px-1 rounded">http://localhost:8000/mcp</code></p>
-              </div>
-
-              {/* Step 2: Connect */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
                   <h3 className="text-sm font-medium text-gray-900">在 Agent 中接入</h3>
                 </div>
+                <p className="text-xs text-gray-500 mb-1.5">MCP 端点地址：<code className="bg-gray-100 px-1 rounded">https://quantgpt.online/mcp</code></p>
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs text-gray-500 mb-1.5 font-medium">方式 A：原生 MCP Client（推荐）</p>
@@ -406,7 +348,7 @@ agent.register_tool(backtest_tool)`;
               {/* Tips */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
                   <h3 className="text-sm font-medium text-gray-900">注意事项</h3>
                 </div>
                 <div className="space-y-1.5">

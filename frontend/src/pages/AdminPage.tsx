@@ -380,13 +380,15 @@ function TasksTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const pageSize = 20;
 
   const load = useCallback(
-    (p: number, status?: string) => {
+    (p: number, status?: string, taskType?: string) => {
       setLoading(true);
       const s = status ?? statusFilter;
-      fetchTasks(p, pageSize, { status: s || undefined })
+      const t = taskType ?? typeFilter;
+      fetchTasks(p, pageSize, { status: s || undefined, task_type: t || undefined })
         .then((d) => {
           setTasks(d.tasks);
           setTotal(d.total);
@@ -394,7 +396,7 @@ function TasksTab() {
         })
         .finally(() => setLoading(false));
     },
-    [statusFilter],
+    [statusFilter, typeFilter],
   );
 
   useEffect(() => {
@@ -403,24 +405,53 @@ function TasksTab() {
 
   const handleStatusChange = (val: string) => {
     setStatusFilter(val);
-    load(1, val);
+    load(1, val, typeFilter);
+  };
+
+  const handleTypeChange = (val: string) => {
+    setTypeFilter(val);
+    load(1, statusFilter, val);
+  };
+
+  const typeLabel = (t: string) => {
+    switch (t) {
+      case "backtest": return "单因子";
+      case "iteration": return "迭代";
+      case "composite": return "多因子组合";
+      default: return t;
+    }
   };
 
   return (
     <div>
-      <div className="mb-3 flex gap-2 items-center">
-        <label className="text-sm text-gray-500">状态：</label>
-        <select
-          value={statusFilter}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">全部</option>
-          <option value="completed">completed</option>
-          <option value="failed">failed</option>
-          <option value="pending">pending</option>
-          <option value="iteration_completed">iteration_completed</option>
-        </select>
+      <div className="mb-3 flex gap-4 items-center">
+        <div className="flex gap-2 items-center">
+          <label className="text-sm text-gray-500">状态：</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">全部</option>
+            <option value="completed">completed</option>
+            <option value="failed">failed</option>
+            <option value="pending">pending</option>
+            <option value="iteration_completed">iteration_completed</option>
+          </select>
+        </div>
+        <div className="flex gap-2 items-center">
+          <label className="text-sm text-gray-500">类型：</label>
+          <select
+            value={typeFilter}
+            onChange={(e) => handleTypeChange(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">全部</option>
+            <option value="backtest">单因子</option>
+            <option value="iteration">迭代</option>
+            <option value="composite">多因子组合</option>
+          </select>
+        </div>
       </div>
       {loading && tasks.length === 0 ? (
         <div className="flex justify-center py-12">
@@ -433,6 +464,7 @@ function TasksTab() {
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="py-2 px-3 font-medium">ID</th>
                 <th className="py-2 px-3 font-medium">用户</th>
+                <th className="py-2 px-3 font-medium">类型</th>
                 <th className="py-2 px-3 font-medium">表达式</th>
                 <th className="py-2 px-3 font-medium">状态</th>
                 <th className="py-2 px-3 font-medium">创建时间</th>
@@ -443,6 +475,7 @@ function TasksTab() {
                 <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2.5 px-3 font-mono text-xs">{t.id}</td>
                   <td className="py-2.5 px-3 text-xs">{t.user_email}</td>
+                  <td className="py-2.5 px-3 text-xs text-gray-600">{typeLabel(t.task_type)}</td>
                   <td className="py-2.5 px-3 font-mono text-xs max-w-[300px] truncate" title={t.expression || ""}>
                     {t.expression || (t.error ? <span className="text-red-500">{t.error}</span> : "-")}
                   </td>
@@ -528,7 +561,7 @@ function FeedbacksTab() {
                 <td className="py-2.5 px-3 text-xs">
                   {f.screenshot_path ? (
                     <a
-                      href={`/api/v1/feedback-screenshots/${f.id}`}
+                      href={`/api/v1/feedback-screenshots/${f.screenshot_path.split("/").pop()?.replace(".png", "") ?? f.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-blue-600 hover:underline"

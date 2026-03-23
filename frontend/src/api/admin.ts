@@ -84,6 +84,7 @@ export interface AdminTask {
   id: string;
   user_email: string;
   user_id: string;
+  task_type: string;
   status: string;
   expression: string | null;
   error: string | null;
@@ -93,10 +94,11 @@ export interface AdminTask {
 export async function fetchTasks(
   page = 1,
   pageSize = 20,
-  filters?: { status?: string; user_id?: string },
+  filters?: { status?: string; task_type?: string; user_id?: string },
 ): Promise<{ tasks: AdminTask[]; total: number; page: number; page_size: number }> {
   let url = `${BASE}/api/v1/admin/tasks?page=${page}&page_size=${pageSize}`;
   if (filters?.status) url += `&status=${filters.status}`;
+  if (filters?.task_type) url += `&task_type=${filters.task_type}`;
   if (filters?.user_id) url += `&user_id=${filters.user_id}`;
   const res = await adminFetch(url);
   if (!res.ok) throw new Error("获取任务列表失败");
