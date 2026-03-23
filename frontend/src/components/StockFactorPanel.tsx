@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import type { StockFactorData, StockFactorInfo } from "../types/backtest";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 interface Props {
   data: StockFactorData;
@@ -65,6 +66,7 @@ function generateStockInterpretation(
 }
 
 export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) {
+  const { positiveClass, negativeClass } = useColorMode();
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -193,11 +195,11 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
               <p className="text-xs font-medium text-gray-500 mb-1">回测期收益</p>
               <p className="text-sm text-gray-600">
                 累计{" "}
-                <span className={searchResult.period_return >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
+                <span className={searchResult.period_return >= 0 ? `${positiveClass} font-medium` : `${negativeClass} font-medium`}>
                   {searchResult.period_return >= 0 ? "+" : ""}{pct(searchResult.period_return)}
                 </span>
                 {" "}· Top 组年化{" "}
-                <span className={topGroupAnnualReturn >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
+                <span className={topGroupAnnualReturn >= 0 ? `${positiveClass} font-medium` : `${negativeClass} font-medium`}>
                   {topGroupAnnualReturn >= 0 ? "+" : ""}{pct(topGroupAnnualReturn)}
                 </span>
               </p>

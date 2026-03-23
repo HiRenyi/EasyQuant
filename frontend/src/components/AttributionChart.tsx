@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FactorItem } from "../api/composite";
+import { useColorMode } from "../contexts/ColorModeContext";
 import {
   fetchFactorAttribution,
   type AttributionResult,
@@ -27,6 +28,7 @@ export default function AttributionChart({
   holdingPeriod,
 }: Props) {
   const [result, setResult] = useState<AttributionResult | null>(null);
+  const { positiveClass, negativeClass } = useColorMode();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,7 +166,7 @@ export default function AttributionChart({
                       />
                     </div>
                   </div>
-                  <span className={`w-20 text-right font-mono ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                  <span className={`w-20 text-right font-mono ${isPositive ? positiveClass : negativeClass}`}>
                     {c.marginal_ic >= 0 ? "+" : ""}{num(c.marginal_ic)}
                   </span>
                   {c.contribution_pct !== undefined && (

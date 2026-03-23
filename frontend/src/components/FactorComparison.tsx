@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { Plus, Trash2, BarChart3, Loader2, Star, Check } from "lucide-react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type { CompareFactorsResponse, CompareFactorResult } from "../api/comparison";
 import { compareFactors } from "../api/comparison";
 import type { SavedFactor } from "../api/factorLibrary";
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function FactorComparison({ savedExpressions }: Props) {
+  const { positiveClass, negativeClass } = useColorMode();
   const [factors, setFactors] = useState([
     { expression: "", label: "" },
     { expression: "", label: "" },
@@ -259,11 +261,11 @@ export default function FactorComparison({ savedExpressions }: Props) {
                         <div className="flex items-center gap-2 mt-1 ml-6 text-[11px] text-gray-500">
                           <span>Sharpe <span className="font-medium text-gray-700">{m.sharpe.toFixed(2)}</span></span>
                           <span className="text-gray-200">|</span>
-                          <span className={m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}>
+                          <span className={m.cagr >= 0 ? positiveClass : negativeClass}>
                             {(m.cagr * 100).toFixed(1)}%
                           </span>
                           <span className="text-gray-200">|</span>
-                          <span className="text-red-500">{(m.max_drawdown * 100).toFixed(1)}%</span>
+                          <span className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</span>
                         </div>
                       )}
                     </button>
@@ -282,6 +284,7 @@ export default function FactorComparison({ savedExpressions }: Props) {
 }
 
 function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
+  const { positiveClass, negativeClass } = useColorMode();
   const successFactors = data.factors.filter((f): f is CompareFactorResult & { metrics: NonNullable<CompareFactorResult["metrics"]> } =>
     f.status === "success" && !!f.metrics
   );
@@ -316,7 +319,7 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
                     const v = f.metrics[key as keyof typeof f.metrics] ?? 0;
                     const isBest = v === best && successFactors.length > 1;
                     return (
-                      <td key={i} className={`text-right px-3 py-2 font-mono ${isBest ? "font-bold text-emerald-600" : "text-gray-700"}`}>
+                      <td key={i} className={`text-right px-3 py-2 font-mono ${isBest ? `font-bold ${positiveClass}` : "text-gray-700"}`}>
                         {format(v)}
                       </td>
                     );
@@ -353,7 +356,7 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
                     }}
                   />
                 </div>
-                <span className={`text-xs font-mono w-16 text-right ${Number(totalReturn) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                <span className={`text-xs font-mono w-16 text-right ${Number(totalReturn) >= 0 ? positiveClass : negativeClass}`}>
                   {Number(totalReturn) >= 0 ? "+" : ""}{totalReturn}%
                 </span>
               </div>

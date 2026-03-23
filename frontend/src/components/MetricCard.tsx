@@ -1,3 +1,5 @@
+import { useColorMode } from "../contexts/ColorModeContext";
+
 interface MetricCardProps {
   label: string;
   value: string;
@@ -7,11 +9,12 @@ interface MetricCardProps {
 }
 
 export default function MetricCard({ label, value, color = "default", sub, subLabel }: MetricCardProps) {
+  const { positiveClass, negativeClass } = useColorMode();
   const colorClass =
     color === "green"
-      ? "text-emerald-600"
+      ? positiveClass
       : color === "red"
-        ? "text-red-600"
+        ? negativeClass
         : "text-gray-900";
 
   return (

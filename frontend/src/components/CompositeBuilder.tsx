@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { Plus, Trash2, Play, Loader2, Shuffle, Star, Check } from "lucide-react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type { FactorItem, CompositeBacktestPayload } from "../api/composite";
 import type { SavedFactor } from "../api/factorLibrary";
 import { fetchFactors } from "../api/factorLibrary";
@@ -18,6 +19,7 @@ const METHODS = [
 ];
 
 export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions }: Props) {
+  const { positiveClass, negativeClass } = useColorMode();
   const [factors, setFactors] = useState<FactorItem[]>([
     { expression: "", weight: 1.0 },
     { expression: "", weight: 1.0 },
@@ -261,11 +263,11 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                         <div className="flex items-center gap-2 mt-1 ml-6 text-[11px] text-gray-500">
                           <span>Sharpe <span className="font-medium text-gray-700">{m.sharpe.toFixed(2)}</span></span>
                           <span className="text-gray-200">|</span>
-                          <span className={m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}>
+                          <span className={m.cagr >= 0 ? positiveClass : negativeClass}>
                             {(m.cagr * 100).toFixed(1)}%
                           </span>
                           <span className="text-gray-200">|</span>
-                          <span className="text-red-500">{(m.max_drawdown * 100).toFixed(1)}%</span>
+                          <span className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</span>
                         </div>
                       )}
                     </button>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Trophy, Loader2, ArrowRight, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 interface WallFactor {
   id: string;
@@ -41,6 +42,7 @@ const RANK_STYLES = [
 
 export default function FactorWall({ onTryFactor }: Props) {
   const { isGuest, user } = useAuth();
+  const { positiveClass, negativeClass } = useColorMode();
   const [factors, setFactors] = useState<WallFactor[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -142,25 +144,25 @@ export default function FactorWall({ onTryFactor }: Props) {
                   <div className="hidden sm:flex items-center gap-4 text-xs shrink-0">
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">Sharpe</div>
-                      <div className={`font-bold ${m.sharpe >= 0.5 ? "text-emerald-600" : m.sharpe >= 0 ? "text-gray-700" : "text-red-500"}`}>
+                      <div className={`font-bold ${m.sharpe >= 0.5 ? positiveClass : m.sharpe >= 0 ? "text-gray-700" : negativeClass}`}>
                         {m.sharpe?.toFixed(2)}
                       </div>
                     </div>
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">年化</div>
-                      <div className={`font-bold ${m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      <div className={`font-bold ${m.cagr >= 0 ? positiveClass : negativeClass}`}>
                         {(m.cagr * 100).toFixed(1)}%
                       </div>
                     </div>
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">回撤</div>
-                      <div className="font-bold text-red-500">
+                      <div className={`font-bold ${negativeClass}`}>
                         {(m.max_drawdown * 100).toFixed(1)}%
                       </div>
                     </div>
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">IC</div>
-                      <div className={`font-bold ${(m.ic_mean ?? 0) > 0.03 ? "text-emerald-600" : "text-gray-700"}`}>
+                      <div className={`font-bold ${(m.ic_mean ?? 0) > 0.03 ? positiveClass : "text-gray-700"}`}>
                         {(m.ic_mean ?? 0).toFixed(3)}
                       </div>
                     </div>
@@ -193,9 +195,9 @@ export default function FactorWall({ onTryFactor }: Props) {
                     )}
                     {/* Mobile metrics */}
                     <div className="flex flex-wrap gap-3 mt-3 sm:hidden text-xs">
-                      <span>Sharpe <b className={m.sharpe >= 0.5 ? "text-emerald-600" : "text-gray-700"}>{m.sharpe?.toFixed(2)}</b></span>
-                      <span>年化 <b className={m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}>{(m.cagr * 100).toFixed(1)}%</b></span>
-                      <span>回撤 <b className="text-red-500">{(m.max_drawdown * 100).toFixed(1)}%</b></span>
+                      <span>Sharpe <b className={m.sharpe >= 0.5 ? positiveClass : "text-gray-700"}>{m.sharpe?.toFixed(2)}</b></span>
+                      <span>年化 <b className={m.cagr >= 0 ? positiveClass : negativeClass}>{(m.cagr * 100).toFixed(1)}%</b></span>
+                      <span>回撤 <b className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</b></span>
                       <span>IC <b>{(m.ic_mean ?? 0).toFixed(3)}</b></span>
                     </div>
                     <div className="flex items-center gap-3 mt-3 text-[11px] text-gray-400">

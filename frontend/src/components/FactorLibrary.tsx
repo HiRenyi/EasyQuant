@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Star, Trash2, ExternalLink } from "lucide-react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type { SavedFactor } from "../api/factorLibrary";
 import { fetchFactors, deleteFactor } from "../api/factorLibrary";
 import { getReportUrl } from "../api/client";
@@ -17,6 +18,7 @@ function FactorItem({
 }) {
   const m = factor.metrics;
   const bs = factor.backtest_summary as Record<string, number> | null;
+  const { positiveClass, negativeClass } = useColorMode();
 
   return (
     <div className="group rounded-lg border border-gray-150 bg-white px-3 py-2.5 hover:shadow-sm transition-shadow">
@@ -52,9 +54,9 @@ function FactorItem({
         <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-500">
           <span>S <span className="text-gray-700 font-medium">{m.sharpe.toFixed(2)}</span></span>
           <span className="text-gray-200">|</span>
-          <span className={m.cagr >= 0 ? "text-emerald-600" : "text-red-500"}>{pct(m.cagr)}</span>
+          <span className={m.cagr >= 0 ? positiveClass : negativeClass}>{pct(m.cagr)}</span>
           <span className="text-gray-200">|</span>
-          <span className="text-red-500">{pct(m.max_drawdown)}</span>
+          <span className={negativeClass}>{pct(m.max_drawdown)}</span>
           {bs && (
             <>
               <span className="text-gray-200">|</span>

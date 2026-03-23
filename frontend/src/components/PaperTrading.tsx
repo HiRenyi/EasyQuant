@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, Pause, Play, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type { PaperStrategy, PaperOrder } from "../api/paper";
 import { fetchPaperStrategies, fetchPaperStrategy, fetchPaperOrders, updatePaperStrategy } from "../api/paper";
 
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function PaperTrading(_props: Props) {
+  const { colorMode, positiveClass, negativeClass } = useColorMode();
   const [strategies, setStrategies] = useState<PaperStrategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export default function PaperTrading(_props: Props) {
               </div>
 
               <div className="text-right shrink-0">
-                <div className={`text-lg font-bold ${isUp ? "text-emerald-600" : "text-red-500"}`}>
+                <div className={`text-lg font-bold ${isUp ? positiveClass : negativeClass}`}>
                   {isUp ? "+" : ""}{pct(s.total_return)}
                 </div>
                 <div className="text-xs text-gray-400">¥{fmt(s.current_value)}</div>
@@ -184,7 +186,11 @@ export default function PaperTrading(_props: Props) {
                                   <td className="px-3 py-1.5 text-gray-500">{o.date}</td>
                                   <td className="px-3 py-1.5 font-mono text-gray-700">{o.stock_code}</td>
                                   <td className="px-3 py-1.5">
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${o.direction === "buy" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      o.direction === "buy"
+                                        ? (colorMode === "cn" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700")
+                                        : (colorMode === "cn" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600")
+                                    }`}>
                                       {o.direction === "buy" ? "买入" : "卖出"}
                                     </span>
                                   </td>

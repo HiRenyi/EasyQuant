@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
 export const APP_VERSION = "v2.0.0";
@@ -461,6 +462,21 @@ agent.register_tool(backtest_tool)`;
   );
 }
 
+function ColorModeToggle() {
+  const { colorMode, toggleColorMode } = useColorMode();
+  return (
+    <button
+      onClick={toggleColorMode}
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-gray-200 hover:bg-gray-50 transition-colors"
+      title={colorMode === "cn" ? "当前：红涨绿跌（中国）" : "当前：绿涨红跌（西方）"}
+    >
+      <span className={colorMode === "cn" ? "text-red-500" : "text-emerald-500"}>涨</span>
+      <span className="text-gray-300">/</span>
+      <span className={colorMode === "cn" ? "text-emerald-500" : "text-red-500"}>跌</span>
+    </button>
+  );
+}
+
 export default function Header() {
   const { user, isGuest, logout } = useAuth();
   const navigate = useNavigate();
@@ -488,6 +504,7 @@ export default function Header() {
           </div>
           {isGuest ? (
             <div className="flex items-center gap-3">
+              <ColorModeToggle />
               <button
                 onClick={() => setShowMcpGuide(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"
@@ -509,6 +526,7 @@ export default function Header() {
             </div>
           ) : user ? (
             <div className="flex items-center gap-3">
+              <ColorModeToggle />
               <button
                 onClick={() => setShowMcpGuide(true)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-orange-600 hover:bg-orange-50 transition-colors"

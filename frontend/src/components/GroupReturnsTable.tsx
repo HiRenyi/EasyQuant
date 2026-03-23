@@ -1,3 +1,5 @@
+import { useColorMode } from "../contexts/ColorModeContext";
+
 interface GroupReturn {
   group: string;
   annual_return: number;
@@ -15,6 +17,7 @@ function fmt(n: number, pct = false): string {
 }
 
 export default function GroupReturnsTable({ groupReturns }: Props) {
+  const { positiveClass, negativeClass } = useColorMode();
   const groups = Object.entries(groupReturns).sort(([a], [b]) => a.localeCompare(b));
 
   if (groups.length === 0) return null;
@@ -34,11 +37,11 @@ export default function GroupReturnsTable({ groupReturns }: Props) {
           {groups.map(([key, g]) => (
             <tr key={key} className="border-b border-gray-50 last:border-0">
               <td className="px-4 py-2.5 font-medium text-gray-700">{g.group}</td>
-              <td className={`px-4 py-2.5 text-right ${g.annual_return >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              <td className={`px-4 py-2.5 text-right ${g.annual_return >= 0 ? positiveClass : negativeClass}`}>
                 {fmt(g.annual_return, true)}
               </td>
               <td className="px-4 py-2.5 text-right text-gray-700">{fmt(g.sharpe)}</td>
-              <td className="px-4 py-2.5 text-right text-red-600">{fmt(g.max_drawdown, true)}</td>
+              <td className={`px-4 py-2.5 text-right ${negativeClass}`}>{fmt(g.max_drawdown, true)}</td>
             </tr>
           ))}
         </tbody>
