@@ -4,9 +4,19 @@ import { useAuth } from "../contexts/AuthContext";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v2.0.0";
+export const APP_VERSION = "v2.1.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.1.0",
+    date: "2026-03-23",
+    items: [
+      "因子中性化默认全部开启（行业+市值），无需手动勾选",
+      "前端设置改为「取消中性化」操作，勾选即关闭",
+      "MCP 工具（run_backtest/score_factor/run_anti_overfit/run_rolling_validation）新增 neutralize_industry/neutralize_cap 参数",
+      "支持涨跌颜色切换（红涨绿跌 / 绿涨红跌）",
+    ],
+  },
   {
     version: "v2.0.0",
     date: "2026-03-23",
