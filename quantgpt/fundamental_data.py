@@ -619,22 +619,22 @@ _RQ_FACTOR_MAP: Dict[str, str] = {
     "gp_margin":        "gross_profit_margin",
     "eps_ttm":          "earnings_per_share",
     # Growth
-    "yoy_ni":           "inc_net_profit_annual",
-    "yoy_equity":       "inc_total_equity_annual",
-    "yoy_asset":        "inc_total_assets_annual",
-    "yoy_pni":          "inc_net_profit_annual",  # closest match
+    "yoy_ni":           "inc_net_profit",
+    "yoy_equity":       "inc_earnings_per_share",   # no direct equity growth; EPS growth as proxy
+    "yoy_asset":        "inc_operating_revenue",     # no direct asset growth; revenue growth as proxy
+    "yoy_pni":          "inc_net_profit",
     # Balance
     "current_ratio":    "current_ratio",
     "debt_ratio":       "debt_to_asset_ratio",
     "equity_multiplier": "equity_multiplier",
     # Operation
-    "asset_turnover":   "total_asset_turnover_rate",
-    "inv_turnover":     "inventory_turnover_rate",
-    # Dupont
-    "dupont_roe":       "du_pont_roe",
-    "dupont_asset_turn": "du_pont_asset_turnover",
+    "asset_turnover":   "total_asset_turnover",
+    "inv_turnover":     "inventory_turnover",
+    # Dupont (rqdatac has no DuPont-specific factors; use standard ROE / turnover)
+    "dupont_roe":       "return_on_equity",
+    "dupont_asset_turn": "total_asset_turnover",
     # Cash flow
-    "cfo_to_np":        "operating_cashflow_to_net_profit",
+    "cfo_to_np":        "operating_cash_flow_per_share",  # closest available
     # Valuation (rqdatac computes these directly as daily factors)
     "pe":               "pe_ratio",
     "pb":               "pb_ratio",
@@ -644,18 +644,20 @@ _RQ_FACTOR_MAP: Dict[str, str] = {
     # Raw financials (for derived calculations)
     "net_profit":       "net_profit",
     "revenue":          "revenue",
-    "total_share":      "total_shares",
-    "float_share":      "circulation_a_shares",
+    "total_share":      "total_equity",          # total_shares unavailable; total_equity as proxy
+    "float_share":      "a_share_market_val",    # circulation_a_shares unavailable
 }
 
 # All unique rqdatac factor names (for prewarming)
 ALL_RQ_FACTORS: List[str] = sorted(set(_RQ_FACTOR_MAP.values()))
 
-# Reverse map: rqdatac name → project name(s)
-_RQ_TO_VAR: Dict[str, str] = {}
+# Reverse map: rqdatac name → project name(s). One rqdatac factor can map to multiple project vars.
+_RQ_TO_VARS: Dict[str, List[str]] = {}
 for _var, _rq in _RQ_FACTOR_MAP.items():
-    if _rq not in _RQ_TO_VAR:
-        _RQ_TO_VAR[_rq] = _var
+    _RQ_TO_VARS.setdefault(_rq, []).append(_var)
+
+# Single reverse map (first only) for backward compat
+_RQ_TO_VAR: Dict[str, str] = {rq: vars[0] for rq, vars in _RQ_TO_VARS.items()}
 
 # Factor cache directory
 _FACTOR_CACHE_DIR = _PROJECT_ROOT / "data" / "factors"
@@ -739,9 +741,13 @@ def _fetch_factors_rq(
     df["stock_code"] = df["order_book_id"].apply(_from_rq_code)
     df["trade_date"] = pd.to_datetime(df["date"])
 
-    # Rename rqdatac columns → project variable names
-    rename_map = {rq: var for rq, var in _RQ_TO_VAR.items() if rq in df.columns}
-    df = df.rename(columns=rename_map)
+    # Rename rqdatac columns → project variable names (handle one-to-many)
+    for rq_name, var_names in _RQ_TO_VARS.items():
+        if rq_name in df.columns:
+            # First var gets the rename, extras get a copy
+            df = df.rename(columns={rq_name: var_names[0]})
+            for extra_var in var_names[1:]:
+                df[extra_var] = df[var_names[0]]
 
     # Keep only stock_code, trade_date, + variable columns
     var_cols = [c for c in df.columns if c not in ("order_book_id", "date")]
@@ -851,6 +857,17 @@ def enrich_with_fundamentals_rq(
     # Rename any remaining rqdatac column names → project variable names
     rename_map = {rq_name: var_name for var_name, rq_name in var_to_rq.items() if rq_name in factor_df.columns}
     factor_df = factor_df.rename(columns=rename_map)
+
+    # Fill alias columns: if a needed var shares the same rqdatac source as an existing column, copy it
+    for var in needed_vars:
+        if var not in factor_df.columns:
+            rq_name = _RQ_FACTOR_MAP.get(var)
+            if rq_name:
+                # Find a sibling var that maps to the same rqdatac factor and already exists
+                for sibling_var in _RQ_TO_VARS.get(rq_name, []):
+                    if sibling_var in factor_df.columns:
+                        factor_df[var] = factor_df[sibling_var]
+                        break
 
     # Select only the columns we need
     keep_cols = ["stock_code", "trade_date"] + [v for v in var_to_rq.keys() if v in factor_df.columns]
