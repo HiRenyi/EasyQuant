@@ -418,6 +418,10 @@ function TasksTab() {
       case "backtest": return "单因子";
       case "iteration": return "迭代";
       case "composite": return "多因子组合";
+      case "mcp_backtest": return "MCP 回测";
+      case "mcp_score": return "MCP 评分";
+      case "mcp_antioverfit": return "MCP 反过拟合";
+      case "mcp_rolling": return "MCP 滚动验证";
       default: return t;
     }
   };
@@ -450,6 +454,10 @@ function TasksTab() {
             <option value="backtest">单因子</option>
             <option value="iteration">迭代</option>
             <option value="composite">多因子组合</option>
+            <option value="mcp_backtest">MCP 回测</option>
+            <option value="mcp_score">MCP 评分</option>
+            <option value="mcp_antioverfit">MCP 反过拟合</option>
+            <option value="mcp_rolling">MCP 滚动验证</option>
           </select>
         </div>
       </div>

@@ -67,6 +67,11 @@ async def admin_overview(db: AsyncSession = Depends(get_db)):
     )
     unresolved_count = unresolved_q.scalar() or 0
 
+    mcp_count_q = await db.execute(
+        select(func.count(Task.id)).where(Task.task_type.like("mcp_%"))
+    )
+    mcp_task_count = mcp_count_q.scalar() or 0
+
     # Task status distribution (for pie chart)
     status_dist_q = await db.execute(
         select(Task.status, func.count(Task.id))
@@ -129,6 +134,7 @@ async def admin_overview(db: AsyncSession = Depends(get_db)):
         "today_active": today_active,
         "feedback_count": feedback_count,
         "unresolved_feedback_count": unresolved_count,
+        "mcp_task_count": mcp_task_count,
         "status_distribution": status_distribution,
         "daily_tasks": daily_tasks,
         "user_trend": user_trend,

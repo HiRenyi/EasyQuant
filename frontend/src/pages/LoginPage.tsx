@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { BarChart3, Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff, FlaskConical, Layers, TrendingUp, Sparkles } from "lucide-react";
+import { BarChart3, Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff, FlaskConical, Terminal, Sparkles, ShieldCheck } from "lucide-react";
 import { sendCode, verifyCode, loginWithPassword, resetPassword } from "../api/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -144,32 +144,50 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center px-4">
       <div className="w-full max-w-4xl flex gap-12 items-center">
-        {/* Left: Feature showcase (hidden on small screens) */}
+        {/* Left: Hero positioning (hidden on small screens) */}
         <div className="hidden lg:block flex-1">
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-8">
             <BarChart3 className="h-8 w-8 text-blue-600" />
             <span className="text-2xl font-bold text-gray-900">QuantGPT</span>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">AI 驱动的 A 股因子回测</h2>
-          <p className="text-gray-500 mb-8">用自然语言描述你的因子策略，一键回测。</p>
 
-          <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight leading-tight">
+            Agent-Native<br />
+            Quant Research<br />
+            Infrastructure
+          </h2>
+          <p className="mt-3 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            AI 时代量化研究新范式
+          </p>
+          <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+            不写代码，直接验证你的因子想法。<br />从自然语言到专业回测报告，30 秒完成。
+          </p>
+
+          <div className="mt-8 grid grid-cols-2 gap-3">
             {[
-              { icon: Sparkles, color: "text-blue-500", bg: "bg-blue-50", title: "自然语言输入", desc: "用中文描述因子逻辑，AI 自动生成量化表达式" },
-              { icon: FlaskConical, color: "text-emerald-500", bg: "bg-emerald-50", title: "完整指标体系", desc: "Sharpe、IC、IR、单调性、换手率等 20+ 指标" },
-              { icon: Layers, color: "text-purple-500", bg: "bg-purple-50", title: "多因子组合", desc: "等权/IC加权组合 + 因子归因分析" },
-              { icon: TrendingUp, color: "text-amber-500", bg: "bg-amber-50", title: "AI 迭代优化", desc: "一键生成候选改进因子，反过拟合检测" },
+              { icon: Terminal, color: "text-orange-500", bg: "bg-orange-50", title: "MCP 原生协议", desc: "AI Agent 直连回测引擎，8 个标准化工具" },
+              { icon: FlaskConical, color: "text-emerald-500", bg: "bg-emerald-50", title: "专业级指标体系", desc: "IC/IR、单调性、Sharpe 等 20+ 指标，行业/市值中性化" },
+              { icon: Sparkles, color: "text-blue-500", bg: "bg-blue-50", title: "零代码回测", desc: "自然语言描述因子逻辑，AI 自动生成表达式并回测" },
+              { icon: ShieldCheck, color: "text-purple-500", bg: "bg-purple-50", title: "抗过拟合验证", desc: "IC 稳定性、子样本压力、安慰剂检验、Walk-Forward" },
             ].map((f, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className={`${f.bg} rounded-lg p-2 shrink-0`}>
-                  <f.icon className={`h-4 w-4 ${f.color}`} />
+              <div key={i} className="rounded-xl border border-gray-100 bg-white/60 p-3">
+                <div className={`${f.bg} rounded-lg p-1.5 w-fit mb-2`}>
+                  <f.icon className={`h-3.5 w-3.5 ${f.color}`} />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{f.title}</p>
-                  <p className="text-xs text-gray-500">{f.desc}</p>
-                </div>
+                <p className="text-xs font-semibold text-gray-900 mb-0.5">{f.title}</p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">{f.desc}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 flex items-center gap-2 text-[11px] text-gray-400">
+            <span>30+ 算子</span>
+            <span>·</span>
+            <span>4 大股票池</span>
+            <span>·</span>
+            <span>2015-2025 全量数据</span>
+            <span>·</span>
+            <span>开源免费</span>
           </div>
         </div>
 

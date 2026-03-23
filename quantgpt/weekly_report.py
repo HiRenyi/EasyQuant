@@ -50,7 +50,7 @@ from .models import User
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_REPORT_DIR = _PROJECT_ROOT / "marketing" / "factor_research"
+_REPORT_DIR = _PROJECT_ROOT / "factor_research"
 
 # Brand colors for charts
 _COLORS = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",

@@ -13,6 +13,7 @@ Provides tools for Agent-driven backtest workflow:
 
 import json
 import logging
+import time
 import traceback
 
 import pandas as pd
@@ -24,6 +25,7 @@ from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_return
 from .backtest import run_factor_backtest
 from .report import generate_report
 from .fundamental_data import ALL_FUNDAMENTAL_NAMES
+from .mcp_tracking import track_mcp_result
 
 import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s", stream=sys.stderr)
@@ -154,6 +156,9 @@ def run_backtest(
     Returns:
         JSON string with report_path, metrics, group_returns, anti_overfit.
     """
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
     try:
         logger.info(f"Getting universe: {universe}")
         stock_codes = get_universe(universe, date=start_date)
@@ -234,6 +239,7 @@ def run_backtest(
 
 
 @mcp.tool()
+@track_mcp_call("mcp_score")
 def score_factor(
     expression: str,
     universe: str = "hs300",
@@ -378,6 +384,7 @@ def diagnose_factor(
 
 
 @mcp.tool()
+@track_mcp_call("mcp_antioverfit")
 def run_anti_overfit(
     expression: str,
     universe: str = "hs300",
@@ -431,6 +438,7 @@ def run_anti_overfit(
 
 
 @mcp.tool()
+@track_mcp_call("mcp_rolling")
 def run_rolling_validation(
     expression: str,
     universe: str = "hs300",
