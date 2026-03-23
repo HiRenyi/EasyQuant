@@ -815,9 +815,10 @@ def enrich_with_fundamentals_rq(
     var_to_rq = {}
     for var in needed_vars:
         rq_name = _RQ_FACTOR_MAP.get(var)
-        if rq_name and rq_name not in rq_factors:
-            rq_factors.append(rq_name)
-            var_to_rq[var] = rq_name
+        if rq_name:
+            if rq_name not in rq_factors:
+                rq_factors.append(rq_name)
+            var_to_rq[var] = rq_name  # keep ALL vars, even if rq_name is duplicated
 
     if not rq_factors:
         return None

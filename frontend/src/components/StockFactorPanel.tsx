@@ -68,11 +68,11 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Top 50 by factor_rank descending (rank already handles flipped direction)
-  const top50 = useMemo(() => {
+  // Top 10 by factor_rank descending (rank already handles flipped direction)
+  const top10 = useMemo(() => {
     return [...data.stocks]
       .sort((a, b) => b.factor_rank - a.factor_rank)
-      .slice(0, 50);
+      .slice(0, 10);
   }, [data.stocks]);
 
   // Stock search
@@ -94,7 +94,7 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
         >
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-medium text-gray-700">
-              因子信号强度 Top 50
+              因子信号强度 Top 10
             </h4>
             <span className="text-xs text-gray-400">
               调仓日 {data.rebalance_date} · 共 {data.total_stock_count} 只股票
@@ -125,7 +125,7 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
                 </tr>
               </thead>
               <tbody>
-                {top50.map((s, i) => (
+                {top10.map((s, i) => (
                   <tr
                     key={s.stock_code}
                     className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50"

@@ -101,8 +101,27 @@ async def lifespan(app: FastAPI):
 
     # Run at 16:30 Beijing time (UTC+8) = 08:30 UTC on weekdays
     scheduler.add_job(_paper_settlement_job, CronTrigger(hour=8, minute=30, day_of_week="mon-fri"))
+
+    # Weekly report: every Monday 9:03 CST = 01:03 UTC
+    async def _weekly_report_job():
+        from .weekly_report import get_latest_report_content, send_weekly_report
+        from .db import _get_session_factory
+        md = get_latest_report_content()
+        if not md:
+            logger.warning("Weekly report job: no report file found")
+            return
+        async with _get_session_factory()() as db:
+            try:
+                stats = await send_weekly_report(db, md)
+                logger.info(f"Weekly report job completed: {stats}")
+            except Exception as e:
+                logger.error(f"Weekly report job failed: {e}")
+
+    scheduler.add_job(_weekly_report_job, CronTrigger(hour=1, minute=3, day_of_week="mon"))
+
     scheduler.start()
     logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
+    logger.info("Weekly report scheduler started (Monday 09:03 CST)")
 
     yield
 
