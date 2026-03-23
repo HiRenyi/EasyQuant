@@ -31,7 +31,12 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("quantgpt", instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。可用 score_factor 评分、diagnose_factor 诊断、run_anti_overfit 检测过拟合、run_rolling_validation 滚动验证。")
+mcp = FastMCP(
+    "quantgpt",
+    instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。可用 score_factor 评分、diagnose_factor 诊断、run_anti_overfit 检测过拟合、run_rolling_validation 滚动验证。",
+    streamable_http_path="/",
+    stateless_http=True,
+)
 
 
 def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, start_date: str, end_date: str):

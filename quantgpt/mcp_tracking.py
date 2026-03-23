@@ -57,13 +57,29 @@ async def _persist_mcp_call(
 
 
 def _fire_and_forget(coro):
-    """Run an async coroutine in a background thread (MCP tools are sync)."""
+    """Schedule an async coroutine for fire-and-forget execution.
+
+    In HTTP mode (FastAPI/uvicorn), submits to the running event loop via
+    create_task so the DB session stays on the same loop.
+    In stdio mode (no running loop), falls back to a background thread.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        # Running inside an async context (HTTP mode) — schedule on same loop
+        loop.create_task(coro)
+        return
+    except RuntimeError:
+        pass
+
+    # No running loop (stdio mode) — use a background thread
     def _run():
         try:
             asyncio.run(coro)
         except Exception as e:
-            logger.warning(f"MCP tracking background thread error: {e}")
-    threading.Thread(target=_run, daemon=True).start()
+            logger.warning(f"MCP tracking error: {e}")
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join(timeout=5)
 
 
 def _extract_summary(result_str: str, task_type: str) -> dict | None:

@@ -123,7 +123,12 @@ async def lifespan(app: FastAPI):
     logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
     logger.info("Factor research report scheduler started (Monday 09:03 CST)")
 
-    yield
+    # Start MCP session manager
+    from .mcp_server import mcp as _mcp_server
+    _mcp_server.streamable_http_app()  # lazy-init session manager
+    async with _mcp_server.session_manager.run():
+        logger.info("MCP streamable-http session manager started")
+        yield
 
     scheduler.shutdown(wait=False)
     await close_db()
@@ -1823,6 +1828,22 @@ def _mount_spa():
         if _index_html.is_file():
             return HTMLResponse(_index_html.read_text())
         raise HTTPException(status_code=404, detail="Frontend not built")
+
+
+# ---- Mount MCP streamable-http at /mcp ----
+from .mcp_server import mcp as _mcp_server
+_mcp_app = _mcp_server.streamable_http_app()
+app.mount("/mcp", _mcp_app)
+
+
+@app.middleware("http")
+async def _mcp_slash_redirect(request: Request, call_next):
+    """Rewrite /mcp to /mcp/ so Starlette Mount matches."""
+    if request.url.path == "/mcp":
+        from starlette.responses import RedirectResponse
+        # 307 preserves method (POST stays POST)
+        return RedirectResponse(url="/mcp/", status_code=307)
+    return await call_next(request)
 
 
 _mount_spa()
