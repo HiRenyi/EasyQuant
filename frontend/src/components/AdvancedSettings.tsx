@@ -107,25 +107,25 @@ export default function AdvancedSettings({ values, onChange }: Props) {
 
           {/* Neutralization options */}
           <div className="border-t border-gray-100 pt-3">
-            <p className="text-xs text-gray-500 mb-2">因子中性化</p>
+            <p className="text-xs text-gray-500 mb-2">因子中性化 <span className="text-[10px] text-gray-400">（默认开启）</span></p>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={values.neutralize_industry}
-                  onChange={(e) => set("neutralize_industry", e.target.checked)}
+                  checked={!values.neutralize_industry}
+                  onChange={(e) => set("neutralize_industry", !e.target.checked)}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                 />
-                <span className="text-xs text-gray-600">行业中性</span>
+                <span className="text-xs text-gray-600">取消行业中性</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={values.neutralize_cap}
-                  onChange={(e) => set("neutralize_cap", e.target.checked)}
+                  checked={!values.neutralize_cap}
+                  onChange={(e) => set("neutralize_cap", !e.target.checked)}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                 />
-                <span className="text-xs text-gray-600">市值中性</span>
+                <span className="text-xs text-gray-600">取消市值中性</span>
               </label>
             </div>
             <p className="text-[10px] text-gray-400 mt-1">中性化可消除行业/市值偏暴露，获得更纯粹的因子 alpha</p>

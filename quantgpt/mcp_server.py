@@ -135,6 +135,8 @@ def run_backtest(
     n_groups: int = 5,
     holding_period: int = 5,
     benchmark: str = "hs300",
+    neutralize_industry: bool = True,
+    neutralize_cap: bool = True,
 ) -> str:
     """执行因子回测,生成 QuantStats HTML 报告。
 
@@ -146,6 +148,8 @@ def run_backtest(
         n_groups: 分组数量
         holding_period: 持仓周期(交易日)
         benchmark: 基准指数 (hs300 / zz500 / sz50)
+        neutralize_industry: 行业中性化(默认开启)
+        neutralize_cap: 市值中性化(默认开启)
 
     Returns:
         JSON string with report_path, metrics, group_returns, anti_overfit.
@@ -163,7 +167,9 @@ def run_backtest(
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
         logger.info(f"Running backtest: {expression}")
-        result = run_factor_backtest(market_df, expression, n_groups, holding_period)
+        result = run_factor_backtest(market_df, expression, n_groups, holding_period,
+                                     neutralize_industry=neutralize_industry,
+                                     neutralize_cap=neutralize_cap)
 
         # Anti-overfit analysis
         anti_overfit_result = None
@@ -215,6 +221,8 @@ def run_backtest(
                 "n_groups": n_groups,
                 "holding_period": holding_period,
                 "benchmark": benchmark,
+                "neutralize_industry": neutralize_industry,
+                "neutralize_cap": neutralize_cap,
                 "stock_count": len(stock_codes),
             },
         }
@@ -234,6 +242,8 @@ def score_factor(
     n_groups: int = 5,
     holding_period: int = 5,
     benchmark: str = "hs300",
+    neutralize_industry: bool = True,
+    neutralize_cap: bool = True,
 ) -> str:
     """执行因子回测并返回综合评分(0-100)和等级(A/B/C/D)。
 
@@ -247,6 +257,8 @@ def score_factor(
         n_groups: 分组数量
         holding_period: 持仓周期(交易日)
         benchmark: 基准指数 (hs300 / zz500 / sz50)
+        neutralize_industry: 行业中性化(默认开启)
+        neutralize_cap: 市值中性化(默认开启)
 
     Returns:
         JSON with score, grade, component_scores, key metrics.
@@ -262,7 +274,9 @@ def score_factor(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, n_groups, holding_period)
+        result = run_factor_backtest(market_df, expression, n_groups, holding_period,
+                                     neutralize_industry=neutralize_industry,
+                                     neutralize_cap=neutralize_cap)
 
         bm_returns = None
         try:
@@ -370,6 +384,8 @@ def run_anti_overfit(
     start_date: str = "2023-01-01",
     end_date: str = "2025-12-31",
     holding_period: int = 5,
+    neutralize_industry: bool = True,
+    neutralize_cap: bool = True,
 ) -> str:
     """对因子执行反过拟合检测(4项测试)。
 
@@ -382,6 +398,8 @@ def run_anti_overfit(
         start_date: 起始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         holding_period: 持仓周期(交易日)
+        neutralize_industry: 行业中性化(默认开启)
+        neutralize_cap: 市值中性化(默认开启)
 
     Returns:
         JSON with score, recommendation, and per-test details.
@@ -397,7 +415,9 @@ def run_anti_overfit(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
+        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
+                                     neutralize_industry=neutralize_industry,
+                                     neutralize_cap=neutralize_cap)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for anti-overfit analysis."})
@@ -417,6 +437,8 @@ def run_rolling_validation(
     start_date: str = "2020-01-01",
     end_date: str = "2025-12-31",
     holding_period: int = 5,
+    neutralize_industry: bool = True,
+    neutralize_cap: bool = True,
 ) -> str:
     """对因子执行滚动验证(Walk-Forward)。
 
@@ -429,6 +451,8 @@ def run_rolling_validation(
         start_date: 起始日期(建议≥5年数据)
         end_date: 结束日期
         holding_period: 持仓周期(交易日)
+        neutralize_industry: 行业中性化(默认开启)
+        neutralize_cap: 市值中性化(默认开启)
 
     Returns:
         JSON with composite score, per-window results, decay analysis.
@@ -444,7 +468,9 @@ def run_rolling_validation(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0)
+        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
+                                     neutralize_industry=neutralize_industry,
+                                     neutralize_cap=neutralize_cap)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for rolling validation."})

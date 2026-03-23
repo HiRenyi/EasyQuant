@@ -254,8 +254,8 @@ class AutoBacktestRequest(BaseModel):
     holding_period: int = Field(5, description="持仓周期(交易日)", ge=1, le=60)
     benchmark: str = Field("hs300", description="基准指数: hs300 / zz500 / sz50")
     session_id: str | None = Field(None, description="关联会话 ID")
-    neutralize_industry: bool = Field(False, description="行业中性化")
-    neutralize_cap: bool = Field(False, description="市值中性化")
+    neutralize_industry: bool = Field(True, description="行业中性化")
+    neutralize_cap: bool = Field(True, description="市值中性化")
 
     @field_validator("prompt")
     @classmethod

@@ -24,8 +24,8 @@ def run_factor_backtest(
     n_groups: int = 5,
     holding_period: int = 5,
     cost_rate: float = 0.003,
-    neutralize_industry: bool = False,
-    neutralize_cap: bool = False,
+    neutralize_industry: bool = True,
+    neutralize_cap: bool = True,
     precomputed_factor: pd.Series | None = None,
 ) -> Dict:
     """Run quantile group backtest on a factor expression (long-only).
