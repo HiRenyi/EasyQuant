@@ -1530,7 +1530,7 @@ def _feishu_sign(secret: str, timestamp: int) -> str:
 
 
 def _send_webhook(webhook_url: str, feedback_data: dict) -> bool:
-    """Send feedback to webhook (Feishu). Returns True on success."""
+    """Send feedback to webhook (Feishu) as interactive card. Returns True on success."""
     import httpx
 
     user_email = feedback_data.get("user_email", "unknown")
@@ -1540,23 +1540,63 @@ def _send_webhook(webhook_url: str, feedback_data: dict) -> bool:
     created_at = feedback_data.get("created_at", "")
     screenshot_url = feedback_data.get("screenshot_url", "")
 
-    text_parts = [
-        f"用户反馈 from {user_email}",
-        f"时间: {created_at}",
-        f"描述: {description}",
+    # Build card elements
+    elements: list[dict] = [
+        {
+            "tag": "column_set",
+            "flex_mode": "none",
+            "background_style": "default",
+            "columns": [
+                {
+                    "tag": "column",
+                    "width": "weighted",
+                    "weight": 1,
+                    "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": f"**用户**\n{user_email}"}}],
+                },
+                {
+                    "tag": "column",
+                    "width": "weighted",
+                    "weight": 1,
+                    "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": f"**时间**\n{created_at}"}}],
+                },
+            ],
+        },
+        {"tag": "hr"},
+        {
+            "tag": "div",
+            "text": {"tag": "lark_md", "content": f"**问题描述**\n{description}"},
+        },
     ]
-    if task_id:
-        text_parts.append(f"任务ID: {task_id}")
-    if page_url:
-        text_parts.append(f"页面: {page_url}")
-    if screenshot_url:
-        text_parts.append(f"截图: {screenshot_url}")
 
-    text = "\n".join(text_parts)
+    # Optional fields
+    extra_parts = []
+    if task_id:
+        extra_parts.append(f"**任务 ID:** `{task_id}`")
+    if page_url:
+        extra_parts.append(f"**页面:** {page_url}")
+    if screenshot_url:
+        extra_parts.append(f"**截图:** [查看截图]({screenshot_url})")
+    if extra_parts:
+        elements.append({
+            "tag": "div",
+            "text": {"tag": "lark_md", "content": "\n".join(extra_parts)},
+        })
+
+    # Footer
+    elements.append({
+        "tag": "note",
+        "elements": [{"tag": "plain_text", "content": "QuantGPT Feedback Bot"}],
+    })
 
     payload: dict = {
-        "msg_type": "text",
-        "content": {"text": text},
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": "新用户反馈"},
+                "template": "orange",
+            },
+            "elements": elements,
+        },
     }
 
     # Feishu signature verification
@@ -1570,6 +1610,10 @@ def _send_webhook(webhook_url: str, feedback_data: dict) -> bool:
         with httpx.Client(timeout=10) as client:
             resp = client.post(webhook_url, json=payload)
             if resp.status_code < 300:
+                body = resp.json() if resp.text else {}
+                if body.get("code", 0) != 0:
+                    logger.warning(f"Webhook API error: {body}")
+                    return False
                 return True
             logger.warning(f"Webhook returned {resp.status_code}: {resp.text[:200]}")
             return False
