@@ -3,9 +3,20 @@ import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink }
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v1.9.0";
+export const APP_VERSION = "v2.0.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.0.0",
+    date: "2026-03-23",
+    items: [
+      "新增技术指标支持：ema、sma、wma、rsi、macd、atr、boll_upper/lower/mid、obv",
+      "修复因子对比页面 500 错误（NaN/Inf 导致 JSON 序列化失败）",
+      "修复回测失败时错误信息显示为 [object Object] 的问题",
+      "接入 rqdatac 作为主数据源，baostock 降级为 fallback",
+      "新增全量数据预热脚本（2015-2025，全股票池）",
+    ],
+  },
   {
     version: "v1.9.0",
     date: "2026-03-23",
