@@ -231,15 +231,22 @@ def run_backtest(
                 "stock_count": len(stock_codes),
             },
         }
-        return json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        _result_str = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        return _result_str
 
     except Exception as e:
         logger.error(f"Backtest failed: {traceback.format_exc()}")
-        return json.dumps({"error": str(e)})
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_backtest", expression,
+                         {"universe": universe, "start_date": start_date, "end_date": end_date,
+                          "n_groups": n_groups, "holding_period": holding_period, "benchmark": benchmark},
+                         _result_str, _error_msg, time.monotonic() - _start)
 
 
 @mcp.tool()
-@track_mcp_call("mcp_score")
 def score_factor(
     expression: str,
     universe: str = "hs300",
@@ -271,6 +278,9 @@ def score_factor(
     """
     from .iteration import compute_factor_score
 
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
     try:
         stock_codes = get_universe(universe, date=start_date)
         fetcher = MarketDataFetcher()
@@ -301,6 +311,10 @@ def score_factor(
                 "long_short_sharpe": result["long_short_sharpe"],
                 "monotonicity_score": result["monotonicity_score"],
                 "spread": result["spread"],
+                "ic_mean": result.get("ic_mean", 0),
+                "rank_ic_mean": result.get("rank_ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "ic_win_rate": result.get("ic_win_rate", 0),
             },
             report_metrics=report_result["metrics"],
         )
@@ -319,11 +333,19 @@ def score_factor(
                 "max_drawdown": report_result["metrics"].get("max_drawdown", 0),
             },
         }
-        return json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        _result_str = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        return _result_str
 
     except Exception as e:
         logger.error(f"Score failed: {traceback.format_exc()}")
-        return json.dumps({"error": str(e)})
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_score", expression,
+                         {"universe": universe, "start_date": start_date, "end_date": end_date,
+                          "n_groups": n_groups, "holding_period": holding_period, "benchmark": benchmark},
+                         _result_str, _error_msg, time.monotonic() - _start)
 
 
 @mcp.tool()
@@ -384,7 +406,6 @@ def diagnose_factor(
 
 
 @mcp.tool()
-@track_mcp_call("mcp_antioverfit")
 def run_anti_overfit(
     expression: str,
     universe: str = "hs300",
@@ -413,6 +434,9 @@ def run_anti_overfit(
     """
     from .anti_overfit import run_anti_overfit as _run_ao
 
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
     try:
         stock_codes = get_universe(universe, date=start_date)
         fetcher = MarketDataFetcher()
@@ -430,15 +454,22 @@ def run_anti_overfit(
             return json.dumps({"error": "Insufficient factor data for anti-overfit analysis."})
 
         ao_result = _run_ao(factor_df, holding_period)
-        return json.dumps(ao_result, ensure_ascii=False, indent=2, default=str)
+        _result_str = json.dumps(ao_result, ensure_ascii=False, indent=2, default=str)
+        return _result_str
 
     except Exception as e:
         logger.error(f"Anti-overfit failed: {traceback.format_exc()}")
-        return json.dumps({"error": str(e)})
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_antioverfit", expression,
+                         {"universe": universe, "start_date": start_date, "end_date": end_date,
+                          "holding_period": holding_period},
+                         _result_str, _error_msg, time.monotonic() - _start)
 
 
 @mcp.tool()
-@track_mcp_call("mcp_rolling")
 def run_rolling_validation(
     expression: str,
     universe: str = "hs300",
@@ -467,6 +498,9 @@ def run_rolling_validation(
     """
     from .rolling_validator import run_rolling_validation as _run_rv
 
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
     try:
         stock_codes = get_universe(universe, date=start_date)
         fetcher = MarketDataFetcher()
@@ -484,11 +518,19 @@ def run_rolling_validation(
             return json.dumps({"error": "Insufficient factor data for rolling validation."})
 
         rv_result = _run_rv(factor_df, holding_period)
-        return json.dumps(rv_result, ensure_ascii=False, indent=2, default=str)
+        _result_str = json.dumps(rv_result, ensure_ascii=False, indent=2, default=str)
+        return _result_str
 
     except Exception as e:
         logger.error(f"Rolling validation failed: {traceback.format_exc()}")
-        return json.dumps({"error": str(e)})
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_rolling", expression,
+                         {"universe": universe, "start_date": start_date, "end_date": end_date,
+                          "holding_period": holding_period},
+                         _result_str, _error_msg, time.monotonic() - _start)
 
 
 # Operator documentation fallback

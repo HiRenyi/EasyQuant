@@ -525,17 +525,11 @@ _INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语
   "source": "收益来源（1-2句，说明为什么这个因子能产生超额收益，背后的行为金融或基本面逻辑）",
   "guidance": "交易指导（2-4句，从经济含义角度指导用户如何利用该因子思路交易，禁止推荐具体股票，聚焦行为规律和风险提示）",
   "risk": "主要风险（1句，说明该因子在什么市场环境下容易失效）",
-  "rating": "A/B/C/D",
-  "rating_reason": "评级理由（1句话总结）",
   "conclusion": "核心结论（2-3句，总结因子整体表现和是否推荐使用）",
   "suggestions": ["改进建议1", "改进建议2"]
 }
 
-评级标准：
-- A级：Sharpe > 1.5, IC > 0.03, 单调性 > 0.7 → 强烈推荐
-- B级：Sharpe > 0.8, IC > 0.02, 单调性 > 0.5 → 推荐
-- C级：Sharpe > 0.3, 有一定选股能力 → 谨慎使用
-- D级：其他 → 不推荐
+注意：评级(rating)由系统算法自动生成，你不需要输出评级。
 
 交易指导要求：
 - 禁止推荐任何具体股票或行业
@@ -870,6 +864,25 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         except Exception as e:
             logger.warning(f"[{task_id}] interpretation failed: {e}")
 
+        # 5c. Deterministic scoring (unified with MCP/iteration)
+        ao_score_val = anti_overfit_result.get("score") if anti_overfit_result else None
+        scoring = compute_factor_score(
+            backtest_summary={
+                "long_short_sharpe": result["long_short_sharpe"],
+                "monotonicity_score": result["monotonicity_score"],
+                "spread": result["spread"],
+                "ic_mean": result.get("ic_mean", 0),
+                "rank_ic_mean": result.get("rank_ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "ic_win_rate": result.get("ic_win_rate", 0),
+            },
+            report_metrics=report_result["metrics"],
+            anti_overfit_score=ao_score_val,
+        )
+        # Inject deterministic grade into interpretation for frontend compatibility
+        interpretation["rating"] = scoring["grade"]
+        interpretation["rating_reason"] = f"综合评分 {scoring['score']}/100"
+
         # Done
         task["status"] = "completed"
 
@@ -910,6 +923,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "total_cost_drag": result.get("total_cost_drag", 0),
             },
             "anti_overfit": anti_overfit_result,
+            "scoring": scoring,
             "interpretation": interpretation,
             "stock_factor_data": result.get("_stock_factor_data"),
             "nav_series": nav_series,

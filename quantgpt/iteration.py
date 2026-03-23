@@ -29,74 +29,52 @@ logger = logging.getLogger(__name__)
 def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_overfit_score: float | None = None) -> dict:
     """Compute a composite 0-100 score for a factor backtest result.
 
-    Weights (without anti_overfit):
-        Sharpe 25%, monotonicity 20%, spread 15%, CAGR 15%, max_drawdown 15%, win_rate 10%
-    Weights (with anti_overfit):
-        Sharpe 22.5%, monotonicity 18%, spread 13.5%, CAGR 13.5%, max_drawdown 13.5%, win_rate 9%, anti_overfit 10%
+    5-component scoring aligned with XTQuant factor_scorer.py:
+        IC Mean 25%, IC IR 25%, Stability 20%, Anti-Overfit 15%, Group Backtest 15%
+
+    Absolute return constraint: if CAGR < 0 or Sharpe < 0, grade capped at C.
     """
 
     def _clamp(v: float, lo: float, hi: float) -> float:
         return max(lo, min(hi, v))
 
-    sharpe = report_metrics.get("sharpe", 0.0)
-    cagr = report_metrics.get("cagr", 0.0)
-    max_dd = report_metrics.get("max_drawdown", 0.0)  # negative
-    win_rate = report_metrics.get("win_rate", 0.0)
+    # --- Component 1: IC Mean (25%) ---
+    ic_mean = backtest_summary.get("ic_mean", 0.0) or backtest_summary.get("rank_ic_mean", 0.0)
+    ic_mean_score = min(abs(ic_mean) / 0.05, 1.0) * 100
+
+    # --- Component 2: IC IR (25%) ---
+    ic_ir = backtest_summary.get("ic_ir", 0.0)
+    ic_ir_score = min(abs(ic_ir) / 1.0, 1.0) * 100
+
+    # --- Component 3: Stability (20%) ---
+    ic_win_rate = backtest_summary.get("ic_win_rate", 0.5)
+    ic_wr_sub = min(max(ic_win_rate - 0.5, 0) / 0.2, 1.0) * 100  # 50%->0, 70%->100
+    ls_sharpe = backtest_summary.get("long_short_sharpe", 0.0)
+    ls_consistency_sub = min(abs(ls_sharpe) / 2.0, 1.0) * 100
+    stability_score = ic_wr_sub * 0.6 + ls_consistency_sub * 0.4
+
+    # --- Component 4: Anti-Overfit (15%) ---
+    ao_score = _clamp(anti_overfit_score, 0, 100) if anti_overfit_score is not None else 50.0
+
+    # --- Component 5: Group Backtest (15%) ---
+    ls_sharpe_gb = min(max(ls_sharpe, 0) / 1.0, 1.0) * 100  # >=1.0 is excellent
     mono = backtest_summary.get("monotonicity_score", 0.0)
+    mono_sub = _clamp(mono, 0, 1) * 100
     spread = backtest_summary.get("spread", 0.0)
+    top_positive_sub = 100.0 if spread > 0 else 0.0
+    group_bt_score = ls_sharpe_gb * 0.4 + mono_sub * 0.4 + top_positive_sub * 0.2
 
-    # Sharpe: clamp [-1, 3] -> 0-100
-    sharpe_score = (_clamp(sharpe, -1, 3) + 1) / 4 * 100
-
-    # Monotonicity: already 0-1 -> 0-100
-    mono_score = _clamp(mono, 0, 1) * 100
-
-    # Spread: clamp [-0.05, 0.05], 0 -> 50
-    spread_score = (_clamp(spread, -0.05, 0.05) + 0.05) / 0.10 * 100
-
-    # CAGR: clamp [-0.3, 0.5], 0 -> 37.5
-    cagr_score = (_clamp(cagr, -0.3, 0.5) + 0.3) / 0.8 * 100
-
-    # Max drawdown: 0% -> 100, -50% -> 0 (max_dd is negative)
-    dd_val = _clamp(max_dd, -0.5, 0.0)
-    dd_score = (dd_val + 0.5) / 0.5 * 100
-
-    # Win rate: 0.3 -> 0, 0.5 -> 50, 0.7 -> 100
-    wr_score = (_clamp(win_rate, 0.3, 0.7) - 0.3) / 0.4 * 100
-
-    components = {
-        "sharpe": round(sharpe_score, 1),
-        "monotonicity": round(mono_score, 1),
-        "spread": round(spread_score, 1),
-        "cagr": round(cagr_score, 1),
-        "max_drawdown": round(dd_score, 1),
-        "win_rate": round(wr_score, 1),
-    }
-
-    if anti_overfit_score is not None:
-        ao_clamped = _clamp(anti_overfit_score, 0, 100)
-        components["anti_overfit"] = round(ao_clamped, 1)
-        # Re-weight: reduce each original weight by 10% proportionally, add 10% for anti_overfit
-        score = (
-            sharpe_score * 0.225
-            + mono_score * 0.18
-            + spread_score * 0.135
-            + cagr_score * 0.135
-            + dd_score * 0.135
-            + wr_score * 0.09
-            + ao_clamped * 0.10
-        )
-    else:
-        score = (
-            sharpe_score * 0.25
-            + mono_score * 0.20
-            + spread_score * 0.15
-            + cagr_score * 0.15
-            + dd_score * 0.15
-            + wr_score * 0.10
-        )
+    # --- Weighted composite ---
+    score = (
+        ic_mean_score * 0.25
+        + ic_ir_score * 0.25
+        + stability_score * 0.20
+        + ao_score * 0.15
+        + group_bt_score * 0.15
+    )
     score = round(_clamp(score, 0, 100), 1)
 
+    # --- Grade ---
     if score >= 80:
         grade = "A"
     elif score >= 60:
@@ -106,7 +84,27 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
     else:
         grade = "D"
 
-    return {"score": score, "grade": grade, "component_scores": components}
+    # --- Absolute return constraint ---
+    capped = False
+    cap_reason = None
+    cagr = report_metrics.get("cagr", 0.0)
+    sharpe = report_metrics.get("sharpe", 0.0)
+    if cagr < 0 or sharpe < 0:
+        if grade in ("A", "B"):
+            grade = "C"
+            score = min(score, 59.9)
+            capped = True
+            cap_reason = "negative_cagr" if cagr < 0 else "negative_sharpe"
+
+    components = {
+        "ic_mean": round(ic_mean_score, 1),
+        "ic_ir": round(ic_ir_score, 1),
+        "stability": round(stability_score, 1),
+        "anti_overfit": round(ao_score, 1),
+        "group_backtest": round(group_bt_score, 1),
+    }
+
+    return {"score": score, "grade": grade, "component_scores": components, "capped": capped, "cap_reason": cap_reason}
 
 
 # ---- Iterate prompt building ----
@@ -423,6 +421,10 @@ def _generate_single_candidate(
                 "long_short_sharpe": result["long_short_sharpe"],
                 "monotonicity_score": result["monotonicity_score"],
                 "spread": result["spread"],
+                "ic_mean": result.get("ic_mean", 0),
+                "rank_ic_mean": result.get("rank_ic_mean", 0),
+                "ic_ir": result.get("ic_ir", 0),
+                "ic_win_rate": result.get("ic_win_rate", 0),
             },
             report_metrics=report_result["metrics"],
             anti_overfit_score=ao_score_val,
