@@ -183,9 +183,9 @@ async def verify_code(req: VerifyCodeRequest, db: AsyncSession = Depends(get_db)
         db.add(user)
         await db.flush()
         logger.info(f"New user registered: {req.email}")
-
-    user.last_login_at = now
-    await db.flush()
+    else:
+        user.last_login_at = now
+        await db.flush()
 
     access_token = create_access_token(user.id, user.email)
     refresh_token = create_refresh_token(user.id)
