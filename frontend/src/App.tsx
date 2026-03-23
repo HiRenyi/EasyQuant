@@ -241,7 +241,7 @@ export default function App() {
               {showError && activeTask && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                   <p className="text-sm font-medium text-red-700">回测失败</p>
-                  <p className="mt-1 text-sm text-red-600">{activeTask.error}</p>
+                  <p className="mt-1 text-sm text-red-600">{typeof activeTask.error === "string" ? activeTask.error : (activeTask.error && typeof activeTask.error === "object" ? JSON.stringify(activeTask.error) : "未知错误")}</p>
                   {activeTask.expression && (
                     <p className="mt-2 text-xs text-red-500 font-mono">表达式: {activeTask.expression}</p>
                   )}
@@ -249,7 +249,7 @@ export default function App() {
                     onClick={() => window.dispatchEvent(new CustomEvent("open-feedback", {
                       detail: {
                         task_id: activeTask.task_id,
-                        prefill: `回测失败: ${activeTask.error || "未知错误"}${activeTask.expression ? `\n表达式: ${activeTask.expression}` : ""}`,
+                        prefill: `回测失败: ${typeof activeTask.error === "string" ? activeTask.error : JSON.stringify(activeTask.error) || "未知错误"}${activeTask.expression ? `\n表达式: ${activeTask.expression}` : ""}`,
                       },
                     }))}
                     className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"

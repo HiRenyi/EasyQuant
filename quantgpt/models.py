@@ -26,6 +26,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)  # bcrypt, NULL=未设置密码
     nickname = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    subscribe_weekly = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 

@@ -124,7 +124,7 @@ def compute_factor_correlation(
     matrix = corr_df.values.tolist()
     return {
         "labels": labels,
-        "matrix": [[round(v, 4) for v in row] for row in matrix],
+        "matrix": [[round(v, 4) if not (isinstance(v, float) and (v != v or abs(v) == float("inf"))) else 0.0 for v in row] for row in matrix],
     }
 
 

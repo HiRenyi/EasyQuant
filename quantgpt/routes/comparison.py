@@ -1,6 +1,7 @@
 """Factor comparison API routes."""
 
 import logging
+import math
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +13,17 @@ from ..schemas import validate_date_format, validate_universe_value, fetch_marke
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["comparison"])
+
+
+def _safe_float(v, default=0.0):
+    """Convert value to JSON-safe float (replace NaN/Inf with default)."""
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return round(f, 6)
+    except (TypeError, ValueError):
+        return default
 
 
 class CompareFactorItem(BaseModel):
@@ -60,7 +72,7 @@ async def compare_factors(
             # Extract top-group cumulative returns as list
             cum_ret = (1 + bt["strategy_returns"]).cumprod()
             cum_ret_list = [
-                {"date": str(d.date()) if hasattr(d, "date") else str(d)[:10], "value": round(float(v), 4)}
+                {"date": str(d.date()) if hasattr(d, "date") else str(d)[:10], "value": _safe_float(v)}
                 for d, v in cum_ret.items()
             ]
 
@@ -69,15 +81,15 @@ async def compare_factors(
                 "label": label,
                 "status": "success",
                 "metrics": {
-                    "sharpe": bt.get("top_group_sharpe", 0),
-                    "ls_sharpe": bt["long_short_sharpe"],
-                    "annual_return": bt.get("long_short_annual", 0),
-                    "monotonicity": bt["monotonicity_score"],
-                    "spread": bt["spread"],
-                    "ic_mean": bt.get("ic_mean", 0),
-                    "rank_ic_mean": bt.get("rank_ic_mean", 0),
-                    "ic_ir": bt.get("ic_ir", 0),
-                    "turnover": bt.get("turnover", 0),
+                    "sharpe": _safe_float(bt.get("top_group_sharpe", 0)),
+                    "ls_sharpe": _safe_float(bt.get("long_short_sharpe", 0)),
+                    "annual_return": _safe_float(bt.get("long_short_annual", 0)),
+                    "monotonicity": _safe_float(bt.get("monotonicity_score", 0)),
+                    "spread": _safe_float(bt.get("spread", 0)),
+                    "ic_mean": _safe_float(bt.get("ic_mean", 0)),
+                    "rank_ic_mean": _safe_float(bt.get("rank_ic_mean", 0)),
+                    "ic_ir": _safe_float(bt.get("ic_ir", 0)),
+                    "turnover": _safe_float(bt.get("turnover", 0)),
                 },
                 "cumulative_returns": cum_ret_list,
             })

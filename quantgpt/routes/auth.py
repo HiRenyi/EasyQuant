@@ -331,5 +331,23 @@ async def me(user: User = Depends(get_current_user)):
         "email": user.email,
         "nickname": user.nickname,
         "has_password": user.password_hash is not None,
+        "subscribe_weekly": user.subscribe_weekly,
         "created_at": user.created_at.isoformat(),
     }
+
+
+class SubscriptionUpdate(BaseModel):
+    subscribe_weekly: bool
+
+
+@router.patch("/subscription")
+async def update_subscription(
+    req: SubscriptionUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update factor research report subscription preference."""
+    user.subscribe_weekly = req.subscribe_weekly
+    db.add(user)
+    await db.commit()
+    return {"subscribe_weekly": user.subscribe_weekly}

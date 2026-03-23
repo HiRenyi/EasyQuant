@@ -433,3 +433,38 @@ async def admin_delete_featured_factor(
         raise HTTPException(status_code=404, detail="因子不存在")
     await db.delete(factor)
     await db.commit()
+
+
+# ---- Factor Deep Research Report ----
+
+
+class SendTestReportRequest(BaseModel):
+    email: str
+
+
+@router.post("/weekly-report/send-test", dependencies=[Depends(require_admin)])
+async def admin_send_test_report(req: SendTestReportRequest):
+    """Send latest factor deep research report to a single test email."""
+    from ..weekly_report import get_latest_report_content, send_weekly_report_to
+
+    md = get_latest_report_content()
+    if not md:
+        raise HTTPException(status_code=404, detail="没有找到因子研究报告文件")
+
+    ok = await send_weekly_report_to(req.email, md)
+    if not ok:
+        raise HTTPException(status_code=500, detail="发送失败，请检查 SMTP 配置和日志")
+    return {"message": f"因子深度研究报告已发送到 {req.email}"}
+
+
+@router.post("/weekly-report/send-all", dependencies=[Depends(require_admin)])
+async def admin_send_all_reports(db: AsyncSession = Depends(get_db)):
+    """Send latest factor deep research report to all subscribed users."""
+    from ..weekly_report import get_latest_report_content, send_weekly_report
+
+    md = get_latest_report_content()
+    if not md:
+        raise HTTPException(status_code=404, detail="没有找到因子研究报告文件")
+
+    stats = await send_weekly_report(db, md)
+    return stats

@@ -102,26 +102,26 @@ async def lifespan(app: FastAPI):
     # Run at 16:30 Beijing time (UTC+8) = 08:30 UTC on weekdays
     scheduler.add_job(_paper_settlement_job, CronTrigger(hour=8, minute=30, day_of_week="mon-fri"))
 
-    # Weekly report: every Monday 9:03 CST = 01:03 UTC
+    # Factor deep research report: every Monday 9:03 CST = 01:03 UTC
     async def _weekly_report_job():
         from .weekly_report import get_latest_report_content, send_weekly_report
         from .db import _get_session_factory
         md = get_latest_report_content()
         if not md:
-            logger.warning("Weekly report job: no report file found")
+            logger.warning("Factor research job: no report file found")
             return
         async with _get_session_factory()() as db:
             try:
                 stats = await send_weekly_report(db, md)
-                logger.info(f"Weekly report job completed: {stats}")
+                logger.info(f"Factor research job completed: {stats}")
             except Exception as e:
-                logger.error(f"Weekly report job failed: {e}")
+                logger.error(f"Factor research job failed: {e}")
 
     scheduler.add_job(_weekly_report_job, CronTrigger(hour=1, minute=3, day_of_week="mon"))
 
     scheduler.start()
     logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
-    logger.info("Weekly report scheduler started (Monday 09:03 CST)")
+    logger.info("Factor research report scheduler started (Monday 09:03 CST)")
 
     yield
 
@@ -285,6 +285,8 @@ Cross-sectional: rank(expr), zscore(expr), sign(expr), log(expr), abs(expr), sca
 Time-series: ts_mean(col,N), ts_std(col,N), ts_sum(col,N), ts_max(col,N), ts_min(col,N),
   ts_shift(col,N), ts_delta(col,N), ts_rank(col,N), ts_argmax(col,N), ts_argmin(col,N),
   decay_linear(col,N), product(col,N)
+Technical indicators: ema(col,N), sma(col,N), wma(col,N), rsi(col,N), macd(col,N),
+  boll_upper(col,N), boll_lower(col,N), boll_mid(col,N), obv(col,N), atr(N)
 Dual-column: ts_corr(col1,col2,N), ts_cov(col1,col2,N)
 Nonlinear: power(base,exp), sign_power(base,exp), tanh(expr), sigmoid(expr), exp(expr), sqrt(expr)
 Conditional: max(a,b), min(a,b), where(cond,true_val,false_val), clip(expr,lower,upper)
@@ -347,6 +349,11 @@ EXAMPLES:
 成长因子: rank(yoy_ni)
 基本面+动量: rank(roe) * rank(ts_delta(close, 20) / ts_shift(close, 20))
 高股息: rank(dividend_yield) * rank(-1 * ts_std(returns, 20))
+技术指标-RSI: rank(-1 * rsi(close, 14))
+技术指标-MACD: rank(macd(close, 26))
+技术指标-布林带: rank((close - boll_lower(close, 20)) / (boll_upper(close, 20) - boll_lower(close, 20) + 1e-10))
+技术指标-EMA动量: rank(ema(close, 5) / ema(close, 20) - 1)
+技术指标-ATR波动: rank(-1 * atr(14) / close)
 ================================================================================
 """
 
@@ -359,7 +366,8 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 ================================================================================
 ⚠️ 关键注意事项
 ================================================================================
-- 🚨 只能使用上面 SUPPORTED OPERATORS 中列出的函数，禁止使用 rsi, macd, ema, sma, bbands, atr, obv, adx 等未列出的技术指标函数
+- 🚨 只能使用上面 SUPPORTED OPERATORS 中列出的函数，禁止使用 bbands, adx 等未列出的函数
+- 🚨 技术指标已支持：ema(col,N) EMA, sma(col,N) 简单均线, wma(col,N) 加权均线, rsi(col,N) RSI(0~100), macd(col,N) MACD柱状图, atr(N) 真实波幅(用high/low/close), boll_upper/boll_lower/boll_mid(col,N) 布林带, obv(col,N) OBV滚动和
 - 🚨 变量名必须严格匹配：pe_ratio→pe, pe_ttm→pe, pb_ratio→pb, eps→eps_ttm, div_yield→dividend_yield
 - 🚨 如果用户要求的指标不在支持列表中，用最接近的已支持变量替代，并在表达式中注释说明
 - ts_rank(col, N) 返回百分位排名，范围 0~1（不是 0~100），与之比较时用 0.3 而非 30

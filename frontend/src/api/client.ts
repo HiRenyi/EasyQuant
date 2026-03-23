@@ -52,7 +52,11 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
 export async function parseError(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    return body.detail || `请求失败 (${res.status})`;
+    const detail = body.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ");
+    if (detail && typeof detail === "object") return JSON.stringify(detail);
+    return `请求失败 (${res.status})`;
   } catch {
     if (res.status === 429) return "请求过于频繁，请稍后再试";
     if (res.status === 503) return "服务繁忙，请稍后再试";

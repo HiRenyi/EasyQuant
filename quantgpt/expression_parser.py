@@ -36,6 +36,17 @@ Supported operations:
 - clip(expr, lo, hi)  : clip values to [lo, hi] range
 - where(cond, t, f)   : conditional selection (t if cond else f)
 - indneutralize(col, industry) : industry neutralization (placeholder)
+Technical indicators:
+- ema(col, N)         : exponential moving average (span=N)
+- sma(col, N)         : simple moving average (alias for ts_mean)
+- wma(col, N)         : weighted moving average (linear decay)
+- rsi(col, N)         : Relative Strength Index (0~100)
+- macd(col, N)        : MACD histogram (fast=N/2, slow=N, signal=N/4)
+- obv(col, N)         : On-Balance Volume rolling sum (simplified)
+- atr(N)              : Average True Range (uses high/low/close columns)
+- boll_upper(col, N)  : Bollinger Band upper (mean + 2*std)
+- boll_lower(col, N)  : Bollinger Band lower (mean - 2*std)
+- boll_mid(col, N)    : Bollinger Band middle (rolling mean)
 - Arithmetic: +, -, *, /, ^
 - Comparison: >, <, >=, <=, ==, !=
 - Logical: and, or, &, |
@@ -146,6 +157,38 @@ class ExpressionParser:
         'sqrt': lambda s: np.sqrt(s.clip(lower=0)),
     }
 
+    # Technical indicator helpers (standalone functions, not lambdas)
+    @staticmethod
+    def _calc_rsi(s: "pd.Series", w: int) -> "pd.Series":
+        delta = s.diff()
+        gain = delta.clip(lower=0).rolling(w, min_periods=1).mean()
+        loss = (-delta.clip(upper=0)).rolling(w, min_periods=1).mean()
+        rs = gain / (loss + 1e-10)
+        return 100 - (100 / (1 + rs))
+
+    @staticmethod
+    def _calc_macd(s: "pd.Series", w: int) -> "pd.Series":
+        # w is slow period; fast = w//2, signal = w//4 (min 2)
+        fast = max(2, w // 2)
+        signal = max(2, w // 4)
+        ema_fast = s.ewm(span=fast, adjust=False).mean()
+        ema_slow = s.ewm(span=w, adjust=False).mean()
+        macd_line = ema_fast - ema_slow
+        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+        return macd_line - signal_line  # histogram
+
+    @staticmethod
+    def _calc_atr(df: "pd.DataFrame", w: int) -> "pd.Series":
+        high = df.get('high', df['close'])
+        low = df.get('low', df['close'])
+        close_prev = df['close'].shift(1)
+        tr = pd.concat([
+            high - low,
+            (high - close_prev).abs(),
+            (low - close_prev).abs(),
+        ], axis=1).max(axis=1)
+        return tr.rolling(w, min_periods=1).mean()
+
     # Supported time-series functions (column, window -> Series)
     _TS_OPS = {
         'ts_mean': lambda s, w: s.rolling(w, min_periods=1).mean(),
@@ -163,6 +206,16 @@ class ExpressionParser:
             raw=True
         ),
         'product': lambda s, w: s.rolling(w, min_periods=1).apply(lambda x: np.prod(x), raw=True),
+        # Technical indicators
+        'ema': lambda s, w: s.ewm(span=w, adjust=False).mean(),
+        'sma': lambda s, w: s.rolling(w, min_periods=1).mean(),  # same as ts_mean
+        'rsi': lambda s, w: ExpressionParser._calc_rsi(s, w),
+        'macd': lambda s, w: ExpressionParser._calc_macd(s, w),
+        'obv': lambda s, w: s.rolling(w, min_periods=1).sum(),  # simplified: rolling OBV sum
+        'wma': lambda s, w: s.rolling(w, min_periods=1).apply(
+            lambda x: np.dot(x, np.arange(1, len(x) + 1)) / np.sum(np.arange(1, len(x) + 1)) if len(x) > 0 else np.nan,
+            raw=True
+        ),  # weighted moving average (same as decay_linear)
     }
 
     # Supported dual-column time-series functions (col1, col2, window -> Series)
@@ -308,6 +361,28 @@ class ExpressionParser:
 
         if func_name in self._NEUTRALIZE_OPS:
             raise ValueError("indneutralize is not supported (requires industry classification data)")
+
+        # ATR needs high/low/close columns, not a single series
+        if func_name == 'atr':
+            parts = self._split_top_level(args_str)
+            if len(parts) != 1:
+                raise ValueError("atr requires exactly 1 argument: (window)")
+            window = self._validate_window(int(parts[0].strip()), func_name)
+            return lambda df, _w=window: ExpressionParser._calc_atr(df, _w)
+
+        # BOLL bands: boll_upper(col, N) / boll_lower(col, N) / boll_mid(col, N)
+        if func_name in ('boll_upper', 'boll_lower', 'boll_mid'):
+            parts = self._split_top_level(args_str)
+            if len(parts) != 2:
+                raise ValueError(f"{func_name} requires exactly 2 arguments: (column, window)")
+            inner = self._sub_parse(parts[0].strip())
+            window = self._validate_window(int(parts[1].strip()), func_name)
+            if func_name == 'boll_upper':
+                return lambda df, _i=inner, _w=window: _i(df).rolling(_w, min_periods=1).mean() + 2 * _i(df).rolling(_w, min_periods=1).std()
+            elif func_name == 'boll_lower':
+                return lambda df, _i=inner, _w=window: _i(df).rolling(_w, min_periods=1).mean() - 2 * _i(df).rolling(_w, min_periods=1).std()
+            else:  # boll_mid
+                return lambda df, _i=inner, _w=window: _i(df).rolling(_w, min_periods=1).mean()
 
         if func_name == 'clip':
             parts = self._split_top_level(args_str)
