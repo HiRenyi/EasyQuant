@@ -537,40 +537,40 @@ function HighlightedMarkdown({ content, isDark }: { content: string; isDark: boo
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        h1: ({ children }) => (
+        h1: ({ children }: { children?: React.ReactNode }) => (
           <h1 className={`text-xl font-bold mb-5 pb-3 border-b ${isDark ? "border-gray-700 text-gray-100" : "border-gray-200 text-gray-900"}`}>
             {children}
           </h1>
         ),
-        h2: ({ children }) => (
+        h2: ({ children }: { children?: React.ReactNode }) => (
           <h2 className={`text-lg font-bold mt-10 mb-4 pb-2 border-b ${isDark ? "border-gray-700 text-gray-100" : "border-gray-300 text-gray-900"}`}>
             {children}
           </h2>
         ),
-        h3: ({ children }) => (
+        h3: ({ children }: { children?: React.ReactNode }) => (
           <h3 className={`text-base font-bold mt-7 mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>
             {children}
           </h3>
         ),
-        p: ({ children }) => (
+        p: ({ children }: { children?: React.ReactNode }) => (
           <p className={`text-sm leading-[1.9] my-3 ${textColor}`}>{children}</p>
         ),
-        strong: ({ children }) => (
+        strong: ({ children }: { children?: React.ReactNode }) => (
           <strong className={`font-semibold ${strongColor}`}>{children}</strong>
         ),
-        em: ({ children }) => (
+        em: ({ children }: { children?: React.ReactNode }) => (
           <em className="italic">{children}</em>
         ),
-        ul: ({ children }) => (
+        ul: ({ children }: { children?: React.ReactNode }) => (
           <ul className="my-3 pl-5 list-disc space-y-2">{children}</ul>
         ),
-        ol: ({ children }) => (
+        ol: ({ children }: { children?: React.ReactNode }) => (
           <ol className="my-3 pl-5 list-decimal space-y-2">{children}</ol>
         ),
-        li: ({ children }) => (
+        li: ({ children }: { children?: React.ReactNode }) => (
           <li className={`text-sm leading-[1.9] ${textColor}`}>{children}</li>
         ),
-        blockquote: ({ children }) => (
+        blockquote: ({ children }: { children?: React.ReactNode }) => (
           <blockquote className={`border-l-2 pl-4 my-4 ${isDark ? "border-gray-600" : "border-gray-300"}`}>
             {children}
           </blockquote>
@@ -578,10 +578,10 @@ function HighlightedMarkdown({ content, isDark }: { content: string; isDark: boo
         hr: () => (
           <hr className={`my-8 ${isDark ? "border-gray-700" : "border-gray-200"}`} />
         ),
-        a: ({ children, href }) => (
+        a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
           <a href={href} className={`underline ${isDark ? "text-blue-400" : "text-blue-600"}`} target="_blank" rel="noopener noreferrer">{children}</a>
         ),
-        code: ({ children }) => (
+        code: ({ children }: { children?: React.ReactNode }) => (
           <code className={`text-xs px-1.5 py-0.5 rounded ${isDark ? "bg-gray-800 text-amber-300" : "bg-gray-100 text-gray-800"}`}>{children}</code>
         ),
       }}
