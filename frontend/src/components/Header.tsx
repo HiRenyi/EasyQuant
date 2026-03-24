@@ -181,8 +181,12 @@ function McpGuideModal({ onClose }: { onClose: () => void }) {
   const mcpConfig = `{
   "mcpServers": {
     "quantgpt": {
-      "url": "https://quantgpt.online/mcp",
-      "transport": "streamable-http"
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-m", "quantgpt"],
+      "env": {
+        "PYTHONPATH": "/path/to/QuantGPT"
+      }
     }
   }
 }`;
@@ -267,23 +271,38 @@ agent.register_tool(backtest_tool)`;
                 </p>
               </div>
 
-              {/* Step 1 */}
+              {/* Step 1: Clone */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
+                  <h3 className="text-sm font-medium text-gray-900">克隆项目并安装</h3>
+                </div>
+                <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
+                  <CopyButton text={"git clone https://github.com/Miasyster/QuantGPT.git\ncd QuantGPT\npip install -e ."} />
+                  <pre className="whitespace-pre-wrap"><span className="text-green-400">$</span> git clone https://github.com/Miasyster/QuantGPT.git{"\n"}<span className="text-green-400">$</span> cd QuantGPT{"\n"}<span className="text-green-400">$</span> pip install -e .</pre>
+                </div>
+              </div>
+
+              {/* Step 2: Configure */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
                   <h3 className="text-sm font-medium text-gray-900">配置 MCP</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-1.5 font-medium">在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code>，填入以下内容：</p>
+                <p className="text-xs text-gray-500 mb-1.5 font-medium">在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code>：</p>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
                   <CopyButton text={mcpConfig} />
                   <pre className="whitespace-pre-wrap">{mcpConfig}</pre>
                 </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  将 <code className="bg-gray-100 text-gray-600 px-1 rounded">PYTHONPATH</code> 替换为实际项目路径。需配置米筐数据源，详见项目 README。
+                </p>
               </div>
 
-              {/* Step 2 */}
+              {/* Step 3 */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
+                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
                   <h3 className="text-sm font-medium text-gray-900">开始使用</h3>
                 </div>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">

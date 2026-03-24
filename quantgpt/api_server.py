@@ -1830,19 +1830,19 @@ def _mount_spa():
         raise HTTPException(status_code=404, detail="Frontend not built")
 
 
-# ---- Mount MCP streamable-http at /mcp ----
+# ---- Mount MCP at /mcp (both streamable-http and SSE) ----
 from .mcp_server import mcp as _mcp_server
 _mcp_app = _mcp_server.streamable_http_app()
+_mcp_sse_app = _mcp_server.sse_app()
 app.mount("/mcp", _mcp_app)
+app.mount("/mcp-sse", _mcp_sse_app)
 
 
 @app.middleware("http")
-async def _mcp_slash_redirect(request: Request, call_next):
-    """Rewrite /mcp to /mcp/ so Starlette Mount matches."""
+async def _mcp_path_rewrite(request: Request, call_next):
+    """Rewrite /mcp to /mcp/ internally so Starlette Mount matches."""
     if request.url.path == "/mcp":
-        from starlette.responses import RedirectResponse
-        # 307 preserves method (POST stays POST)
-        return RedirectResponse(url="/mcp/", status_code=307)
+        request.scope["path"] = "/mcp/"
     return await call_next(request)
 
 

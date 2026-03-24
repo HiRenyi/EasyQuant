@@ -18,6 +18,7 @@ import traceback
 
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from .expression_parser import ExpressionParser, parse_expression
 from .expression_parser import __doc__ as _expr_module_doc
@@ -36,6 +37,9 @@ mcp = FastMCP(
     instructions="QuantGPT — A 股因子回测服务。先用 list_operators 了解可用算子，再用 run_backtest 执行回测。可用 score_factor 评分、diagnose_factor 诊断、run_anti_overfit 检测过拟合、run_rolling_validation 滚动验证。",
     streamable_http_path="/",
     stateless_http=True,
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=["quantgpt.online", "www.quantgpt.online", "localhost", "127.0.0.1"],
+    ),
 )
 
 
