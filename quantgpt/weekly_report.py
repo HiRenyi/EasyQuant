@@ -162,19 +162,30 @@ def _parse_metrics_rows(rows: list[str]) -> dict:
 # Chart generation (matplotlib → base64 PNG)
 # ---------------------------------------------------------------------------
 
-def _fig_to_base64(fig: plt.Figure) -> str:
-    """Convert matplotlib figure to base64-encoded PNG for email embedding."""
+# Directory for chart images served via /charts/ URL
+_CHARTS_DIR = Path(__file__).resolve().parent.parent / "reports" / "charts"
+
+# Accumulates (filename, png_bytes) during render; cleared at start of each render.
+_embedded_images: list[tuple[str, bytes]] = []
+
+# Base URL for chart images in emails
+_CHARTS_BASE_URL = "https://quantgpt.online/charts"
+
+
+def _img_tag(fig: plt.Figure, alt: str = "") -> str:
+    """Save chart to disk and return an HTML img tag with public URL."""
+    _CHARTS_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"chart_{len(_embedded_images)}.png"
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight",
                 facecolor=_BG_COLOR, edgecolor="none", pad_inches=0.15)
     plt.close(fig)
     buf.seek(0)
-    return base64.b64encode(buf.read()).decode("utf-8")
-
-
-def _img_tag(b64: str, alt: str = "") -> str:
-    """Create an HTML img tag from base64 data."""
-    return (f'<img src="data:image/png;base64,{b64}" alt="{alt}" '
+    png_bytes = buf.read()
+    (_CHARTS_DIR / filename).write_bytes(png_bytes)
+    _embedded_images.append((filename, png_bytes))
+    url = f"{_CHARTS_BASE_URL}/{filename}"
+    return (f'<img src="{url}" alt="{alt}" '
             f'style="width:100%;max-width:720px;height:auto;display:block;margin:16px auto;border-radius:8px;">')
 
 
@@ -248,7 +259,7 @@ def generate_score_bar_chart(factors: list[dict]) -> str:
               frameon=False, ncol=4)
 
     fig.tight_layout()
-    return _img_tag(_fig_to_base64(fig), "因子评分排行")
+    return _img_tag(fig, "因子评分排行")
 
 
 def generate_category_pie_chart(factors: list[dict]) -> str:
@@ -279,7 +290,7 @@ def generate_category_pie_chart(factors: list[dict]) -> str:
 
     ax.set_title("因子类别分布", fontsize=13, fontweight="600", color="#1e293b", pad=8)
     fig.tight_layout()
-    return _img_tag(_fig_to_base64(fig), "因子类别分布")
+    return _img_tag(fig, "因子类别分布")
 
 
 def generate_top_factors_radar(top_factors: list[dict]) -> str:
@@ -356,7 +367,7 @@ def generate_top_factors_radar(top_factors: list[dict]) -> str:
               fontsize=8, frameon=False)
 
     fig.tight_layout()
-    return _img_tag(_fig_to_base64(fig), "Top 因子多维对比")
+    return _img_tag(fig, "Top 因子多维对比")
 
 
 def generate_metrics_comparison_chart(top_factors: list[dict]) -> str:
@@ -400,7 +411,7 @@ def generate_metrics_comparison_chart(top_factors: list[dict]) -> str:
     fig.suptitle("Top 因子关键指标对比", fontsize=13, fontweight="600",
                  color="#1e293b", y=0.98)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    return _img_tag(_fig_to_base64(fig), "关键指标对比")
+    return _img_tag(fig, "关键指标对比")
 
 
 def generate_grade_summary_card(factors: list[dict]) -> str:
@@ -620,7 +631,11 @@ def _inline_format(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def render_weekly_report_email(md_content: str, unsubscribe_url: str = "") -> str:
-    """Convert Markdown weekly report to branded HTML email with charts."""
+    """Convert Markdown weekly report to branded HTML email with chart images.
+
+    Charts are saved to reports/charts/ and referenced via public URLs.
+    """
+    _embedded_images.clear()
 
     # Extract structured data for chart generation
     factors = _extract_factor_rankings(md_content)
@@ -663,7 +678,7 @@ def render_weekly_report_email(md_content: str, unsubscribe_url: str = "") -> st
         )
 
     _BRAND_BG = "#f8fafc"
-    return f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:{_BRAND_BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:780px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
@@ -678,6 +693,7 @@ def render_weekly_report_email(md_content: str, unsubscribe_url: str = "") -> st
   </div>
 </div>
 </body></html>"""
+    return html
 
 
 # ---------------------------------------------------------------------------

@@ -1837,6 +1837,11 @@ _mcp_sse_app = _mcp_server.sse_app()
 app.mount("/mcp", _mcp_app)
 app.mount("/mcp-sse", _mcp_sse_app)
 
+# ---- Serve chart images for email reports ----
+_CHARTS_DIR = Path(__file__).resolve().parent.parent / "reports" / "charts"
+_CHARTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/charts", StaticFiles(directory=str(_CHARTS_DIR)), name="charts")
+
 
 @app.middleware("http")
 async def _mcp_path_rewrite(request: Request, call_next):
