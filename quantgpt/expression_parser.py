@@ -116,7 +116,7 @@ class ExpressionParser:
     """Parse factor expressions into callable functions."""
 
     MAX_WINDOW = 500
-    MAX_DEPTH = 40
+    MAX_DEPTH = 100
     MAX_EXPRESSION_LENGTH = 1000
 
     # Pattern: func_name(args)
