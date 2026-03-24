@@ -128,3 +128,31 @@ export async function resolveFeedback(id: string): Promise<void> {
   });
   if (!res.ok) throw new Error("标记失败");
 }
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  description: string;
+  schedule: string;
+  next_run: string | null;
+  last_run: string | null;
+  last_status: string | null;
+  last_error: string | null;
+}
+
+export async function fetchScheduledJobs(): Promise<{ jobs: ScheduledJob[] }> {
+  const res = await adminFetch(`${BASE}/api/v1/admin/scheduled-jobs`);
+  if (!res.ok) throw new Error("获取定时任务失败");
+  return res.json();
+}
+
+export async function triggerJob(jobId: string): Promise<{ message: string }> {
+  const res = await adminFetch(`${BASE}/api/v1/admin/scheduled-jobs/${jobId}/run`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail || "触发失败");
+  }
+  return res.json();
+}

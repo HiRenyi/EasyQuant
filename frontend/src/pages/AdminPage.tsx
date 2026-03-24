@@ -16,6 +16,8 @@ import {
   Activity,
   Inbox,
   AlertCircle,
+  Clock,
+  Play,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -28,11 +30,13 @@ import {
   fetchTasks,
   fetchFeedbacks,
   resolveFeedback,
+  fetchScheduledJobs,
+  triggerJob,
   adminLogout,
 } from "../api/admin";
-import type { Overview, AdminUser, AdminTask, AdminFeedback } from "../api/admin";
+import type { Overview, AdminUser, AdminTask, AdminFeedback, ScheduledJob } from "../api/admin";
 
-type Tab = "overview" | "users" | "tasks" | "feedbacks";
+type Tab = "overview" | "users" | "tasks" | "feedbacks" | "scheduled";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "-";
@@ -612,6 +616,106 @@ function FeedbacksTab() {
   );
 }
 
+// ---- Scheduled Jobs Tab ----
+function ScheduledJobsTab() {
+  const [jobs, setJobs] = useState<ScheduledJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetchScheduledJobs()
+      .then((d) => setJobs(d.jobs))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleTrigger = async (jobId: string) => {
+    setTriggering(jobId);
+    setMsg(null);
+    try {
+      const res = await triggerJob(jobId);
+      setMsg(res.message);
+      setTimeout(load, 2000);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "触发失败");
+    } finally {
+      setTriggering(null);
+    }
+  };
+
+  const statusBadge = (status: string | null) => {
+    if (!status) return <span className="text-gray-400 text-xs">-</span>;
+    const colors: Record<string, string> = {
+      success: "bg-green-100 text-green-700",
+      failed: "bg-red-100 text-red-700",
+      running: "bg-blue-100 text-blue-700",
+      skipped: "bg-yellow-100 text-yellow-700",
+    };
+    return (
+      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || "bg-gray-100 text-gray-600"}`}>
+        {status}
+      </span>
+    );
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>;
+
+  return (
+    <div>
+      {msg && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-blue-50 text-blue-700 text-sm border border-blue-100">{msg}</div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-left text-gray-500">
+              <th className="py-2 px-3 font-medium">任务名称</th>
+              <th className="py-2 px-3 font-medium">说明</th>
+              <th className="py-2 px-3 font-medium">执行计划</th>
+              <th className="py-2 px-3 font-medium">下次执行</th>
+              <th className="py-2 px-3 font-medium">上次执行</th>
+              <th className="py-2 px-3 font-medium">状态</th>
+              <th className="py-2 px-3 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((j) => (
+              <tr key={j.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-3 px-3 font-medium text-gray-800">{j.name}</td>
+                <td className="py-3 px-3 text-xs text-gray-500 max-w-[200px]">{j.description}</td>
+                <td className="py-3 px-3 text-xs font-mono text-gray-600">{j.schedule}</td>
+                <td className="py-3 px-3 text-xs text-gray-500">{j.next_run ? formatTime(j.next_run) : "-"}</td>
+                <td className="py-3 px-3 text-xs text-gray-500">{j.last_run ? formatTime(j.last_run) : "从未运行"}</td>
+                <td className="py-3 px-3">
+                  {statusBadge(j.last_status)}
+                  {j.last_error && (
+                    <div className="text-xs text-red-500 mt-1 max-w-[150px] truncate" title={j.last_error}>{j.last_error}</div>
+                  )}
+                </td>
+                <td className="py-3 px-3">
+                  <button
+                    onClick={() => handleTrigger(j.id)}
+                    disabled={triggering === j.id}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                  >
+                    {triggering === j.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Play className="h-3.5 w-3.5" />}
+                    立即执行
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ---- Main AdminPage ----
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -621,6 +725,7 @@ export default function AdminPage() {
     { key: "users", label: "用户", icon: Users },
     { key: "tasks", label: "任务", icon: ListTodo },
     { key: "feedbacks", label: "反馈", icon: MessageSquare },
+    { key: "scheduled", label: "定时任务", icon: Clock },
   ];
 
   return (
@@ -666,6 +771,7 @@ export default function AdminPage() {
         {tab === "users" && <UsersTab />}
         {tab === "tasks" && <TasksTab />}
         {tab === "feedbacks" && <FeedbacksTab />}
+        {tab === "scheduled" && <ScheduledJobsTab />}
       </div>
     </div>
   );

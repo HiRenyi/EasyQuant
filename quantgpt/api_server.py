@@ -90,6 +90,7 @@ async def lifespan(app: FastAPI):
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
     from zoneinfo import ZoneInfo
+    from .scheduler_registry import register_scheduler, register_job, record_job_run
     CST = ZoneInfo("Asia/Shanghai")
     scheduler = AsyncIOScheduler()
 
@@ -99,11 +100,14 @@ async def lifespan(app: FastAPI):
         async with _get_session_factory()() as db:
             try:
                 await run_daily_settlement(db)
+                record_job_run("paper_settlement", "success")
             except Exception as e:
                 logger.error(f"Paper settlement job failed: {e}")
+                record_job_run("paper_settlement", "failed", str(e))
 
     # Run at 16:30 Beijing time on weekdays
-    scheduler.add_job(_paper_settlement_job, CronTrigger(hour=16, minute=30, day_of_week="mon-fri", timezone=CST))
+    scheduler.add_job(_paper_settlement_job, CronTrigger(hour=16, minute=30, day_of_week="mon-fri", timezone=CST), id="paper_settlement")
+    register_job("paper_settlement", "模拟盘日结算", "每个交易日收盘后结算模拟持仓盈亏", "周一至周五 16:30 CST")
 
     # Factor deep research report: every Monday 9:03 CST = 01:03 UTC
     async def _weekly_report_job():
@@ -112,15 +116,19 @@ async def lifespan(app: FastAPI):
         md = get_latest_report_content()
         if not md:
             logger.warning("Factor research job: no report file found")
+            record_job_run("weekly_report", "skipped", "no report file found")
             return
         async with _get_session_factory()() as db:
             try:
                 stats = await send_weekly_report(db, md)
                 logger.info(f"Factor research job completed: {stats}")
+                record_job_run("weekly_report", "success")
             except Exception as e:
                 logger.error(f"Factor research job failed: {e}")
+                record_job_run("weekly_report", "failed", str(e))
 
-    scheduler.add_job(_weekly_report_job, CronTrigger(hour=9, minute=3, day_of_week="mon", timezone=CST))
+    scheduler.add_job(_weekly_report_job, CronTrigger(hour=9, minute=3, day_of_week="mon", timezone=CST), id="weekly_report")
+    register_job("weekly_report", "因子研究周报", "每周一发送因子深度研究报告邮件给订阅用户", "每周一 09:03 CST")
 
     # Daily market summary: 15:30 CST = 07:30 UTC on weekdays
     async def _daily_summary_job():
@@ -130,12 +138,15 @@ async def lifespan(app: FastAPI):
             try:
                 await generate_daily_summary(db, market="a_share")
                 logger.info("Daily summary job completed")
+                record_job_run("daily_summary", "success")
             except Exception as e:
                 logger.error(f"Daily summary job failed: {e}")
+                record_job_run("daily_summary", "failed", str(e))
 
-    # Daily market summary: 15:30 Beijing time on weekdays
-    scheduler.add_job(_daily_summary_job, CronTrigger(hour=15, minute=30, day_of_week="mon-fri", timezone=CST))
+    scheduler.add_job(_daily_summary_job, CronTrigger(hour=15, minute=30, day_of_week="mon-fri", timezone=CST), id="daily_summary")
+    register_job("daily_summary", "每日大盘报告", "每个交易日收盘后生成因子信号驱动的市场解读报告", "周一至周五 15:30 CST")
 
+    register_scheduler(scheduler)
     scheduler.start()
     logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
     logger.info("Factor research report scheduler started (Monday 09:03 CST)")

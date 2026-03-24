@@ -480,3 +480,33 @@ async def admin_send_all_reports(db: AsyncSession = Depends(get_db)):
 
     stats = await send_weekly_report(db, md)
     return stats
+
+
+# ---- Scheduled Jobs ----
+
+@router.get("/scheduled-jobs", dependencies=[Depends(require_admin)])
+async def admin_scheduled_jobs():
+    """List all scheduled jobs with status and next run time."""
+    from ..scheduler_registry import get_jobs_info
+    return {"jobs": get_jobs_info()}
+
+
+@router.post("/scheduled-jobs/{job_id}/run", dependencies=[Depends(require_admin)])
+async def admin_trigger_job(job_id: str):
+    """Manually trigger a scheduled job."""
+    from ..scheduler_registry import get_scheduler, record_job_run
+
+    scheduler = get_scheduler()
+    if not scheduler:
+        raise HTTPException(status_code=503, detail="调度器未启动")
+
+    job = scheduler.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"任务 {job_id} 不存在")
+
+    try:
+        record_job_run(job_id, "running")
+        job.modify(next_run_time=datetime.now(timezone.utc))
+        return {"message": f"任务 {job_id} 已触发"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
