@@ -21,7 +21,7 @@ interface Props {
 }
 
 export default function PaperTrading(_props: Props) {
-  const { colorMode, positiveClass, negativeClass } = useColorMode();
+  const { colorMode, isDark, positiveClass, negativeClass } = useColorMode();
   const [strategies, setStrategies] = useState<PaperStrategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -76,8 +76,8 @@ export default function PaperTrading(_props: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">我的模拟盘 ({strategies.length})</h2>
-        <button onClick={load} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100">
+        <h2 className={`text-sm font-semibold ${isDark ? "text-gray-300" : "text-gray-700"}`}>我的模拟盘 ({strategies.length})</h2>
+        <button onClick={load} className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:bg-gray-800" : "hover:bg-gray-100"}`}>
           <RefreshCw className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -87,18 +87,18 @@ export default function PaperTrading(_props: Props) {
         const isUp = s.total_return >= 0;
 
         return (
-          <div key={s.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div key={s.id} className={`rounded-xl border ${isDark ? "border-gray-700" : "border-gray-200"} ${isDark ? "bg-gray-900" : "bg-white"} overflow-hidden`}>
             {/* Header row */}
             <div
-              className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50"
+              className={`flex items-center gap-3 p-4 cursor-pointer ${isDark ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}
               onClick={() => expand(s.id)}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800 truncate">{s.name}</span>
+                  <span className={`text-sm font-medium ${isDark ? "text-gray-200" : "text-gray-800"} truncate`}>{s.name}</span>
                   <StatusBadge status={s.status} />
                 </div>
-                <code className="text-[11px] text-blue-600 font-mono truncate block mt-0.5">{s.expression}</code>
+                <code className={`text-[11px] ${isDark ? "text-amber-400" : "text-blue-600"} font-mono truncate block mt-0.5`}>{s.expression}</code>
               </div>
 
               <div className="text-right shrink-0">
@@ -112,7 +112,7 @@ export default function PaperTrading(_props: Props) {
                 {s.status === "active" && (
                   <button
                     onClick={(e) => { e.stopPropagation(); updateStatus(s.id, "paused"); }}
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                    className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:bg-amber-500/10 hover:text-amber-400" : "hover:bg-amber-50 hover:text-amber-600"}`}
                     title="暂停"
                   >
                     <Pause className="h-3.5 w-3.5" />
@@ -121,7 +121,7 @@ export default function PaperTrading(_props: Props) {
                 {s.status === "paused" && (
                   <button
                     onClick={(e) => { e.stopPropagation(); updateStatus(s.id, "active"); }}
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-emerald-50 hover:text-emerald-600"
+                    className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:bg-emerald-500/10 hover:text-emerald-400" : "hover:bg-emerald-50 hover:text-emerald-600"}`}
                     title="恢复"
                   >
                     <Play className="h-3.5 w-3.5" />
@@ -133,7 +133,7 @@ export default function PaperTrading(_props: Props) {
                       e.stopPropagation();
                       if (confirm("确定停止该策略？停止后无法恢复。")) updateStatus(s.id, "stopped");
                     }}
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500"
+                    className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:bg-red-500/10 hover:text-red-400" : "hover:bg-red-50 hover:text-red-500"}`}
                     title="停止"
                   >
                     <Square className="h-3.5 w-3.5" />
@@ -144,7 +144,7 @@ export default function PaperTrading(_props: Props) {
             </div>
 
             {/* Meta row */}
-            <div className="px-4 pb-3 flex gap-4 text-xs text-gray-400 border-t border-gray-50">
+            <div className={`px-4 pb-3 flex gap-4 text-xs text-gray-400 border-t ${isDark ? "border-gray-700" : "border-gray-50"}`}>
               <span>{UNIVERSE_LABELS[s.universe] ?? s.universe}</span>
               <span>换仓 {s.holding_period} 天</span>
               <span>初始 ¥{fmt(s.initial_capital)}</span>
@@ -154,7 +154,7 @@ export default function PaperTrading(_props: Props) {
 
             {/* Expanded detail */}
             {isExpanded && (
-              <div className="border-t border-gray-100 p-4 space-y-4 bg-gray-50">
+              <div className={`border-t ${isDark ? "border-gray-700" : "border-gray-100"} p-4 space-y-4 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
                 {loadingDetail ? (
                   <div className="text-center py-4 text-xs text-gray-400">加载中...</div>
                 ) : (
@@ -167,11 +167,11 @@ export default function PaperTrading(_props: Props) {
                     {/* Orders */}
                     {orders.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-gray-600 mb-2">最近交易记录</p>
-                        <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+                        <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-2`}>最近交易记录</p>
+                        <div className={`rounded-lg border ${isDark ? "border-gray-700" : "border-gray-200"} overflow-hidden ${isDark ? "bg-gray-900" : "bg-white"}`}>
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="bg-gray-50 text-gray-500">
+                              <tr className={`${isDark ? "bg-gray-800" : "bg-gray-50"} ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                                 <th className="px-3 py-2 text-left">日期</th>
                                 <th className="px-3 py-2 text-left">股票</th>
                                 <th className="px-3 py-2 text-left">方向</th>
@@ -182,21 +182,25 @@ export default function PaperTrading(_props: Props) {
                             </thead>
                             <tbody>
                               {orders.slice(0, 20).map((o) => (
-                                <tr key={o.id} className="border-t border-gray-100">
-                                  <td className="px-3 py-1.5 text-gray-500">{o.date}</td>
-                                  <td className="px-3 py-1.5 font-mono text-gray-700">{o.stock_code}</td>
+                                <tr key={o.id} className={`border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+                                  <td className={`px-3 py-1.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{o.date}</td>
+                                  <td className={`px-3 py-1.5 font-mono ${isDark ? "text-gray-300" : "text-gray-700"}`}>{o.stock_code}</td>
                                   <td className="px-3 py-1.5">
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                                       o.direction === "buy"
-                                        ? (colorMode === "cn" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700")
-                                        : (colorMode === "cn" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600")
+                                        ? (colorMode === "cn"
+                                            ? (isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-700")
+                                            : (isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700"))
+                                        : (colorMode === "cn"
+                                            ? (isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600")
+                                            : (isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"))
                                     }`}>
                                       {o.direction === "buy" ? "买入" : "卖出"}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-1.5 text-right text-gray-600">{o.shares}</td>
-                                  <td className="px-3 py-1.5 text-right text-gray-600">{o.price.toFixed(2)}</td>
-                                  <td className="px-3 py-1.5 text-right text-gray-600">¥{fmt(o.amount)}</td>
+                                  <td className={`px-3 py-1.5 text-right ${isDark ? "text-gray-400" : "text-gray-600"}`}>{o.shares}</td>
+                                  <td className={`px-3 py-1.5 text-right ${isDark ? "text-gray-400" : "text-gray-600"}`}>{o.price.toFixed(2)}</td>
+                                  <td className={`px-3 py-1.5 text-right ${isDark ? "text-gray-400" : "text-gray-600"}`}>¥{fmt(o.amount)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -220,14 +224,16 @@ export default function PaperTrading(_props: Props) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { isDark } = useColorMode();
   const map: Record<string, string> = {
-    active: "bg-emerald-50 text-emerald-700",
-    paused: "bg-amber-50 text-amber-700",
-    stopped: "bg-gray-100 text-gray-500",
+    active: isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700",
+    paused: isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700",
+    stopped: isDark ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500",
   };
+  const fallback = isDark ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500";
   const labels: Record<string, string> = { active: "运行中", paused: "已暂停", stopped: "已停止" };
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${map[status] ?? "bg-gray-100 text-gray-500"}`}>
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${map[status] ?? fallback}`}>
       {labels[status] ?? status}
     </span>
   );
@@ -237,6 +243,7 @@ function NavChart({ data, initialCapital }: {
   data: { date: string; value: number; daily_return: number | null }[];
   initialCapital: number;
 }) {
+  const { isDark } = useColorMode();
   if (data.length < 2) return null;
 
   const values = data.map((d) => d.value);
@@ -257,8 +264,8 @@ function NavChart({ data, initialCapital }: {
 
   return (
     <div>
-      <p className="text-xs font-medium text-gray-600 mb-2">净值曲线</p>
-      <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-2`}>净值曲线</p>
+      <div className={`rounded-lg border ${isDark ? "border-gray-700" : "border-gray-200"} ${isDark ? "bg-gray-900" : "bg-white"} p-3`}>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-16" preserveAspectRatio="none">
           <polyline points={points} fill="none" stroke={color} strokeWidth="2" />
         </svg>

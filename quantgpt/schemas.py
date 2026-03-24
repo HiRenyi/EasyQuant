@@ -13,6 +13,7 @@ from pydantic import field_validator
 
 VALID_UNIVERSES = {"small_scale", "hs300", "csi500", "csi1000", "csi2000"}
 VALID_BENCHMARKS = {"hs300", "zz500", "csi1000", "sz50"}
+
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -55,10 +56,10 @@ def fetch_market_data(universe: str, start_date: str, end_date: str):
         ValueError: If no data is fetched.
     """
     from .market_data import MarketDataFetcher, get_universe
-
     stock_codes = get_universe(universe, date=start_date)
     fetcher = MarketDataFetcher()
     market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+
     if market_df is None or len(market_df) == 0:
         raise ValueError("未获取到行情数据")
     return market_df, stock_codes

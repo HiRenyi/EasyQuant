@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from "react";
 import { Share2, Download, X } from "lucide-react";
 import type { BacktestResult } from "../types/backtest";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 interface Props {
   result: BacktestResult;
@@ -200,6 +201,7 @@ function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
 }
 
 export default function ShareCardButton({ result }: Props) {
+  const { isDark } = useColorMode();
   const [showModal, setShowModal] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -235,7 +237,7 @@ export default function ShareCardButton({ result }: Props) {
     <>
       <button
         onClick={open}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 transition-colors"
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? "text-gray-400 bg-gray-800 hover:bg-gray-700" : "text-gray-600 bg-gray-50 hover:bg-gray-100"} transition-colors`}
       >
         <Share2 className="h-3.5 w-3.5" />
         分享
@@ -247,14 +249,14 @@ export default function ShareCardButton({ result }: Props) {
           onClick={() => setShowModal(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl p-5 max-w-[700px] w-full mx-4"
+            className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-2xl p-5 max-w-[700px] w-full mx-4`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">分享回测结果</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>分享回测结果</h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:text-gray-200 hover:bg-gray-800" : "hover:text-gray-600 hover:bg-gray-100"}`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -270,7 +272,7 @@ export default function ShareCardButton({ result }: Props) {
               </button>
               <button
                 onClick={download}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border ${isDark ? "border-gray-700 text-gray-300 hover:bg-gray-800" : "border-gray-200 text-gray-700 hover:bg-gray-50"} text-sm`}
               >
                 <Download className="h-4 w-4" />
                 下载

@@ -57,6 +57,7 @@ class Session(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(200), nullable=True)
+    market = Column(String(20), default="a_share", nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -112,6 +113,7 @@ class SavedFactor(Base):
     backtest_summary = Column(JSON, nullable=True)  # 快照：backtest_summary
     params = Column(JSON, nullable=True)            # 回测参数
     report_url = Column(String(500), nullable=True)
+    market = Column(String(20), default="a_share", nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -133,6 +135,7 @@ class FeaturedFactor(Base):
     source = Column(String(20), nullable=False, default="submission")  # 'official' | 'submission'
     status = Column(String(20), nullable=False, default="pending")     # 'pending' | 'approved' | 'rejected'
     sort_order = Column(Integer, default=0, nullable=False)
+    market = Column(String(20), default="a_share", nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -213,3 +216,19 @@ class PaperOrder(Base):
     commission = Column(Float, nullable=False, default=0.0)
 
     strategy = relationship("PaperStrategy", back_populates="orders")
+
+
+class DailySummary(Base):
+    __tablename__ = "daily_summaries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    date = Column(String(10), nullable=False)          # "2026-03-24"
+    market = Column(String(20), default="a_share", nullable=False)
+    title = Column(String(200), nullable=True)
+    content = Column(Text, nullable=True)              # markdown
+    metrics = Column(JSON, nullable=True)              # index changes, volume, etc.
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_daily_summaries_date_market", "date", "market", unique=True),
+    )

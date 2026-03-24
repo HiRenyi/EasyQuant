@@ -59,6 +59,7 @@ from .routes.templates import router as templates_router
 from .routes.composite import router as composite_router
 from .routes.comparison import router as comparison_router
 from .routes.paper import router as paper_router
+from .routes.daily_summary import router as daily_summary_router
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,8 @@ async def lifespan(app: FastAPI):
     # Start paper trading scheduler
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from zoneinfo import ZoneInfo
+    CST = ZoneInfo("Asia/Shanghai")
     scheduler = AsyncIOScheduler()
 
     async def _paper_settlement_job():
@@ -99,8 +102,8 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"Paper settlement job failed: {e}")
 
-    # Run at 16:30 Beijing time (UTC+8) = 08:30 UTC on weekdays
-    scheduler.add_job(_paper_settlement_job, CronTrigger(hour=8, minute=30, day_of_week="mon-fri"))
+    # Run at 16:30 Beijing time on weekdays
+    scheduler.add_job(_paper_settlement_job, CronTrigger(hour=16, minute=30, day_of_week="mon-fri", timezone=CST))
 
     # Factor deep research report: every Monday 9:03 CST = 01:03 UTC
     async def _weekly_report_job():
@@ -117,7 +120,21 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"Factor research job failed: {e}")
 
-    scheduler.add_job(_weekly_report_job, CronTrigger(hour=1, minute=3, day_of_week="mon"))
+    scheduler.add_job(_weekly_report_job, CronTrigger(hour=9, minute=3, day_of_week="mon", timezone=CST))
+
+    # Daily market summary: 15:30 CST = 07:30 UTC on weekdays
+    async def _daily_summary_job():
+        from .daily_summary import generate_daily_summary
+        from .db import _get_session_factory
+        async with _get_session_factory()() as db:
+            try:
+                await generate_daily_summary(db, market="a_share")
+                logger.info("Daily summary job completed")
+            except Exception as e:
+                logger.error(f"Daily summary job failed: {e}")
+
+    # Daily market summary: 15:30 Beijing time on weekdays
+    scheduler.add_job(_daily_summary_job, CronTrigger(hour=15, minute=30, day_of_week="mon-fri", timezone=CST))
 
     scheduler.start()
     logger.info("Paper trading scheduler started (weekdays 16:30 CST)")
@@ -142,7 +159,7 @@ _cors_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app = FastAPI(
     title="QuantGPT API",
-    version="0.1.0",
+    version="2.3.0",
     description="QuantGPT — 用自然语言回测 A 股因子",
     docs_url=None,
     redoc_url=None,
@@ -166,6 +183,7 @@ app.include_router(templates_router)
 app.include_router(composite_router)
 app.include_router(comparison_router)
 app.include_router(paper_router)
+app.include_router(daily_summary_router)
 
 
 # ---- Rate limiter (in-memory, per IP) ----
@@ -252,12 +270,12 @@ from .schemas import validate_date_format as _validate_date_fn, validate_univers
 
 class AutoBacktestRequest(BaseModel):
     prompt: str = Field(..., description="自然语言描述", examples=["帮我测试一个20日动量因子"])
-    universe: str = Field("hs300", description="股票池: small_scale / hs300 / csi500")
+    universe: str = Field("hs300", description="股票池")
     start_date: str = Field("2023-01-01", description="起始日期 YYYY-MM-DD")
     end_date: str = Field("2025-12-31", description="结束日期 YYYY-MM-DD")
     n_groups: int = Field(5, description="分组数量", ge=2, le=20)
     holding_period: int = Field(5, description="持仓周期(交易日)", ge=1, le=60)
-    benchmark: str = Field("hs300", description="基准指数: hs300 / zz500 / sz50")
+    benchmark: str = Field("hs300", description="基准指数")
     session_id: str | None = Field(None, description="关联会话 ID")
     neutralize_industry: bool = Field(True, description="行业中性化")
     neutralize_cap: bool = Field(True, description="市值中性化")
@@ -524,11 +542,11 @@ def _call_fix_expression(expression: str, error: str, prompt: str) -> str:
 
 _INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语言解读因子表达式的经济含义并撰写研究报告。
 
-你的任务是解读一个 A 股因子表达式，输出 JSON，格式如下：
+你的任务是解读一个因子表达式，输出 JSON，格式如下：
 {
   "logic": "因子的核心逻辑（1-2句，说明该因子捕捉了什么市场现象）",
   "source": "收益来源（1-2句，说明为什么这个因子能产生超额收益，背后的行为金融或基本面逻辑）",
-  "guidance": "交易指导（2-4句，从经济含义角度指导用户如何利用该因子思路交易，禁止推荐具体股票，聚焦行为规律和风险提示）",
+  "guidance": "交易指导（2-4句，从经济含义角度指导用户如何利用该因子思路交易，禁止推荐具体标的，聚焦行为规律和风险提示）",
   "risk": "主要风险（1句，说明该因子在什么市场环境下容易失效）",
   "conclusion": "核心结论（2-3句，总结因子整体表现和是否推荐使用）",
   "suggestions": ["改进建议1", "改进建议2"]
@@ -537,13 +555,12 @@ _INTERPRET_SYSTEM = """你是一位专业的量化研究员，擅长用通俗语
 注意：评级(rating)由系统算法自动生成，你不需要输出评级。
 
 交易指导要求：
-- 禁止推荐任何具体股票或行业
+- 禁止推荐任何具体标的
 - 从行为金融角度出发，指出市场参与者的非理性行为
 - 结合回测指标（如换手率、IC、单调性）给出实操建议
 - 语言简洁，面向普通投资者
 
 只输出 JSON，不要任何额外文字。"""
-
 
 def _call_interpret_factor(
     expression: str,
@@ -626,7 +643,7 @@ def _persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_file
                     result=task_data.get("result"),
                     error=task_data.get("error"),
                 )
-                session.add(task_record)
+                await session.merge(task_record)
 
                 if report_filename:
                     report_record = ReportModel(
@@ -791,13 +808,11 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             _check_cancelled(task_id)
             task["status"] = "fetching_fundamentals"
             logger.info(f"[{task_id}] fetching fundamentals for vars: {fund_vars}")
-            # Try rqdatac first (daily frequency, no alignment needed)
             rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, req.start_date, req.end_date)
             if rq_result is not None:
                 market_df = rq_result
                 logger.info(f"[{task_id}] fundamental data merged via rqdatac")
             else:
-                # Fallback: baostock quarterly
                 fund_fetcher = FundamentalDataFetcher()
                 non_div_vars = fund_vars - {"dividend_yield"}
                 if non_div_vars:
@@ -818,7 +833,8 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         task["status"] = "backtesting"
         result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
                                      neutralize_industry=req.neutralize_industry,
-                                     neutralize_cap=req.neutralize_cap)
+                                     neutralize_cap=req.neutralize_cap,
+                                     trading_days_per_year=252)
 
         # 4a. Anti-overfit analysis
         _check_cancelled(task_id)
@@ -849,6 +865,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             benchmark_returns=bm_returns,
             title="Factor Top-Group Backtest",
             output_dir=str(user_report_dir),
+            periods_per_year=252,
         )
         report_filename = Path(report_result["report_path"]).name
 
@@ -1027,7 +1044,7 @@ async def auto_backtest(
     user_id = str(user.id) if user else GUEST_USER_ID
     session_id = req.session_id
 
-    # Guest restrictions: force small_scale, limit params
+    # Guest restrictions: force small universe, limit params
     if is_guest:
         req.universe = "small_scale"
         session_id = None
@@ -1227,6 +1244,13 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
     task = _tasks.get(task_id)
     if not task:
         return
+
+    # Pre-persist task record so report FK constraints pass
+    if not task.get("is_guest"):
+        try:
+            _persist_task_to_db(task_id, user_id, task)
+        except Exception:
+            pass
 
     try:
         # 1. Read parent task result — memory first, then DB

@@ -517,7 +517,8 @@ class ExpressionParser:
         # Column reference — only allow known columns (case-insensitive)
         col_name = expr_lower.strip()
         from .fundamental_data import ALL_FUNDAMENTAL_NAMES
-        _ALLOWED_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'} | ALL_FUNDAMENTAL_NAMES
+        _PRICE_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'}
+        _ALLOWED_COLUMNS = _PRICE_COLUMNS | ALL_FUNDAMENTAL_NAMES
         # Common LLM alias mapping — redirect invalid names to valid ones
         _ALIAS_MAP = {
             'pe_ratio': 'pe', 'pe_ttm': 'pe', 'pb_ratio': 'pb', 'ps_ratio': 'ps',
@@ -653,4 +654,5 @@ def parse_expression(expression: str) -> Callable[[pd.DataFrame], pd.Series]:
     Returns:
         Callable that takes a DataFrame and returns factor values as a Series.
     """
-    return ExpressionParser().parse(expression)
+    parser = ExpressionParser()
+    return parser.parse(expression)

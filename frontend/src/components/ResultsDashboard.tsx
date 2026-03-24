@@ -9,6 +9,7 @@ import FactorInterpretationCard from "./FactorInterpretationCard";
 import ShareCardButton from "./ShareCardButton";
 import { authFetch, parseError } from "../api/client";
 import { createPaperStrategy } from "../api/paper";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 interface Props {
   result: BacktestResult;
@@ -29,6 +30,7 @@ function num(n: number): string {
 }
 
 export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, isSaving, isSaved, showSubmitToWall, onGoToPaper }: Props) {
+  const { isDark } = useColorMode();
   const { metrics, backtest_summary, report_url, params } = result;
   const [wallStatus, setWallStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
   const [paperStatus, setPaperStatus] = useState<"idle" | "creating" | "created" | "error">("idle");
@@ -80,7 +82,7 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-700">回测结果</h3>
+        <h3 className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>回测结果</h3>
         <div className="flex items-center gap-3">
           <ShareCardButton result={result} />
           {showSubmitToWall && (
@@ -89,10 +91,10 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
               disabled={wallStatus !== "idle"}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
                 wallStatus === "submitted"
-                  ? "text-emerald-600 bg-emerald-50 cursor-default"
+                  ? `${isDark ? "text-emerald-400" : "text-emerald-600"} ${isDark ? "bg-emerald-500/10" : "bg-emerald-50"} cursor-default`
                   : wallStatus === "error"
-                  ? "text-red-600 bg-red-50"
-                  : "text-blue-600 bg-blue-50 hover:bg-blue-100"
+                  ? `${isDark ? "text-red-400" : "text-red-600"} ${isDark ? "bg-red-500/10" : "bg-red-50"}`
+                  : `${isDark ? "text-amber-400" : "text-blue-600"} ${isDark ? "bg-amber-500/10" : "bg-blue-50"} ${isDark ? "hover:bg-amber-500/20" : "hover:bg-blue-100"}`
               }`}
             >
               <Trophy className="h-3.5 w-3.5" />
@@ -118,10 +120,10 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
             disabled={paperStatus === "creating" || paperStatus === "created"}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
               paperStatus === "created"
-                ? "text-teal-600 bg-teal-50 cursor-default"
+                ? `${isDark ? "text-teal-400" : "text-teal-600"} ${isDark ? "bg-teal-500/10" : "bg-teal-50"} cursor-default`
                 : paperStatus === "error"
-                ? "text-red-600 bg-red-50"
-                : "text-teal-700 bg-teal-50 hover:bg-teal-100"
+                ? `${isDark ? "text-red-400" : "text-red-600"} ${isDark ? "bg-red-500/10" : "bg-red-50"}`
+                : `${isDark ? "text-teal-400" : "text-teal-700"} ${isDark ? "bg-teal-500/10" : "bg-teal-50"} ${isDark ? "hover:bg-teal-500/20" : "hover:bg-teal-100"}`
             }`}
           >
             <LineChart className="h-3.5 w-3.5" />
@@ -133,9 +135,9 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <p className="text-xs font-medium text-gray-500 mb-1">因子表达式</p>
-        <code className="text-sm text-blue-700 font-mono break-all leading-relaxed">{params.expression}</code>
+      <div className={`rounded-xl border ${isDark ? "border-gray-700" : "border-gray-200"} ${isDark ? "bg-gray-900" : "bg-white"} px-4 py-3`}>
+        <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-500"} mb-1`}>因子表达式</p>
+        <code className={`text-sm ${isDark ? "text-amber-400" : "text-blue-700"} font-mono break-all leading-relaxed`}>{params.expression}</code>
       </div>
 
       {result.interpretation && Object.keys(result.interpretation).length > 0 && (

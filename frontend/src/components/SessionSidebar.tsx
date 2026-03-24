@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, Trash2, MessageSquare, ChevronDown } from "lucide-react";
+import { useColorMode } from "../contexts/ColorModeContext";
 import type { Session, Task } from "../types/backtest";
 import TaskHistoryItem from "./TaskHistoryItem";
 
@@ -26,6 +27,7 @@ export default function SessionSidebar({
   onDeleteSession,
   onSelectTask,
 }: Props) {
+  const { isDark } = useColorMode();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -63,7 +65,7 @@ export default function SessionSidebar({
     <div className="space-y-2">
       <button
         onClick={onCreateSession}
-        className="w-full flex items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+        className={`w-full flex items-center gap-2 rounded-lg border border-dashed ${isDark ? "border-gray-600" : "border-gray-300"} px-3 py-2 text-sm ${isDark ? "text-gray-400" : "text-gray-500"} ${isDark ? "hover:border-amber-500 hover:text-amber-400" : "hover:border-blue-400 hover:text-blue-600"} transition-colors`}
       >
         <Plus className="h-4 w-4" />
         新建会话
@@ -80,7 +82,9 @@ export default function SessionSidebar({
             <div key={session.id}>
               <div
                 className={`group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
-                  isActive ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-100"
+                  isActive
+                    ? (isDark ? "bg-amber-500/10 text-amber-400" : "bg-blue-50 text-blue-700")
+                    : (isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-600 hover:bg-gray-100")
                 }`}
                 onClick={() => onSwitchSession(session.id)}
                 onDoubleClick={(e) => { e.stopPropagation(); startEdit(session); }}
@@ -90,7 +94,7 @@ export default function SessionSidebar({
                   {isEditing ? (
                     <input
                       ref={inputRef}
-                      className="w-full bg-white border border-blue-300 rounded px-1 py-0.5 text-sm text-gray-800 outline-none"
+                      className={`w-full ${isDark ? "bg-gray-900" : "bg-white"} border ${isDark ? "border-amber-500" : "border-blue-300"} rounded px-1 py-0.5 text-sm ${isDark ? "text-gray-200" : "text-gray-800"} outline-none`}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={commitEdit}
@@ -109,18 +113,18 @@ export default function SessionSidebar({
                     {isActive && sessionTasks.length > 0 && (
                       <button
                         onClick={(e) => toggleCollapse(session.id, e)}
-                        className="p-0.5 rounded hover:bg-blue-100"
+                        className={`p-0.5 rounded ${isDark ? "hover:bg-amber-500/20" : "hover:bg-blue-100"}`}
                         title={isCollapsed ? "展开" : "折叠"}
                       >
                         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                       </button>
                     )}
                     <button
-                      className="p-0.5 rounded hover:bg-red-100"
+                      className={`p-0.5 rounded ${isDark ? "hover:bg-red-500/10" : "hover:bg-red-100"}`}
                       onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}
                       title="删除会话"
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
+                      <Trash2 className={`h-3.5 w-3.5 ${isDark ? "text-red-400 hover:text-red-300" : "text-red-400 hover:text-red-600"}`} />
                     </button>
                   </div>
                 )}

@@ -77,6 +77,7 @@ async def save_factor(
         backtest_summary=req.backtest_summary,
         params=req.params,
         report_url=req.report_url,
+        market="a_share",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -231,6 +232,7 @@ async def submit_to_wall(
         report_url=req.report_url,
         source="submission",
         status="pending",
+        market="a_share",
         created_at=datetime.now(timezone.utc),
     )
     db.add(factor)

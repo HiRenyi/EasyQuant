@@ -1,6 +1,6 @@
 [project]
 name = "quantgpt"
-version = "0.1.0"
+version = "2.3.0"
 description = "QuantGPT — 用自然语言回测 A 股因子"
 requires-python = ">=3.10"
 dependencies = [

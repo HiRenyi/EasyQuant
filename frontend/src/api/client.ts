@@ -214,7 +214,8 @@ export async function createSession(name?: string): Promise<Session> {
 }
 
 export async function fetchSessions(): Promise<{ sessions: Session[] }> {
-  const res = await authFetch(`${BASE}/api/v1/sessions`);
+  const url = `${BASE}/api/v1/sessions`;
+  const res = await authFetch(url);
   if (!res.ok) throw new Error(`Sessions fetch failed: ${res.status}`);
   return res.json();
 }

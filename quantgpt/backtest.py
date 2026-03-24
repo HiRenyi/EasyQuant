@@ -27,6 +27,7 @@ def run_factor_backtest(
     neutralize_industry: bool = True,
     neutralize_cap: bool = True,
     precomputed_factor: pd.Series | None = None,
+    trading_days_per_year: int = 252,
 ) -> Dict:
     """Run quantile group backtest on a factor expression (long-only).
 
@@ -229,13 +230,13 @@ def run_factor_backtest(
     ls_series = daily_group_ret[top_g] - daily_group_ret[bot_g]
 
     # 8. Metrics
-    annualize = np.sqrt(252)
+    annualize = np.sqrt(trading_days_per_year)
     strat_mean, strat_std = strategy_series.mean(), strategy_series.std()
     top_sharpe = float((strat_mean / strat_std * annualize) if strat_std > 0 else 0.0)
 
     ls_mean, ls_std = ls_series.mean(), ls_series.std()
     ls_sharpe = float((ls_mean / ls_std * annualize) if ls_std > 0 else 0.0)
-    ls_annual = float((1 + ls_mean) ** 252 - 1)
+    ls_annual = float((1 + ls_mean) ** trading_days_per_year - 1)
 
     group_means = [float(daily_group_ret[g].mean()) for g in actual_groups]
     mono = _calc_monotonicity(group_means)
@@ -263,7 +264,7 @@ def run_factor_backtest(
         group_ret_summary[int(g)] = {
             "group": f"G{int(g)+1}",
             "mean_return": float(s.mean()),
-            "annual_return": float((1 + s.mean()) ** 252 - 1),
+            "annual_return": float((1 + s.mean()) ** trading_days_per_year - 1),
             "sharpe": float((s.mean() / std * annualize) if std > 0 else 0.0),
             "max_drawdown": float(_calc_max_drawdown(s)),
         }

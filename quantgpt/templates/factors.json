@@ -2,8 +2,9 @@
   {
     "id": "momentum_20d",
     "name": "20日动量",
-    "category": "momentum",
+    "category": "trend",
     "description": "过去20个交易日的涨幅排名，捕捉趋势延续效应",
+    "signal_description": "上升表示市场趋势延续、追涨意愿增强；下降表示趋势减弱、获利回吐压力增大",
     "expression": "rank(ts_delta(close, 20) / ts_shift(close, 20))",
     "tags": ["动量", "趋势"],
     "difficulty": "beginner",
@@ -17,8 +18,9 @@
   {
     "id": "momentum_accelerated",
     "name": "加速动量",
-    "category": "momentum",
+    "category": "trend",
     "description": "短期动量加速度——近5日动量强于近20日动量的股票",
+    "signal_description": "上升表示短期动能加速、市场情绪升温；下降表示动能衰减、趋势可能见顶",
     "expression": "rank(ts_delta(close, 5)/ts_shift(close, 5)) - rank(ts_delta(close, 20)/ts_shift(close, 20))",
     "tags": ["动量", "加速"],
     "difficulty": "intermediate",
@@ -30,25 +32,11 @@
     "reference": "Chan et al. (1996)"
   },
   {
-    "id": "momentum_volume_confirm",
-    "name": "量价确认动量",
-    "category": "momentum",
-    "description": "价格上涨且成交量放大确认的动量信号",
-    "expression": "rank(ts_delta(close, 10)/ts_shift(close, 10)) * rank(volume/ts_mean(volume, 20))",
-    "tags": ["动量", "量价"],
-    "difficulty": "intermediate",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 5,
-      "n_groups": 5
-    },
-    "reference": "Lee & Swaminathan (2000)"
-  },
-  {
     "id": "reversal_5d",
     "name": "5日短期反转",
-    "category": "value",
+    "category": "trend",
     "description": "过去5日跌幅最大的股票倾向于反弹，捕捉短期过度反应",
+    "signal_description": "上升表示超跌反弹需求强烈、短期恐慌后的修复；下降表示追涨情绪浓、短期过热",
     "expression": "rank(-1 * ts_delta(close, 5) / ts_shift(close, 5))",
     "tags": ["反转", "短期"],
     "difficulty": "beginner",
@@ -60,40 +48,11 @@
     "reference": "De Bondt & Thaler (1985)"
   },
   {
-    "id": "mean_reversion_60d",
-    "name": "60日均值回归",
-    "category": "value",
-    "description": "价格偏离60日均线的程度，低估值股票更具回归潜力",
-    "expression": "rank(-1 * (close - ts_mean(close, 60)) / ts_std(close, 60))",
-    "tags": ["均值回归", "价值"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 10,
-      "n_groups": 5
-    },
-    "reference": "Poterba & Summers (1988)"
-  },
-  {
-    "id": "ep_earnings_yield",
-    "name": "盈利收益率 (EP)",
-    "category": "value",
-    "description": "使用 close 近似替代的盈利收益率，低价股相对高价股的价值效应",
-    "expression": "rank(-1 * close / ts_mean(close, 60))",
-    "tags": ["价值", "估值"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Fama & French (1992)"
-  },
-  {
     "id": "volume_anomaly",
     "name": "成交量异动",
     "category": "volume",
     "description": "当日成交量相对20日均量的倍率，捕捉资金异动信号",
+    "signal_description": "上升表示资金活跃度增加、入场意愿增强；下降表示观望情绪浓、市场缩量",
     "expression": "rank(volume / ts_mean(volume, 20))",
     "tags": ["量价", "异动"],
     "difficulty": "beginner",
@@ -109,6 +68,7 @@
     "name": "量价背离",
     "category": "volume",
     "description": "价格上涨但成交量萎缩——潜在反转信号",
+    "signal_description": "上升表示量价背离加剧、潜在反转风险升高；下降表示量价配合良好、趋势健康",
     "expression": "rank(-1 * ts_corr(close, volume, 20))",
     "tags": ["量价", "背离"],
     "difficulty": "intermediate",
@@ -124,6 +84,7 @@
     "name": "换手率反转",
     "category": "volume",
     "description": "近期换手率下降的股票往往被低估，具有反转潜力",
+    "signal_description": "上升表示缩量个股被低估、资金从热门股流出；下降表示放量追高、投机情绪浓",
     "expression": "rank(-1 * ts_delta(volume/ts_mean(volume, 60), 10))",
     "tags": ["换手率", "反转"],
     "difficulty": "intermediate",
@@ -139,6 +100,7 @@
     "name": "低波动率异象",
     "category": "volatility",
     "description": "波动率最低的股票组合往往跑赢高波动股票，与传统理论相悖",
+    "signal_description": "上升表示避险偏好增强、资金涌向低波标的；下降表示追险情绪抬头、高波股受追捧",
     "expression": "rank(-1 * ts_std(close/ts_shift(close, 1) - 1, 20))",
     "tags": ["波动率", "异象"],
     "difficulty": "beginner",
@@ -154,6 +116,7 @@
     "name": "波动率均值回归",
     "category": "volatility",
     "description": "近期波动率高于长期水平时倾向回归，适合捕捉恐慌后的修复机会",
+    "signal_description": "上升表示短期恐慌消退、波动率收敛中；下降表示波动率放大、市场不确定性增加",
     "expression": "rank(-1 * (ts_std(close/ts_shift(close,1)-1, 5) - ts_std(close/ts_shift(close,1)-1, 60)))",
     "tags": ["波动率", "均值回归"],
     "difficulty": "intermediate",
@@ -169,6 +132,7 @@
     "name": "日内动量",
     "category": "technical",
     "description": "日内收盘价相对开盘价的偏离，反映日内资金方向",
+    "signal_description": "上升表示盘中买盘主导、收盘偏强；下降表示盘中抛压主导、尾盘走弱",
     "expression": "rank(ts_mean((close - open) / open, 10))",
     "tags": ["日内", "动量"],
     "difficulty": "beginner",
@@ -184,6 +148,7 @@
     "name": "价格区间突破",
     "category": "technical",
     "description": "收盘价接近20日最高价——突破型趋势信号",
+    "signal_description": "上升表示突破信号增多、市场进攻性增强；下降表示回调压力增大、前高压力显著",
     "expression": "rank((close - ts_min(low, 20)) / (ts_max(high, 20) - ts_min(low, 20) + 0.001))",
     "tags": ["突破", "趋势"],
     "difficulty": "intermediate",
@@ -199,6 +164,7 @@
     "name": "均线偏离度",
     "category": "technical",
     "description": "价格偏离均线的标准化程度，极端偏离后倾向回归",
+    "signal_description": "上升表示超卖修复空间大、均值回归机会增多；下降表示超买风险累积、回调概率上升",
     "expression": "rank(-1 * (close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
     "tags": ["均线", "超买超卖"],
     "difficulty": "beginner",
@@ -210,72 +176,13 @@
     "reference": "Bollinger Bands"
   },
   {
-    "id": "composite_momentum_volume",
-    "name": "动量+量价复合",
-    "category": "composite",
-    "description": "结合价格动量和成交量变化的多维复合因子",
-    "expression": "rank(ts_delta(close, 20)/ts_shift(close, 20)) * rank(volume/ts_mean(volume, 10)) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
-    "tags": ["复合", "动量", "量价"],
-    "difficulty": "advanced",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 5,
-      "n_groups": 5
-    },
-    "reference": "Multi-factor"
-  },
-  {
-    "id": "composite_value_low_vol",
-    "name": "价值+低波复合",
-    "category": "composite",
-    "description": "买入被低估且波动率低的股票——防守型策略",
-    "expression": "rank(-1 * close/ts_mean(close, 60)) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
-    "tags": ["复合", "价值", "低波"],
-    "difficulty": "advanced",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Fama-French + Low-Vol"
-  },
-  {
-    "id": "composite_nonlinear",
-    "name": "非线性复合因子",
-    "category": "composite",
-    "description": "使用非线性变换组合多维信号，捕捉复杂市场模式",
-    "expression": "sign_power(rank(volume/adv20), 2) * rank((close-vwap)/close) * rank(ts_std(close/ts_shift(close,1)-1, 20))",
-    "tags": ["复合", "非线性"],
-    "difficulty": "advanced",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 5,
-      "n_groups": 5
-    },
-    "reference": "Alpha101"
-  },
-  {
-    "id": "decay_weighted_corr",
-    "name": "衰减加权量价相关",
-    "category": "composite",
-    "description": "对量价相关性做衰减加权，近期数据权重更高",
-    "expression": "decay_linear(rank(ts_corr(vwap, volume, 10)), 5)",
-    "tags": ["衰减", "量价相关"],
-    "difficulty": "advanced",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 5,
-      "n_groups": 5
-    },
-    "reference": "Alpha101 #6"
-  },
-  {
-    "id": "fundamental_value_pe",
+    "id": "value_pe",
     "name": "低市盈率",
-    "category": "fundamental",
+    "category": "valuation",
     "description": "买入市盈率最低的股票，经典价值投资策略",
+    "signal_description": "上升表示低估值股被追捧、价值风格占优；下降表示成长股受青睐、估值容忍度提高",
     "expression": "rank(-1 * pe)",
-    "tags": ["价值", "估值", "基本面"],
+    "tags": ["价值", "估值"],
     "difficulty": "beginner",
     "suggested_params": {
       "universe": "hs300",
@@ -285,12 +192,13 @@
     "reference": "Fama & French (1992)"
   },
   {
-    "id": "fundamental_value_pb",
+    "id": "value_pb",
     "name": "低市净率",
-    "category": "fundamental",
+    "category": "valuation",
     "description": "买入市净率最低的股票，偏好资产折价标的",
+    "signal_description": "上升表示破净股修复、资产价值获认可；下降表示轻资产模式受追捧、账面价值被忽视",
     "expression": "rank(-1 * pb)",
-    "tags": ["价值", "估值", "基本面"],
+    "tags": ["价值", "估值"],
     "difficulty": "beginner",
     "suggested_params": {
       "universe": "hs300",
@@ -300,117 +208,13 @@
     "reference": "Fama & French (1993)"
   },
   {
-    "id": "fundamental_quality_roe",
-    "name": "高ROE质量因子",
-    "category": "fundamental",
-    "description": "买入净资产收益率最高的公司，筛选盈利能力强的优质企业",
-    "expression": "rank(roe)",
-    "tags": ["质量", "盈利", "基本面"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Novy-Marx (2013)"
-  },
-  {
-    "id": "fundamental_growth",
-    "name": "净利润增速",
-    "category": "fundamental",
-    "description": "买入净利润同比增长最快的公司，捕捉业绩加速信号",
-    "expression": "rank(yoy_ni)",
-    "tags": ["成长", "业绩", "基本面"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Chan et al. (1991)"
-  },
-  {
-    "id": "fundamental_dividend",
-    "name": "高股息率",
-    "category": "fundamental",
-    "description": "买入股息率最高的股票，稳定现金流回报策略",
-    "expression": "rank(dividend_yield)",
-    "tags": ["股息", "收益", "基本面"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Fama & French (1988)"
-  },
-  {
-    "id": "fundamental_roe_momentum",
-    "name": "质量+动量复合",
-    "category": "composite",
-    "description": "高ROE且近期价格走强的股票——基本面与技术面共振",
-    "expression": "rank(roe) * rank(ts_delta(close, 20) / ts_shift(close, 20))",
-    "tags": ["复合", "质量", "动量", "基本面"],
-    "difficulty": "intermediate",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 10,
-      "n_groups": 5
-    },
-    "reference": "Asness et al. (2019)"
-  },
-  {
-    "id": "fundamental_value_lowvol",
-    "name": "低估值+低波动",
-    "category": "composite",
-    "description": "低PE且低波动的股票——攻守兼备的防御型策略",
-    "expression": "rank(-1 * pe) * rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))",
-    "tags": ["复合", "价值", "低波", "基本面"],
-    "difficulty": "intermediate",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Fama-French + Low-Vol"
-  },
-  {
-    "id": "fundamental_growth_value",
-    "name": "GARP策略",
-    "category": "composite",
-    "description": "合理价格买成长——高增速但估值不贵的股票",
-    "expression": "rank(yoy_ni) * rank(-1 * pe)",
-    "tags": ["复合", "成长", "价值", "基本面"],
-    "difficulty": "intermediate",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Peter Lynch GARP"
-  },
-  {
-    "id": "fundamental_dupont",
-    "name": "杜邦分析因子",
-    "category": "composite",
-    "description": "结合杜邦ROE和资产周转率，筛选经营效率高的公司",
-    "expression": "rank(dupont_roe) * rank(asset_turnover)",
-    "tags": ["复合", "质量", "运营", "基本面"],
-    "difficulty": "advanced",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "DuPont Analysis"
-  },
-  {
-    "id": "fundamental_value_ps",
+    "id": "value_ps",
     "name": "低市销率",
-    "category": "fundamental",
+    "category": "valuation",
     "description": "买入市销率最低的股票，适合高增长但尚未盈利的行业",
+    "signal_description": "上升表示收入驱动估值获认可、营收增长被定价；下降表示利润导向估值回归",
     "expression": "rank(-1 * ps)",
-    "tags": ["价值", "估值", "基本面"],
+    "tags": ["价值", "估值"],
     "difficulty": "beginner",
     "suggested_params": {
       "universe": "hs300",
@@ -418,50 +222,5 @@
       "n_groups": 5
     },
     "reference": "O'Shaughnessy (2005)"
-  },
-  {
-    "id": "fundamental_quality_roa",
-    "name": "高ROA资产回报",
-    "category": "fundamental",
-    "description": "买入总资产收益率最高的公司，衡量资产利用效率",
-    "expression": "rank(roa)",
-    "tags": ["质量", "盈利", "基本面"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Novy-Marx (2013)"
-  },
-  {
-    "id": "fundamental_cashflow",
-    "name": "现金流质量",
-    "category": "fundamental",
-    "description": "经营现金流与净利润之比越高，盈利质量越好",
-    "expression": "rank(cfo_to_np)",
-    "tags": ["质量", "现金流", "基本面"],
-    "difficulty": "intermediate",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Sloan (1996)"
-  },
-  {
-    "id": "fundamental_revenue_growth",
-    "name": "营收增速",
-    "category": "fundamental",
-    "description": "买入营业收入同比增长最快的公司，捕捉收入端扩张信号",
-    "expression": "rank(yoy_or)",
-    "tags": ["成长", "营收", "基本面"],
-    "difficulty": "beginner",
-    "suggested_params": {
-      "universe": "hs300",
-      "holding_period": 20,
-      "n_groups": 5
-    },
-    "reference": "Lakonishok et al. (1994)"
   }
 ]

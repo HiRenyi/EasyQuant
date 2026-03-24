@@ -28,7 +28,7 @@ export default function AttributionChart({
   holdingPeriod,
 }: Props) {
   const [result, setResult] = useState<AttributionResult | null>(null);
-  const { positiveClass, negativeClass } = useColorMode();
+  const { positiveClass, negativeClass, isDark } = useColorMode();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,8 +55,8 @@ export default function AttributionChart({
 
   if (!result) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5 text-center">
-        <p className="text-sm text-gray-500 mb-3">分析各子因子对组合的贡献度</p>
+      <div className={`rounded-xl border border-dashed ${isDark ? "border-gray-600 bg-gray-900" : "border-gray-300 bg-white"} p-5 text-center`}>
+        <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"} mb-3`}>分析各子因子对组合的贡献度</p>
         <button
           onClick={handleRun}
           disabled={loading || factors.length < 2}
@@ -83,9 +83,9 @@ export default function AttributionChart({
   const maxIcMean = Math.max(...successFactors.map((f) => Math.abs(f.ic_mean ?? 0)), 0.001);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <h3 className="text-sm font-medium text-gray-700">因子归因分析</h3>
+    <div className={`rounded-xl border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} overflow-hidden`}>
+      <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+        <h3 className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>因子归因分析</h3>
         <button
           onClick={handleRun}
           disabled={loading}
@@ -99,7 +99,7 @@ export default function AttributionChart({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-gray-500 text-xs">
+            <tr className={`border-b ${isDark ? "border-gray-700" : "border-gray-100"} ${isDark ? "text-gray-400" : "text-gray-500"} text-xs`}>
               <th className="px-3 py-2 text-left">因子</th>
               <th className="px-3 py-2 text-center">IC均值</th>
               <th className="px-3 py-2 text-center">IC_IR</th>
@@ -109,7 +109,7 @@ export default function AttributionChart({
               <th className="px-3 py-2 text-left w-32">IC 强度</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className={`divide-y ${isDark ? "divide-gray-700" : "divide-gray-50"}`}>
             {result.factors.map((f, i) => (
               <tr key={i} className={f.status === "failed" ? "text-gray-400" : ""}>
                 <td className="px-3 py-2 text-xs font-medium">{f.label}</td>
@@ -122,7 +122,7 @@ export default function AttributionChart({
                     <td className="px-3 py-2 text-center text-xs">{pct(f.turnover ?? 0)}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
-                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`flex-1 h-2 ${isDark ? "bg-gray-800" : "bg-gray-100"} rounded-full overflow-hidden`}>
                           <div
                             className={`h-full rounded-full ${(f.ic_mean ?? 0) >= 0 ? "bg-emerald-500" : "bg-red-400"}`}
                             style={{ width: `${Math.min(Math.abs(f.ic_mean ?? 0) / maxIcMean * 100, 100)}%` }}
@@ -142,8 +142,8 @@ export default function AttributionChart({
 
       {/* Marginal contributions */}
       {result.contributions.length > 0 && (
-        <div className="px-4 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-500 mb-2">边际 IC 贡献（Leave-One-Out）</p>
+        <div className={`px-4 py-3 border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-2`}>边际 IC 贡献（Leave-One-Out）</p>
           <div className="space-y-1.5">
             {result.contributions.map((c, i) => {
               const maxContrib = Math.max(
@@ -154,9 +154,9 @@ export default function AttributionChart({
               const isPositive = c.marginal_ic >= 0;
               return (
                 <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="w-24 truncate text-gray-600">{c.label}</span>
+                  <span className={`w-24 truncate ${isDark ? "text-gray-400" : "text-gray-600"}`}>{c.label}</span>
                   <div className="flex-1 flex items-center gap-1">
-                    <div className="flex-1 h-3 bg-gray-50 rounded relative">
+                    <div className={`flex-1 h-3 ${isDark ? "bg-gray-800" : "bg-gray-50"} rounded relative`}>
                       <div
                         className={`absolute top-0 h-full rounded ${isPositive ? "bg-emerald-400" : "bg-red-400"}`}
                         style={{
@@ -183,8 +183,8 @@ export default function AttributionChart({
 
       {/* IC Correlation Matrix */}
       {result.ic_correlation && (
-        <div className="px-4 py-3 border-t border-gray-100">
-          <p className="text-xs text-gray-500 mb-2">IC 相关性矩阵</p>
+        <div className={`px-4 py-3 border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-2`}>IC 相关性矩阵</p>
           <CorrelationMatrix
             labels={Object.keys(result.ic_correlation)}
             matrix={result.ic_correlation}
@@ -193,7 +193,7 @@ export default function AttributionChart({
       )}
 
       {error && (
-        <div className="px-4 py-2 text-xs text-red-500 border-t border-gray-100">{error}</div>
+        <div className={`px-4 py-2 text-xs text-red-500 border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>{error}</div>
       )}
     </div>
   );

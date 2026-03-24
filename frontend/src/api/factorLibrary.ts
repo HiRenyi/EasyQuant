@@ -57,7 +57,8 @@ export async function saveFactor(payload: SaveFactorPayload): Promise<SavedFacto
 }
 
 export async function fetchFactors(): Promise<SavedFactor[]> {
-  const res = await authFetch(`${BASE}/api/v1/factor-library`);
+  const url = `${BASE}/api/v1/factor-library`;
+  const res = await authFetch(url);
   if (!res.ok) throw new Error(`获取因子库失败 (${res.status})`);
   const data = await res.json();
   return data.factors;

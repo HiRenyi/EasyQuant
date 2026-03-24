@@ -18,13 +18,13 @@ function FactorItem({
 }) {
   const m = factor.metrics;
   const bs = factor.backtest_summary as Record<string, number> | null;
-  const { positiveClass, negativeClass } = useColorMode();
+  const { isDark, positiveClass, negativeClass } = useColorMode();
 
   return (
-    <div className="group rounded-lg border border-gray-150 bg-white px-3 py-2.5 hover:shadow-sm transition-shadow">
+    <div className={`group rounded-lg border border-gray-150 ${isDark ? "bg-gray-900" : "bg-white"} px-3 py-2.5 hover:shadow-sm transition-shadow`}>
       {/* Expression — single line truncated */}
       <div className="flex items-center gap-2 min-w-0">
-        <code className="text-xs text-blue-700 font-mono truncate flex-1" title={factor.expression}>
+        <code className={`text-xs ${isDark ? "text-amber-400" : "text-blue-700"} font-mono truncate flex-1`} title={factor.expression}>
           {factor.expression}
         </code>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -51,8 +51,8 @@ function FactorItem({
 
       {/* Compact metrics row */}
       {m && (
-        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-500">
-          <span>S <span className="text-gray-700 font-medium">{m.sharpe.toFixed(2)}</span></span>
+        <div className={`flex items-center gap-2 mt-1.5 text-[11px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+          <span>S <span className={`${isDark ? "text-gray-300" : "text-gray-700"} font-medium`}>{m.sharpe.toFixed(2)}</span></span>
           <span className="text-gray-200">|</span>
           <span className={m.cagr >= 0 ? positiveClass : negativeClass}>{pct(m.cagr)}</span>
           <span className="text-gray-200">|</span>
@@ -80,11 +80,13 @@ function FactorItem({
 }
 
 export default function FactorLibrary() {
+  const { isDark } = useColorMode();
   const [factors, setFactors] = useState<SavedFactor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       const data = await fetchFactors();
       setFactors(data);
     } catch (e) {
@@ -113,7 +115,7 @@ export default function FactorLibrary() {
     return (
       <div className="text-center py-12">
         <Star className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-        <p className="text-xs text-gray-500">因子库为空</p>
+        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>因子库为空</p>
         <p className="text-[10px] text-gray-400 mt-1">回测结果页点击「收藏」保存因子</p>
       </div>
     );

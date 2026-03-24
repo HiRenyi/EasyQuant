@@ -19,7 +19,7 @@ const METHODS = [
 ];
 
 export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions }: Props) {
-  const { positiveClass, negativeClass } = useColorMode();
+  const { positiveClass, negativeClass, isDark } = useColorMode();
   const [factors, setFactors] = useState<FactorItem[]>([
     { expression: "", weight: 1.0 },
     { expression: "", weight: 1.0 },
@@ -134,7 +134,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                 value={f.expression}
                 onChange={(e) => updateFactor(i, "expression", e.target.value)}
                 placeholder="输入因子表达式，如 rank(close/ts_mean(close, 20))"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200 bg-white text-gray-900"} px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 ${isDark ? "focus:ring-amber-500/20 focus:border-amber-500" : "focus:ring-blue-500/20 focus:border-blue-500"}`}
                 list={savedExpressions ? `saved-expr-${i}` : undefined}
               />
               {savedExpressions && savedExpressions.length > 0 && (
@@ -153,7 +153,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                 step={0.1}
                 value={f.weight}
                 onChange={(e) => updateFactor(i, "weight", Number(e.target.value))}
-                className="w-16 rounded-lg border border-gray-200 px-2 py-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className={`w-16 rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200 bg-white"} px-2 py-2 text-xs text-center focus:outline-none focus:ring-2 ${isDark ? "focus:ring-amber-500/20" : "focus:ring-blue-500/20"}`}
                 title="权重"
               />
               <span className="text-[10px] text-gray-400 w-8">
@@ -176,7 +176,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
         <button
           onClick={addFactor}
           disabled={factors.length >= 10}
-          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+          className={`flex items-center gap-1.5 text-xs ${isDark ? "text-amber-400 hover:text-amber-300" : "text-blue-600 hover:text-blue-700"} disabled:opacity-50`}
         >
           <Plus className="h-3.5 w-3.5" />
           添加因子 ({factors.length}/10)
@@ -197,12 +197,12 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
           onClick={() => setShowPicker(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[70vh] flex flex-col"
+            className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[70vh] flex flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className={`flex items-center justify-between px-5 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">从因子库选择</h3>
+                <h3 className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>从因子库选择</h3>
                 <p className="text-[11px] text-gray-400 mt-0.5">
                   勾选要加入组合的因子{pickerSelected.size > 0 && `（已选 ${pickerSelected.size} 个）`}
                 </p>
@@ -210,7 +210,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
               <button
                 onClick={confirmPicker}
                 disabled={pickerSelected.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${isDark ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"} text-white text-xs font-medium disabled:opacity-50 transition-colors`}
               >
                 <Check className="h-3.5 w-3.5" />
                 确认添加
@@ -223,8 +223,8 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                 </div>
               ) : libraryFactors.length === 0 ? (
                 <div className="text-center py-8">
-                  <Star className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500">因子库为空</p>
+                  <Star className={`h-8 w-8 ${isDark ? "text-gray-600" : "text-gray-200"} mx-auto mb-2`} />
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>因子库为空</p>
                   <p className="text-[10px] text-gray-400 mt-1">先在单因子回测页收藏因子</p>
                 </div>
               ) : (
@@ -239,20 +239,20 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                       disabled={alreadyInList}
                       className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
                         alreadyInList
-                          ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                          ? `${isDark ? "border-gray-700 bg-gray-800" : "border-gray-100 bg-gray-50"} opacity-50 cursor-not-allowed`
                           : selected
-                          ? "border-blue-300 bg-blue-50 ring-1 ring-blue-200"
-                          : "border-gray-150 bg-white hover:border-blue-200 hover:shadow-sm"
+                          ? `${isDark ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30" : "border-blue-300 bg-blue-50 ring-1 ring-blue-200"}`
+                          : `${isDark ? "border-gray-700 bg-gray-800 hover:border-amber-500/50 hover:shadow-sm" : "border-gray-150 bg-white hover:border-blue-200 hover:shadow-sm"}`
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                          alreadyInList ? "border-gray-300 bg-gray-200" :
-                          selected ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                          alreadyInList ? `${isDark ? "border-gray-600 bg-gray-700" : "border-gray-300 bg-gray-200"}` :
+                          selected ? `${isDark ? "border-amber-500 bg-amber-500" : "border-blue-500 bg-blue-500"}` : `${isDark ? "border-gray-600" : "border-gray-300"}`
                         }`}>
                           {(selected || alreadyInList) && <Check className="h-3 w-3 text-white" />}
                         </div>
-                        <code className="text-xs text-blue-700 font-mono truncate flex-1" title={f.expression}>
+                        <code className={`text-xs ${isDark ? "text-amber-400" : "text-blue-700"} font-mono truncate flex-1`} title={f.expression}>
                           {f.expression}
                         </code>
                         {alreadyInList && (
@@ -260,13 +260,13 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
                         )}
                       </div>
                       {m && (
-                        <div className="flex items-center gap-2 mt-1 ml-6 text-[11px] text-gray-500">
-                          <span>Sharpe <span className="font-medium text-gray-700">{m.sharpe.toFixed(2)}</span></span>
-                          <span className="text-gray-200">|</span>
+                        <div className={`flex items-center gap-2 mt-1 ml-6 text-[11px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                          <span>Sharpe <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{m.sharpe.toFixed(2)}</span></span>
+                          <span className={isDark ? "text-gray-600" : "text-gray-200"}>|</span>
                           <span className={m.cagr >= 0 ? positiveClass : negativeClass}>
                             {(m.cagr * 100).toFixed(1)}%
                           </span>
-                          <span className="text-gray-200">|</span>
+                          <span className={isDark ? "text-gray-600" : "text-gray-200"}>|</span>
                           <span className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</span>
                         </div>
                       )}
@@ -287,8 +287,8 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
             onClick={() => setMethod(m.value)}
             className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
               method === m.value
-                ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
-                : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                ? `${isDark ? "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/30" : "bg-blue-50 text-blue-700 ring-1 ring-blue-200"}`
+                : `${isDark ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`
             }`}
             title={m.desc}
           >
@@ -303,7 +303,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
         <select
           value={settings.universe}
           onChange={(e) => setSettings((s) => ({ ...s, universe: e.target.value }))}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+          className={`rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200"} px-2 py-1.5 text-xs`}
         >
           <option value="small_scale">small_scale</option>
           <option value="hs300">沪深300</option>
@@ -315,7 +315,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
           max={20}
           value={settings.n_groups}
           onChange={(e) => setSettings((s) => ({ ...s, n_groups: Number(e.target.value) }))}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+          className={`rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200"} px-2 py-1.5 text-xs`}
           title="分组数"
         />
         <input
@@ -324,7 +324,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
           max={60}
           value={settings.holding_period}
           onChange={(e) => setSettings((s) => ({ ...s, holding_period: Number(e.target.value) }))}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+          className={`rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200"} px-2 py-1.5 text-xs`}
           title="持仓周期"
         />
       </div>
@@ -333,7 +333,7 @@ export default function CompositeBuilder({ onSubmit, isLoading, savedExpressions
       <button
         onClick={handleSubmit}
         disabled={isLoading || factors.filter((f) => f.expression.trim()).length < 2}
-        className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className={`w-full flex items-center justify-center gap-2 rounded-lg ${isDark ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"} px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
       >
         {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
         {isLoading ? "组合回测中..." : "开始组合回测"}

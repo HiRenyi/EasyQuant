@@ -1,4 +1,4 @@
-"""Factor strategy templates — curated factor library."""
+"""Factor templates — curated factor library."""
 
 import json
 from pathlib import Path
@@ -20,10 +20,10 @@ def _load_templates() -> list[dict]:
 
 @router.get("/templates")
 async def list_templates(
-    category: str | None = Query(None, description="按类别筛选: momentum/value/volume/volatility/technical/composite"),
+    category: str | None = Query(None, description="按类别筛选: trend/volume/volatility/technical/valuation"),
     difficulty: str | None = Query(None, description="按难度筛选: beginner/intermediate/advanced"),
 ):
-    """获取因子策略模板列表。"""
+    """获取因子模板列表。"""
     templates = _load_templates()
     result = templates
 

@@ -36,6 +36,7 @@ async def create_session(
         id=uuid.uuid4(),
         user_id=user.id,
         name=req.name,
+        market="a_share",
     )
     db.add(session)
     await db.commit()
@@ -43,6 +44,7 @@ async def create_session(
     return {
         "id": str(session.id),
         "name": session.name,
+        "market": session.market,
         "created_at": session.created_at.isoformat() if session.created_at else None,
         "updated_at": session.updated_at.isoformat() if session.updated_at else None,
     }
@@ -53,7 +55,7 @@ async def list_sessions(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """列出当前用户所有会话，按 updated_at 降序。"""
+    """列出当前用户的会话，按 updated_at 降序。"""
     result = await db.execute(
         select(Session)
         .where(Session.user_id == user.id)
@@ -65,6 +67,7 @@ async def list_sessions(
             {
                 "id": str(s.id),
                 "name": s.name,
+                "market": s.market,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
             }

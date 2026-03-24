@@ -12,7 +12,7 @@ function pct(n: number): string {
   return (n * 100).toFixed(2) + "%";
 }
 
-function SignalBar({ value }: { value: number }) {
+function SignalBar({ value, isDark }: { value: number; isDark: boolean }) {
   const width = Math.min(Math.max(value * 100, 0), 100);
   const color =
     width >= 80
@@ -22,10 +22,10 @@ function SignalBar({ value }: { value: number }) {
         : "bg-gray-400";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className={`flex-1 h-2 ${isDark ? "bg-gray-800" : "bg-gray-100"} rounded-full overflow-hidden`}>
         <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
       </div>
-      <span className="text-xs text-gray-600 w-12 text-right tabular-nums">{pct(value)}</span>
+      <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"} w-12 text-right tabular-nums`}>{pct(value)}</span>
     </div>
   );
 }
@@ -66,7 +66,7 @@ function generateStockInterpretation(
 }
 
 export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) {
-  const { positiveClass, negativeClass } = useColorMode();
+  const { positiveClass, negativeClass, isDark } = useColorMode();
   const [leaderboardOpen, setLeaderboardOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -89,13 +89,13 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
   return (
     <div className="space-y-4">
       {/* Area A — Signal Strength Leaderboard */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className={`rounded-xl border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} overflow-hidden`}>
         <button
           onClick={() => setLeaderboardOpen(!leaderboardOpen)}
-          className="w-full px-4 py-3 flex items-center justify-between border-b border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+          className={`w-full px-4 py-3 flex items-center justify-between border-b ${isDark ? "border-gray-700 bg-gray-800 hover:bg-gray-700" : "border-gray-100 bg-gray-50/50 hover:bg-gray-50"} transition-colors`}
         >
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-medium text-gray-700">
+            <h4 className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
               因子信号强度 Top 10
             </h4>
             <span className="text-xs text-gray-400">
@@ -116,28 +116,28 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
         {leaderboardOpen && (
           <div className="max-h-[520px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white z-10">
-                <tr className="border-b border-gray-100">
-                  <th className="px-4 py-2.5 text-left font-medium text-gray-500 w-12">#</th>
-                  <th className="px-4 py-2.5 text-left font-medium text-gray-500">股票代码</th>
-                  <th className="px-4 py-2.5 font-medium text-gray-500 text-left" style={{ minWidth: 160 }}>
+              <thead className={`sticky top-0 ${isDark ? "bg-gray-900" : "bg-white"} z-10`}>
+                <tr className={`border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+                  <th className={`px-4 py-2.5 text-left font-medium ${isDark ? "text-gray-400" : "text-gray-500"} w-12`}>#</th>
+                  <th className={`px-4 py-2.5 text-left font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>股票代码</th>
+                  <th className={`px-4 py-2.5 font-medium ${isDark ? "text-gray-400" : "text-gray-500"} text-left`} style={{ minWidth: 160 }}>
                     信号强度
                   </th>
-                  <th className="px-4 py-2.5 text-right font-medium text-gray-500">所在分组</th>
+                  <th className={`px-4 py-2.5 text-right font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>所在分组</th>
                 </tr>
               </thead>
               <tbody>
                 {top10.map((s, i) => (
                   <tr
                     key={s.stock_code}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50"
+                    className={`border-b ${isDark ? "border-gray-800 last:border-0 hover:bg-gray-800/50" : "border-gray-50 last:border-0 hover:bg-gray-50/50"}`}
                   >
                     <td className="px-4 py-2 text-gray-400 text-xs">{i + 1}</td>
-                    <td className="px-4 py-2 font-mono text-gray-700">{s.stock_code}</td>
+                    <td className={`px-4 py-2 font-mono ${isDark ? "text-gray-300" : "text-gray-700"}`}>{s.stock_code}</td>
                     <td className="px-4 py-2">
-                      <SignalBar value={s.factor_rank} />
+                      <SignalBar value={s.factor_rank} isDark={isDark} />
                     </td>
-                    <td className="px-4 py-2 text-right text-gray-500">{s.group_label}</td>
+                    <td className={`px-4 py-2 text-right ${isDark ? "text-gray-400" : "text-gray-500"}`}>{s.group_label}</td>
                   </tr>
                 ))}
               </tbody>
@@ -147,15 +147,15 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
       </div>
 
       {/* Area B — Individual Stock Factor Profile */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">个股因子画像</h4>
+      <div className={`rounded-xl border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} overflow-hidden`}>
+        <div className={`px-4 py-3 border-b ${isDark ? "border-gray-700 bg-gray-800" : "border-gray-100 bg-gray-50/50"}`}>
+          <h4 className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-2`}>个股因子画像</h4>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="输入股票代码查看 AI 因子画像，如 sh.600519"
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white placeholder-gray-400"
+            className={`w-full px-3 py-2 text-sm border ${isDark ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500 focus:ring-amber-500/20 focus:border-amber-400" : "border-gray-200 bg-white placeholder-gray-400 focus:ring-blue-500/20 focus:border-blue-400"} rounded-lg focus:outline-none focus:ring-2`}
           />
         </div>
 
@@ -163,24 +163,24 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
           <div className="px-4 py-4 space-y-4">
             {/* Factor Score */}
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">因子打分</p>
+              <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5`}>因子打分</p>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
-                  <SignalBar value={searchResult.factor_rank} />
+                  <SignalBar value={searchResult.factor_rank} isDark={isDark} />
                 </div>
-                <span className="text-sm font-medium text-gray-700">
+                <span className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                   {searchResult.group_label}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mt-1`}>
                 信号强度 {pct(searchResult.factor_rank)}，位于 {searchResult.group_label} 组
               </p>
             </div>
 
             {/* AI Signal Interpretation */}
-            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5">
-              <p className="text-xs font-medium text-blue-600 mb-1">信号解读</p>
-              <p className="text-xs text-gray-600 leading-relaxed">
+            <div className={`rounded-lg ${isDark ? "bg-amber-500/10 border border-amber-500/20" : "bg-blue-50 border border-blue-100"} px-3 py-2.5`}>
+              <p className={`text-xs font-medium ${isDark ? "text-amber-400" : "text-blue-600"} mb-1`}>信号解读</p>
+              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"} leading-relaxed`}>
                 {generateStockInterpretation(
                   searchResult,
                   data.flipped,
@@ -192,8 +192,8 @@ export default function StockFactorPanel({ data, topGroupAnnualReturn }: Props) 
 
             {/* Return Contribution */}
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">回测期收益</p>
-              <p className="text-sm text-gray-600">
+              <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-500"} mb-1`}>回测期收益</p>
+              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                 累计{" "}
                 <span className={searchResult.period_return >= 0 ? `${positiveClass} font-medium` : `${negativeClass} font-medium`}>
                   {searchResult.period_return >= 0 ? "+" : ""}{pct(searchResult.period_return)}

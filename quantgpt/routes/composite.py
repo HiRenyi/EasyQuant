@@ -146,6 +146,29 @@ def _run_composite_task(task_id: str, req: CompositeBacktestRequest, user_id: st
             task["error"] = str(e)
             return
 
+        # Enrich with fundamental data if any factor uses fundamental vars
+        from ..fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+        all_fund_vars: set[str] = set()
+        for f in req.factors:
+            all_fund_vars |= detect_fundamental_vars(f.expression)
+        if all_fund_vars:
+            task["status"] = "fetching_fundamentals"
+            logger.info(f"[{task_id}] composite: enriching with fundamentals: {all_fund_vars}")
+            rq_result = enrich_with_fundamentals_rq(market_df, all_fund_vars, stock_codes, req.start_date, req.end_date)
+            if rq_result is not None:
+                market_df = rq_result
+            else:
+                fetcher = FundamentalDataFetcher()
+                non_div = all_fund_vars - {"dividend_yield"}
+                if non_div:
+                    qdf = fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div)
+                    if qdf is not None and len(qdf) > 0:
+                        market_df = fetcher.align_to_daily(qdf, market_df, non_div)
+                if "dividend_yield" in all_fund_vars:
+                    div_df = fetcher.fetch_dividend_data(stock_codes, req.start_date, req.end_date)
+                    if div_df is not None and len(div_df) > 0:
+                        market_df = fetcher.align_dividends_to_daily(div_df, market_df)
+
         task["status"] = "backtesting"
         factors_list = [f.model_dump() for f in req.factors]
         result = run_composite_backtest(
@@ -233,9 +256,26 @@ async def factor_correlation(
     from ..composite import compute_factor_correlation
 
     try:
-        market_df, _ = fetch_market_data(req.universe, req.start_date, req.end_date)
+        market_df, stock_codes = fetch_market_data(req.universe, req.start_date, req.end_date)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Enrich with fundamentals if needed
+    from ..fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+    all_fund_vars: set[str] = set()
+    for f in req.factors:
+        all_fund_vars |= detect_fundamental_vars(f.expression)
+    if all_fund_vars:
+        rq_result = enrich_with_fundamentals_rq(market_df, all_fund_vars, stock_codes, req.start_date, req.end_date)
+        if rq_result is not None:
+            market_df = rq_result
+        else:
+            fetcher = FundamentalDataFetcher()
+            non_div = all_fund_vars - {"dividend_yield"}
+            if non_div:
+                qdf = fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div)
+                if qdf is not None and len(qdf) > 0:
+                    market_df = fetcher.align_to_daily(qdf, market_df, non_div)
 
     factors_list = [f.model_dump() for f in req.factors]
     correlation = compute_factor_correlation(market_df, factors_list)
@@ -251,9 +291,28 @@ async def factor_attribution(
     from ..attribution import compute_factor_attribution
 
     try:
-        market_df, _ = fetch_market_data(req.universe, req.start_date, req.end_date)
+        market_df, stock_codes = fetch_market_data(req.universe, req.start_date, req.end_date)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Enrich with fundamentals if needed
+    from ..fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+    all_fund_vars: set[str] = set()
+    for f in req.factors:
+        all_fund_vars |= detect_fundamental_vars(f.expression)
+    if req.composite_expression:
+        all_fund_vars |= detect_fundamental_vars(req.composite_expression)
+    if all_fund_vars:
+        rq_result = enrich_with_fundamentals_rq(market_df, all_fund_vars, stock_codes, req.start_date, req.end_date)
+        if rq_result is not None:
+            market_df = rq_result
+        else:
+            fetcher = FundamentalDataFetcher()
+            non_div = all_fund_vars - {"dividend_yield"}
+            if non_div:
+                qdf = fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div)
+                if qdf is not None and len(qdf) > 0:
+                    market_df = fetcher.align_to_daily(qdf, market_df, non_div)
 
     factors_list = [f.model_dump() for f in req.factors]
     result = compute_factor_attribution(

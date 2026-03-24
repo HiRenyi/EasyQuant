@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Task, IterationCandidate } from "../types/backtest";
 import { getReportUrl } from "../api/client";
 import { pct, num } from "../utils/format";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 interface Props {
   parentTaskId: string;
@@ -11,12 +12,22 @@ interface Props {
   onSelectCandidate: (iterTaskId: string, index: number) => void;
 }
 
-const GRADE_COLORS: Record<string, string> = {
-  A: "bg-emerald-100 text-emerald-700",
-  B: "bg-blue-100 text-blue-700",
-  C: "bg-amber-100 text-amber-700",
-  D: "bg-red-100 text-red-700",
-};
+function getGradeColors(isDark: boolean): Record<string, string> {
+  return {
+    A: isDark
+      ? "bg-emerald-500/10 text-emerald-400"
+      : "bg-emerald-100 text-emerald-700",
+    B: isDark
+      ? "bg-amber-500/10 text-amber-400"
+      : "bg-blue-100 text-blue-700",
+    C: isDark
+      ? "bg-amber-500/10 text-amber-400"
+      : "bg-amber-100 text-amber-700",
+    D: isDark
+      ? "bg-red-500/10 text-red-400"
+      : "bg-red-100 text-red-700",
+  };
+}
 
 function CandidateRow({
   candidate,
@@ -32,6 +43,8 @@ function CandidateRow({
   onSelect: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { isDark } = useColorMode();
+  const GRADE_COLORS = getGradeColors(isDark);
 
   if (candidate.status === "failed") {
     return (
@@ -52,7 +65,7 @@ function CandidateRow({
   return (
     <>
       <tr
-        className={`cursor-pointer transition-colors ${isBest ? "bg-emerald-50" : "hover:bg-gray-50"} ${isSelected ? "ring-2 ring-inset ring-blue-400" : ""}`}
+        className={`cursor-pointer transition-colors ${isBest ? (isDark ? "bg-emerald-500/10" : "bg-emerald-50") : (isDark ? "hover:bg-gray-800" : "hover:bg-gray-50")} ${isSelected ? "ring-2 ring-inset ring-blue-400" : ""}`}
         onClick={() => setExpanded(!expanded)}
       >
         <td className="px-3 py-2 text-center text-sm">
@@ -76,7 +89,9 @@ function CandidateRow({
             className={`text-xs px-3 py-1 rounded-md font-medium transition-colors ${
               isSelected
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                : isDark
+                  ? "bg-gray-800 text-gray-300 hover:bg-amber-500/10 hover:text-amber-400"
+                  : "bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700"
             }`}
           >
             {isSelected ? "已选择" : "选择此因子"}
@@ -84,35 +99,35 @@ function CandidateRow({
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-gray-50">
+        <tr className={isDark ? "bg-gray-800" : "bg-gray-50"}>
           <td colSpan={7} className="px-4 py-3">
             <div className="grid grid-cols-4 gap-3 text-xs">
               <div>
-                <span className="text-gray-500">Sharpe:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>Sharpe:</span>{" "}
                 <span className="font-medium">{num(candidate.report_metrics.sharpe)}</span>
               </div>
               <div>
-                <span className="text-gray-500">CAGR:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>CAGR:</span>{" "}
                 <span className="font-medium">{pct(candidate.report_metrics.cagr)}</span>
               </div>
               <div>
-                <span className="text-gray-500">最大回撤:</span>{" "}
-                <span className="font-medium text-red-600">{pct(candidate.report_metrics.max_drawdown)}</span>
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>最大回撤:</span>{" "}
+                <span className={`font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>{pct(candidate.report_metrics.max_drawdown)}</span>
               </div>
               <div>
-                <span className="text-gray-500">胜率:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>胜率:</span>{" "}
                 <span className="font-medium">{pct(candidate.report_metrics.win_rate)}</span>
               </div>
               <div>
-                <span className="text-gray-500">价差:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>价差:</span>{" "}
                 <span className="font-medium">{pct(candidate.backtest_summary.spread)}</span>
               </div>
               <div>
-                <span className="text-gray-500">波动率:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>波动率:</span>{" "}
                 <span className="font-medium">{pct(candidate.report_metrics.volatility)}</span>
               </div>
               <div>
-                <span className="text-gray-500">Sortino:</span>{" "}
+                <span className={isDark ? "text-gray-400" : "text-gray-500"}>Sortino:</span>{" "}
                 <span className="font-medium">{num(candidate.report_metrics.sortino)}</span>
               </div>
               <div>
@@ -120,13 +135,13 @@ function CandidateRow({
                   href={getReportUrl(candidate.report_url)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-blue-600 hover:underline"
+                  className={isDark ? "text-amber-400 hover:underline" : "text-blue-600 hover:underline"}
                 >
                   查看报告
                 </a>
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 font-mono break-all">
+            <div className={`mt-2 text-xs font-mono break-all ${isDark ? "text-gray-400" : "text-gray-500"}`}>
               {candidate.expression}
             </div>
           </td>
@@ -145,6 +160,8 @@ export default function IterationPanel({
 }: Props) {
   const [direction, setDirection] = useState("");
   const [showDirectionInput, setShowDirectionInput] = useState(false);
+  const { isDark } = useColorMode();
+  const GRADE_COLORS = getGradeColors(isDark);
 
   const DIRECTION_PRESETS = [
     "加入量价信息",
@@ -157,8 +174,8 @@ export default function IterationPanel({
   // Trigger state — no iteration started
   if (!iterationTask && !isIterating) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5">
-        <p className="text-sm text-gray-500 mb-3 text-center">对当前结果不满意？尝试让 AI 自动优化因子</p>
+      <div className={`rounded-xl border border-dashed ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-300 bg-white"} p-5`}>
+        <p className={`text-sm mb-3 text-center ${isDark ? "text-gray-400" : "text-gray-500"}`}>对当前结果不满意？尝试让 AI 自动优化因子</p>
 
         {showDirectionInput && (
           <div className="mb-3 space-y-2">
@@ -170,8 +187,12 @@ export default function IterationPanel({
                   onClick={() => setDirection(preset)}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                     direction === preset
-                      ? "bg-blue-50 border-blue-300 text-blue-700"
-                      : "border-gray-200 text-gray-500 hover:border-blue-200 hover:text-blue-600"
+                      ? isDark
+                        ? "bg-amber-500/10 border-amber-500 text-amber-400"
+                        : "bg-blue-50 border-blue-300 text-blue-700"
+                      : isDark
+                        ? "border-gray-700 text-gray-400 hover:border-amber-500 hover:text-amber-400"
+                        : "border-gray-200 text-gray-500 hover:border-blue-200 hover:text-blue-600"
                   }`}
                 >
                   {preset}
@@ -183,7 +204,11 @@ export default function IterationPanel({
               value={direction}
               onChange={(e) => setDirection(e.target.value)}
               placeholder="输入自定义迭代方向，如：加入量价信息、增加低波暴露..."
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+                isDark
+                  ? "border-gray-700 bg-gray-800 text-gray-100 focus:ring-amber-500/20 focus:border-amber-500"
+                  : "border-gray-200 focus:ring-blue-500/20 focus:border-blue-500"
+              }`}
             />
           </div>
         )}
@@ -191,7 +216,7 @@ export default function IterationPanel({
         <div className="flex items-center justify-center gap-2">
           <button
             onClick={() => setShowDirectionInput(!showDirectionInput)}
-            className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+            className={`text-xs transition-colors ${isDark ? "text-gray-400 hover:text-amber-400" : "text-gray-400 hover:text-blue-600"}`}
           >
             {showDirectionInput ? "收起方向设置" : "指定迭代方向"}
           </button>
@@ -212,12 +237,12 @@ export default function IterationPanel({
   // Error state
   if (iterationTask?.status === "failed") {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-        <p className="text-sm font-medium text-red-700">迭代优化失败</p>
-        <p className="mt-1 text-sm text-red-600">{iterationTask.error}</p>
+      <div className={`rounded-xl border ${isDark ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"} p-4`}>
+        <p className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-700"}`}>迭代优化失败</p>
+        <p className={`mt-1 text-sm ${isDark ? "text-red-400" : "text-red-600"}`}>{iterationTask.error}</p>
         <button
           onClick={() => onIterate(parentTaskId)}
-          className="mt-3 text-xs text-red-600 hover:text-red-800 underline"
+          className={`mt-3 text-xs underline ${isDark ? "text-red-400 hover:text-red-300" : "text-red-600 hover:text-red-800"}`}
         >
           重试
         </button>
@@ -233,14 +258,14 @@ export default function IterationPanel({
     const progressPct = total > 0 ? (done / total) * 100 : 0;
 
     return (
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+      <div className={`rounded-xl border ${isDark ? "border-amber-500/30 bg-amber-500/10" : "border-blue-200 bg-blue-50"} p-5`}>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-blue-800">迭代优化进行中...</p>
-          <span className="text-xs text-blue-600">{done} / {total} 候选完成</span>
+          <p className={`text-sm font-medium ${isDark ? "text-amber-400" : "text-blue-800"}`}>迭代优化进行中...</p>
+          <span className={`text-xs ${isDark ? "text-amber-400" : "text-blue-600"}`}>{done} / {total} 候选完成</span>
         </div>
-        <div className="w-full bg-blue-200 rounded-full h-2">
+        <div className={`w-full rounded-full h-2 ${isDark ? "bg-amber-500/20" : "bg-blue-200"}`}>
           <div
-            className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+            className={`h-2 rounded-full transition-all duration-500 ${isDark ? "bg-amber-500" : "bg-blue-600"}`}
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -249,7 +274,7 @@ export default function IterationPanel({
             {iterationTask.candidates
               .filter((c) => c.status === "success")
               .map((c, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs text-blue-700">
+                <div key={i} className={`flex items-center gap-2 text-xs ${isDark ? "text-amber-400" : "text-blue-700"}`}>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${GRADE_COLORS[c.grade]}`}>
                     {c.grade}
                   </span>
@@ -273,11 +298,11 @@ export default function IterationPanel({
 
     if (candidates.length === 0) {
       return (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-amber-700">所有候选因子生成失败，请重试</p>
+        <div className={`rounded-xl border ${isDark ? "border-amber-500/30 bg-amber-500/10" : "border-amber-200 bg-amber-50"} p-4`}>
+          <p className={`text-sm ${isDark ? "text-amber-400" : "text-amber-700"}`}>所有候选因子生成失败，请重试</p>
           <button
             onClick={() => onIterate(parentTaskId)}
-            className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline"
+            className={`mt-2 text-xs underline ${isDark ? "text-amber-400 hover:text-amber-300" : "text-amber-600 hover:text-amber-800"}`}
           >
             重新迭代
           </button>
@@ -286,12 +311,12 @@ export default function IterationPanel({
     }
 
     return (
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <h3 className="text-sm font-medium text-gray-700">迭代优化结果</h3>
+      <div className={`rounded-xl border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} overflow-hidden`}>
+        <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+          <h3 className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>迭代优化结果</h3>
           <button
             onClick={() => onIterate(parentTaskId)}
-            className="text-xs text-blue-600 hover:text-blue-800"
+            className={`text-xs ${isDark ? "text-amber-400 hover:text-amber-300" : "text-blue-600 hover:text-blue-800"}`}
           >
             再次迭代
           </button>
@@ -299,7 +324,7 @@ export default function IterationPanel({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-gray-500">
+              <tr className={`border-b ${isDark ? "border-gray-700 text-gray-400" : "border-gray-100 text-gray-500"}`}>
                 <th className="px-3 py-2 text-center w-12">#</th>
                 <th className="px-3 py-2 text-left">表达式</th>
                 <th className="px-3 py-2 text-center w-16">评分</th>
@@ -309,7 +334,7 @@ export default function IterationPanel({
                 <th className="px-3 py-2 text-center w-28">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className={`divide-y ${isDark ? "divide-gray-800" : "divide-gray-50"}`}>
               {candidates.map((c, i) => (
                 <CandidateRow
                   key={i}

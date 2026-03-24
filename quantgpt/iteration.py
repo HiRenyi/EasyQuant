@@ -411,6 +411,7 @@ def _generate_single_candidate(
             benchmark_returns=bm_returns,
             title="Factor Top-Group Backtest",
             output_dir=str(user_report_dir),
+            periods_per_year=252,
         )
         report_filename = Path(report_result["report_path"]).name
 

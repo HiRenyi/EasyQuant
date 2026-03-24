@@ -82,6 +82,19 @@ def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, sta
     return market_df
 
 
+def _fetch_data_for_market(universe: str, start_date: str, end_date: str):
+    """Fetch market data and stock codes. Returns (market_df, stock_codes)."""
+    stock_codes = get_universe(universe, date=start_date)
+    fetcher = MarketDataFetcher()
+    market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+    return market_df, stock_codes
+
+
+def _fetch_benchmark_for_market(benchmark: str, start_date: str, end_date: str):
+    """Fetch benchmark returns."""
+    return fetch_benchmark_returns(benchmark, start_date, end_date)
+
+
 # Dummy DataFrame for expression validation (includes fundamental columns)
 _VALIDATION_DUMMY = pd.DataFrame({
     "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
@@ -102,15 +115,18 @@ def list_operators() -> str:
 @mcp.tool()
 def list_universes() -> str:
     """返回可用股票池列表及说明。"""
-    info = {
+    a_share_info = {
         "small_scale": f"5 只蓝筹股（快速测试）: {UNIVERSES['small_scale']}",
         "hs300": "沪深300成分股（动态获取）",
         "csi500": "中证500成分股（动态获取）",
         "csi1000": "中证1000成分股（派生: 全A - HS300 - CSI500, 取前1000）",
         "csi2000": "中证2000成分股（派生: 全A - HS300 - CSI500 - CSI1000, 取前2000）",
     }
-    benchmarks = {k: v["name"] for k, v in BENCHMARK_CODES.items()}
-    return json.dumps({"universes": info, "benchmarks": benchmarks}, ensure_ascii=False, indent=2)
+    a_share_benchmarks = {k: v["name"] for k, v in BENCHMARK_CODES.items()}
+    return json.dumps({
+        "universes": a_share_info,
+        "benchmarks": a_share_benchmarks,
+    }, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()
@@ -153,12 +169,12 @@ def run_backtest(
 
     Args:
         expression: 因子表达式,如 "rank(close/ts_mean(close, 20))"
-        universe: 股票池名称 (small_scale / hs300 / csi500 / csi1000 / csi2000)
+        universe: 股票池名称 (small_scale/hs300/csi500/csi1000/csi2000)
         start_date: 回测起始日期 YYYY-MM-DD
         end_date: 回测结束日期 YYYY-MM-DD
         n_groups: 分组数量
         holding_period: 持仓周期(交易日)
-        benchmark: 基准指数 (hs300 / zz500 / sz50)
+        benchmark: 基准 (hs300/zz500/sz50/csi1000)
         neutralize_industry: 行业中性化(默认开启)
         neutralize_cap: 市值中性化(默认开启)
 
@@ -170,11 +186,7 @@ def run_backtest(
     _result_str = None
     try:
         logger.info(f"Getting universe: {universe}")
-        stock_codes = get_universe(universe, date=start_date)
-        logger.info(f"Universe {universe}: {len(stock_codes)} stocks")
-
-        fetcher = MarketDataFetcher()
-        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available. Check date range and stock codes."})
 
@@ -197,7 +209,7 @@ def run_backtest(
 
         bm_returns = None
         try:
-            bm_returns = fetch_benchmark_returns(benchmark, start_date, end_date)
+            bm_returns = _fetch_benchmark_for_market(benchmark, start_date, end_date)
         except Exception as e:
             logger.warning(f"Benchmark fetch failed: {e}")
 
@@ -273,12 +285,12 @@ def score_factor(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
+        universe: 股票池 (small_scale/hs300/csi500/csi1000/csi2000)
         start_date: 起始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         n_groups: 分组数量
         holding_period: 持仓周期(交易日)
-        benchmark: 基准指数 (hs300 / zz500 / sz50)
+        benchmark: 基准 (hs300/zz500/sz50/csi1000)
         neutralize_industry: 行业中性化(默认开启)
         neutralize_cap: 市值中性化(默认开启)
 
@@ -291,9 +303,7 @@ def score_factor(
     _error_msg = None
     _result_str = None
     try:
-        stock_codes = get_universe(universe, date=start_date)
-        fetcher = MarketDataFetcher()
-        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
@@ -305,7 +315,7 @@ def score_factor(
 
         bm_returns = None
         try:
-            bm_returns = fetch_benchmark_returns(benchmark, start_date, end_date)
+            bm_returns = _fetch_benchmark_for_market(benchmark, start_date, end_date)
         except Exception:
             pass
 
@@ -431,7 +441,7 @@ def run_anti_overfit(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
+        universe: 股票池 (small_scale/hs300/csi500/csi1000/csi2000)
         start_date: 起始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
         holding_period: 持仓周期(交易日)
@@ -447,9 +457,7 @@ def run_anti_overfit(
     _error_msg = None
     _result_str = None
     try:
-        stock_codes = get_universe(universe, date=start_date)
-        fetcher = MarketDataFetcher()
-        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
@@ -495,7 +503,7 @@ def run_rolling_validation(
 
     Args:
         expression: 因子表达式
-        universe: 股票池 (small_scale / hs300 / csi500 / csi1000 / csi2000)
+        universe: 股票池 (small_scale/hs300/csi500/csi1000/csi2000)
         start_date: 起始日期(建议≥5年数据)
         end_date: 结束日期
         holding_period: 持仓周期(交易日)
@@ -511,9 +519,7 @@ def run_rolling_validation(
     _error_msg = None
     _result_str = None
     try:
-        stock_codes = get_universe(universe, date=start_date)
-        fetcher = MarketDataFetcher()
-        market_df = fetcher.fetch_stocks(stock_codes, start_date, end_date)
+        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 

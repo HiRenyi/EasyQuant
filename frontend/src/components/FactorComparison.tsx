@@ -25,7 +25,7 @@ interface Props {
 }
 
 export default function FactorComparison({ savedExpressions }: Props) {
-  const { positiveClass, negativeClass } = useColorMode();
+  const { positiveClass, negativeClass, isDark } = useColorMode();
   const [factors, setFactors] = useState([
     { expression: "", label: "" },
     { expression: "", label: "" },
@@ -142,14 +142,14 @@ export default function FactorComparison({ savedExpressions }: Props) {
               value={f.label}
               onChange={(e) => updateFactor(i, "label", e.target.value)}
               placeholder={`因子${i + 1}`}
-              className="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className={`w-20 rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200"} px-2 py-1.5 text-xs focus:outline-none focus:ring-2 ${isDark ? "focus:ring-amber-500/20" : "focus:ring-blue-500/20"}`}
             />
             <input
               type="text"
               value={f.expression}
               onChange={(e) => updateFactor(i, "expression", e.target.value)}
               placeholder="因子表达式"
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className={`flex-1 rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100" : "border-gray-200"} px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 ${isDark ? "focus:ring-amber-500/20" : "focus:ring-blue-500/20"}`}
               list={savedExpressions ? `cmp-expr-${i}` : undefined}
             />
             {savedExpressions && (
@@ -169,7 +169,7 @@ export default function FactorComparison({ savedExpressions }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button onClick={addFactor} disabled={factors.length >= 6} className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1">
+        <button onClick={addFactor} disabled={factors.length >= 6} className={`text-xs ${isDark ? "text-amber-400 hover:text-amber-300" : "text-blue-600 hover:text-blue-700"} disabled:opacity-50 flex items-center gap-1`}>
           <Plus className="h-3 w-3" /> 添加因子
         </button>
         <button
@@ -181,7 +181,7 @@ export default function FactorComparison({ savedExpressions }: Props) {
         <button
           onClick={handleCompare}
           disabled={loading || factors.filter((f) => f.expression.trim()).length < 2}
-          className="ml-auto flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className={`ml-auto flex items-center gap-1.5 rounded-lg ${isDark ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"} px-4 py-2 text-xs font-medium text-white disabled:opacity-50`}
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
           {loading ? "对比中..." : "开始对比"}
@@ -195,12 +195,12 @@ export default function FactorComparison({ savedExpressions }: Props) {
           onClick={() => setShowPicker(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[70vh] flex flex-col"
+            className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[70vh] flex flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className={`flex items-center justify-between px-5 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">从因子库选择</h3>
+                <h3 className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>从因子库选择</h3>
                 <p className="text-[11px] text-gray-400 mt-0.5">
                   勾选要对比的因子{pickerSelected.size > 0 && `（已选 ${pickerSelected.size} 个）`}
                 </p>
@@ -208,7 +208,7 @@ export default function FactorComparison({ savedExpressions }: Props) {
               <button
                 onClick={confirmPicker}
                 disabled={pickerSelected.size === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg ${isDark ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-600 hover:bg-blue-700"} text-white text-xs font-medium disabled:opacity-50 transition-colors`}
               >
                 <Check className="h-3.5 w-3.5" />
                 确认添加
@@ -221,8 +221,8 @@ export default function FactorComparison({ savedExpressions }: Props) {
                 </div>
               ) : libraryFactors.length === 0 ? (
                 <div className="text-center py-8">
-                  <Star className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500">因子库为空</p>
+                  <Star className={`h-8 w-8 ${isDark ? "text-gray-600" : "text-gray-200"} mx-auto mb-2`} />
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>因子库为空</p>
                   <p className="text-[10px] text-gray-400 mt-1">先在单因子回测页收藏因子</p>
                 </div>
               ) : (
@@ -237,20 +237,20 @@ export default function FactorComparison({ savedExpressions }: Props) {
                       disabled={alreadyInList}
                       className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
                         alreadyInList
-                          ? "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                          ? `${isDark ? "border-gray-700 bg-gray-800" : "border-gray-100 bg-gray-50"} opacity-50 cursor-not-allowed`
                           : selected
-                          ? "border-blue-300 bg-blue-50 ring-1 ring-blue-200"
-                          : "border-gray-150 bg-white hover:border-blue-200 hover:shadow-sm"
+                          ? `${isDark ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30" : "border-blue-300 bg-blue-50 ring-1 ring-blue-200"}`
+                          : `${isDark ? "border-gray-700 bg-gray-800 hover:border-amber-500/50 hover:shadow-sm" : "border-gray-150 bg-white hover:border-blue-200 hover:shadow-sm"}`
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                          alreadyInList ? "border-gray-300 bg-gray-200" :
-                          selected ? "border-blue-500 bg-blue-500" : "border-gray-300"
+                          alreadyInList ? `${isDark ? "border-gray-600 bg-gray-700" : "border-gray-300 bg-gray-200"}` :
+                          selected ? `${isDark ? "border-amber-500 bg-amber-500" : "border-blue-500 bg-blue-500"}` : `${isDark ? "border-gray-600" : "border-gray-300"}`
                         }`}>
                           {(selected || alreadyInList) && <Check className="h-3 w-3 text-white" />}
                         </div>
-                        <code className="text-xs text-blue-700 font-mono truncate flex-1" title={f.expression}>
+                        <code className={`text-xs ${isDark ? "text-amber-400" : "text-blue-700"} font-mono truncate flex-1`} title={f.expression}>
                           {f.expression}
                         </code>
                         {alreadyInList && (
@@ -258,13 +258,13 @@ export default function FactorComparison({ savedExpressions }: Props) {
                         )}
                       </div>
                       {m && (
-                        <div className="flex items-center gap-2 mt-1 ml-6 text-[11px] text-gray-500">
-                          <span>Sharpe <span className="font-medium text-gray-700">{m.sharpe.toFixed(2)}</span></span>
-                          <span className="text-gray-200">|</span>
+                        <div className={`flex items-center gap-2 mt-1 ml-6 text-[11px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                          <span>Sharpe <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{m.sharpe.toFixed(2)}</span></span>
+                          <span className={isDark ? "text-gray-600" : "text-gray-200"}>|</span>
                           <span className={m.cagr >= 0 ? positiveClass : negativeClass}>
                             {(m.cagr * 100).toFixed(1)}%
                           </span>
-                          <span className="text-gray-200">|</span>
+                          <span className={isDark ? "text-gray-600" : "text-gray-200"}>|</span>
                           <span className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</span>
                         </div>
                       )}
@@ -284,7 +284,7 @@ export default function FactorComparison({ savedExpressions }: Props) {
 }
 
 function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
-  const { positiveClass, negativeClass } = useColorMode();
+  const { positiveClass, negativeClass, isDark } = useColorMode();
   const successFactors = data.factors.filter((f): f is CompareFactorResult & { metrics: NonNullable<CompareFactorResult["metrics"]> } =>
     f.status === "success" && !!f.metrics
   );
@@ -296,11 +296,11 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
   return (
     <div className="space-y-4">
       {/* Metrics comparison table */}
-      <div className="rounded-lg border border-gray-200 overflow-x-auto">
+      <div className={`rounded-lg border ${isDark ? "border-gray-700" : "border-gray-200"} overflow-x-auto`}>
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-3 py-2 font-medium text-gray-500">指标</th>
+            <tr className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"} border-b`}>
+              <th className={`text-left px-3 py-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>指标</th>
               {successFactors.map((f, i) => (
                 <th key={i} className="text-right px-3 py-2 font-medium" style={{ color: COLORS[i % COLORS.length] }}>
                   {f.label}
@@ -308,18 +308,18 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className={`divide-y ${isDark ? "divide-gray-700" : "divide-gray-100"}`}>
             {METRIC_LABELS.map(({ key, label, format, higher_better }) => {
               const values = successFactors.map((f) => f.metrics[key as keyof typeof f.metrics] ?? 0);
               const best = higher_better ? Math.max(...values) : Math.min(...values);
               return (
                 <tr key={key}>
-                  <td className="px-3 py-2 text-gray-600">{label}</td>
+                  <td className={`px-3 py-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>{label}</td>
                   {successFactors.map((f, i) => {
                     const v = f.metrics[key as keyof typeof f.metrics] ?? 0;
                     const isBest = v === best && successFactors.length > 1;
                     return (
-                      <td key={i} className={`text-right px-3 py-2 font-mono ${isBest ? `font-bold ${positiveClass}` : "text-gray-700"}`}>
+                      <td key={i} className={`text-right px-3 py-2 font-mono ${isBest ? `font-bold ${positiveClass}` : `${isDark ? "text-gray-300" : "text-gray-700"}`}`}>
                         {format(v)}
                       </td>
                     );
@@ -332,8 +332,8 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
       </div>
 
       {/* Cumulative returns chart (simple text-based, since no chart lib) */}
-      <div className="rounded-lg border border-gray-200 p-4 bg-white">
-        <h4 className="text-xs font-medium text-gray-600 mb-3">Top组累计收益对比</h4>
+      <div className={`rounded-lg border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} p-4`}>
+        <h4 className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-3`}>Top组累计收益对比</h4>
         <div className="space-y-2">
           {successFactors.map((f, i) => {
             const rets = f.cumulative_returns ?? [];
@@ -346,7 +346,7 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
                 <span className="text-xs w-24 truncate" style={{ color: COLORS[i % COLORS.length] }} title={f.label}>
                   {f.label}
                 </span>
-                <div className="flex-1 bg-gray-100 rounded-full h-4 relative overflow-hidden">
+                <div className={`flex-1 ${isDark ? "bg-gray-800" : "bg-gray-100"} rounded-full h-4 relative overflow-hidden`}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
@@ -367,8 +367,8 @@ function ComparisonResults({ data }: { data: CompareFactorsResponse }) {
 
       {/* Correlation matrix */}
       {data.correlation && (
-        <div className="rounded-lg border border-gray-200 p-4 bg-white">
-          <h4 className="text-xs font-medium text-gray-600 mb-3">因子相关性矩阵</h4>
+        <div className={`rounded-lg border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} p-4`}>
+          <h4 className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-3`}>因子相关性矩阵</h4>
           <CorrelationMatrix
             labels={data.correlation.labels}
             matrix={data.correlation.matrix}

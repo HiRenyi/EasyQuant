@@ -11,7 +11,6 @@ export function useSession() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  // Load sessions on mount; create one if none exist
   useEffect(() => {
     fetchSessions()
       .then(({ sessions: loaded }) => {
@@ -19,7 +18,6 @@ export function useSession() {
           setSessions(loaded);
           setActiveSessionId(loaded[0].id);
         } else {
-          // Create a default session
           apiCreateSession().then((s) => {
             setSessions([s]);
             setActiveSessionId(s.id);
@@ -27,7 +25,8 @@ export function useSession() {
         }
       })
       .catch(() => {
-        // Offline / not logged in — create will happen after login
+        setSessions([]);
+        setActiveSessionId(null);
       });
   }, []);
 
@@ -54,7 +53,6 @@ export function useSession() {
       await apiDeleteSession(id);
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== id);
-        // If deleting the active session, switch to first remaining or create new
         if (activeSessionId === id) {
           if (next.length > 0) {
             setActiveSessionId(next[0].id);
@@ -71,7 +69,6 @@ export function useSession() {
     [activeSessionId]
   );
 
-  // Refresh session name after a task completes (auto-naming)
   const refreshSessions = useCallback(() => {
     fetchSessions()
       .then(({ sessions: loaded }) => {

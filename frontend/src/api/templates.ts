@@ -17,8 +17,10 @@ export interface FactorTemplate {
 }
 
 export async function fetchTemplates(category?: string): Promise<FactorTemplate[]> {
-  let url = `${BASE}/api/v1/templates`;
-  if (category) url += `?category=${category}`;
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  const url = `${BASE}/api/v1/templates${qs ? `?${qs}` : ""}`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();

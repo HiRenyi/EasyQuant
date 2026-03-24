@@ -4,6 +4,7 @@ import { useBacktest } from "./hooks/useBacktest";
 import { useTaskHistory } from "./hooks/useTaskHistory";
 import { useSession } from "./hooks/useSession";
 import { useAuth } from "./contexts/AuthContext";
+import { useColorMode } from "./contexts/ColorModeContext";
 import Header from "./components/Header";
 import BacktestForm from "./components/BacktestForm";
 import ProgressTracker from "./components/ProgressTracker";
@@ -18,16 +19,18 @@ import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
 import PaperTrading from "./components/PaperTrading";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart } from "lucide-react";
+import DailySummary from "./components/DailySummary";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart, Newspaper } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
+type MainTab = "backtest" | "daily" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
-  { id: "templates", label: "策略模板库", icon: BookOpen, color: "indigo" },
+  { id: "daily", label: "盘后日报", icon: Newspaper, color: "rose" },
+  { id: "templates", label: "因子模板库", icon: BookOpen, color: "indigo" },
   { id: "leaderboard", label: "因子榜", icon: Trophy, color: "amber" },
   { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
   { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
@@ -36,6 +39,7 @@ const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: stri
 
 export default function App() {
   const { isGuest } = useAuth();
+  const { isDark } = useColorMode();
   const [activeTab, setActiveTab] = useState<MainTab>("backtest");
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
@@ -183,14 +187,16 @@ export default function App() {
   const showResults = activeTask?.status === "completed" && activeTask.result;
   const showError = activeTask?.status === "failed";
 
+
   return (
-    <div className="min-h-screen bg-[#f9fafb]">
+    <div className={`min-h-screen ${isDark ? "bg-gray-950" : "bg-[#f9fafb]"}`}>
       <Header />
 
       {/* Main navigation tabs */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className={`border-b ${isDark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
         <div className="mx-auto max-w-7xl px-6">
-          <nav className="flex gap-1 -mb-px">
+          <nav className="flex items-center gap-1 -mb-px">
+            {/* Tab buttons */}
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -200,22 +206,31 @@ export default function App() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                     isActive
-                      ? `border-${tab.color}-600 text-${tab.color}-600`
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      ? isDark
+                        ? "border-blue-400 text-blue-400"
+                        : `border-${tab.color}-600 text-${tab.color}-600`
+                      : isDark
+                        ? "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }`}
-                  style={isActive ? {
+                  style={isActive && !isDark ? {
                     borderBottomColor: tab.color === "blue" ? "#2563eb"
+                      : tab.color === "rose" ? "#e11d48"
                       : tab.color === "indigo" ? "#4f46e5"
                       : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
                       : tab.color === "teal" ? "#0d9488"
                       : "#059669",
                     color: tab.color === "blue" ? "#2563eb"
+                      : tab.color === "rose" ? "#e11d48"
                       : tab.color === "indigo" ? "#4f46e5"
                       : tab.color === "amber" ? "#d97706"
                       : tab.color === "purple" ? "#9333ea"
                       : tab.color === "teal" ? "#0d9488"
                       : "#059669",
+                  } : isActive && isDark ? {
+                    borderBottomColor: "#60a5fa",
+                    color: "#93bbfd",
                   } : undefined}
                 >
                   <Icon className="h-4 w-4" />
@@ -282,6 +297,10 @@ export default function App() {
                 </>
               )}
             </>
+          )}
+
+          {activeTab === "daily" && (
+            <DailySummary />
           )}
 
           {activeTab === "templates" && (

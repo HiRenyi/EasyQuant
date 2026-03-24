@@ -1,12 +1,32 @@
 import { useState } from "react";
-import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink } from "lucide-react";
+import { BarChart3, LogOut, X, UserCircle, Terminal, Copy, Check, ExternalLink, Sun, Moon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v2.1.0";
+export const APP_VERSION = "v2.3.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.3.0",
+    date: "2026-03-24",
+    items: [
+      "新增深色/浅色主题切换按钮",
+      "修复多因子组合回测中基本面因子（ROE/PE等）计算失败的问题",
+      "修复因子对比页面基本面因子不可用的问题",
+      "修复迭代优化报告持久化失败的问题",
+      "前端架构优化，统一主题管理",
+    ],
+  },
+  {
+    version: "v2.2.0",
+    date: "2026-03-24",
+    items: [
+      "新增暗色模式切换，支持深色/浅色主题",
+      "支持涨跌颜色切换（红涨绿跌 / 绿涨红跌）",
+      "前端架构优化，统一主题管理",
+    ],
+  },
   {
     version: "v2.1.0",
     date: "2026-03-23",
@@ -34,7 +54,7 @@ const CHANGELOG = [
     items: [
       "新增模拟盘：回测结果一键上模拟盘，每日自动结算净值",
       "新增任务取消：回测运行中随时中止",
-      "策略模板库新增「基本面」分类（PE/PB/ROE/ROA/PS/股息/现金流/营收增速）",
+      "因子模板库新增「基本面」分类（PE/PB/ROE/ROA/PS/股息/现金流/营收增速）",
       "分享卡片改版：展示策略收益、超额收益等核心指标",
       "修复迭代优化对基本面因子（dupont_roe 等）验证失败的问题",
     ],
@@ -94,14 +114,14 @@ const CHANGELOG = [
     date: "2026-03-21",
     items: [
       "多因子组合 / 因子对比页支持从因子库选择已收藏因子",
-      "修复策略模板库为空的路径问题",
+      "修复因子模板库为空的路径问题",
     ],
   },
   {
     version: "v1.5.0",
     date: "2026-03-21",
     items: [
-      "新增策略模板库：18个经典因子策略一键回测",
+      "新增因子模板库：经典因子模板一键回测",
       "新增多因子组合回测 + 因子归因分析",
       "新增因子对比看板：并排比较多个因子表现",
       "新增方向引导迭代：指定 AI 迭代优化方向",
@@ -164,10 +184,11 @@ const CHANGELOG = [
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const { isDark } = useColorMode();
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className="absolute top-2 right-2 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+      className={`absolute top-2 right-2 p-1 rounded text-gray-400 ${isDark ? "hover:text-gray-300 hover:bg-gray-800" : "hover:text-gray-600 hover:bg-gray-100"} transition-colors`}
       title="复制"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
@@ -177,6 +198,7 @@ function CopyButton({ text }: { text: string }) {
 
 function McpGuideModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"claude" | "openclaw">("claude");
+  const { isDark } = useColorMode();
 
   const mcpConfig = `{
   "mcpServers": {
@@ -214,35 +236,38 @@ agent.register_tool(backtest_tool)`;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col"
+        className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
               <Terminal className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">MCP 集成指南</h2>
+              <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>MCP 集成指南</h2>
               <p className="text-xs text-gray-400">通过 MCP 协议接入 QuantGPT 回测能力</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:text-gray-300 hover:bg-gray-800" : "hover:text-gray-600 hover:bg-gray-100"} transition-colors`}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Tab switcher */}
-        <div className="px-5 pt-3 flex gap-1 border-b border-gray-100">
+        <div className={`px-5 pt-3 flex gap-1 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
           <button
             onClick={() => setTab("claude")}
             className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               tab === "claude"
-                ? "text-orange-600 border-b-2 border-orange-500 bg-orange-50/50"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                ? isDark
+                  ? "text-orange-400 border-b-2 border-orange-500 bg-orange-500/10"
+                  : "text-orange-600 border-b-2 border-orange-500 bg-orange-50/50"
+                : isDark
+                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
             }`}
           >
             Claude Code
@@ -251,8 +276,12 @@ agent.register_tool(backtest_tool)`;
             onClick={() => setTab("openclaw")}
             className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               tab === "openclaw"
-                ? "text-blue-600 border-b-2 border-blue-500 bg-blue-50/50"
-                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                ? isDark
+                  ? "text-amber-400 border-b-2 border-amber-500 bg-amber-500/10"
+                  : "text-blue-600 border-b-2 border-blue-500 bg-blue-50/50"
+                : isDark
+                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
+                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
             }`}
           >
             OpenClaw / Agent
@@ -263,8 +292,8 @@ agent.register_tool(backtest_tool)`;
           {tab === "claude" ? (
             <>
               {/* What is MCP */}
-              <div className="bg-blue-50 rounded-lg p-3.5">
-                <p className="text-sm text-blue-800">
+              <div className={`${isDark ? "bg-amber-500/10" : "bg-blue-50"} rounded-lg p-3.5`}>
+                <p className={`text-sm ${isDark ? "text-amber-300" : "text-blue-800"}`}>
                   <span className="font-medium">什么是 MCP？</span>{" "}
                   MCP (Model Context Protocol) 让 Claude 直接调用 QuantGPT 的回测工具。
                   配置后，你可以在 Claude Code 终端中用自然语言执行因子回测。
@@ -274,8 +303,8 @@ agent.register_tool(backtest_tool)`;
               {/* Step 1: Clone */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
-                  <h3 className="text-sm font-medium text-gray-900">克隆项目并安装</h3>
+                  <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>1</span>
+                  <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>克隆项目并安装</h3>
                 </div>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
                   <CopyButton text={"git clone https://github.com/Miasyster/QuantGPT.git\ncd QuantGPT\npip install -e ."} />
@@ -286,24 +315,24 @@ agent.register_tool(backtest_tool)`;
               {/* Step 2: Configure */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
-                  <h3 className="text-sm font-medium text-gray-900">配置 MCP</h3>
+                  <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>2</span>
+                  <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>配置 MCP</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-1.5 font-medium">在项目根目录创建 <code className="bg-gray-100 px-1 rounded">.mcp.json</code>：</p>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5 font-medium`}>在项目根目录创建 <code className={`${isDark ? "bg-gray-800" : "bg-gray-100"} px-1 rounded`}>.mcp.json</code>：</p>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
                   <CopyButton text={mcpConfig} />
                   <pre className="whitespace-pre-wrap">{mcpConfig}</pre>
                 </div>
                 <p className="text-xs text-gray-400 mt-1.5">
-                  将 <code className="bg-gray-100 text-gray-600 px-1 rounded">PYTHONPATH</code> 替换为实际项目路径。需配置米筐数据源，详见项目 README。
+                  将 <code className={`${isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-600"} px-1 rounded`}>PYTHONPATH</code> 替换为实际项目路径。需配置米筐数据源，详见项目 README。
                 </p>
               </div>
 
               {/* Step 3 */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">3</span>
-                  <h3 className="text-sm font-medium text-gray-900">开始使用</h3>
+                  <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>3</span>
+                  <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>开始使用</h3>
                 </div>
                 <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-sm text-gray-100">
                   <CopyButton text="claude mcp list" />
@@ -312,7 +341,7 @@ agent.register_tool(backtest_tool)`;
                     <span className="text-gray-400"># quantgpt: Connected</span>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mt-2`}>
                   验证连接后，直接用自然语言对话即可：「帮我测试一个低波动率因子，在沪深300上回测」
                 </p>
               </div>
@@ -320,8 +349,8 @@ agent.register_tool(backtest_tool)`;
           ) : (
             <>
               {/* OpenClaw intro */}
-              <div className="bg-blue-50 rounded-lg p-3.5">
-                <p className="text-sm text-blue-800">
+              <div className={`${isDark ? "bg-amber-500/10" : "bg-blue-50"} rounded-lg p-3.5`}>
+                <p className={`text-sm ${isDark ? "text-amber-300" : "text-blue-800"}`}>
                   <span className="font-medium">架构说明</span>{" "}
                   OpenClaw 是 Agent 调度框架，通过 MCP 协议动态调用 QuantGPT 的回测能力。
                   QuantGPT 作为 MCP Server 暴露标准化工具接口。
@@ -329,8 +358,8 @@ agent.register_tool(backtest_tool)`;
               </div>
 
               {/* Architecture diagram */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <pre className="text-xs text-gray-600 leading-relaxed font-mono">{`[OpenClaw Agent]
+              <div className={`${isDark ? "bg-gray-800" : "bg-gray-50"} rounded-lg p-3`}>
+                <pre className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"} leading-relaxed font-mono`}>{`[OpenClaw Agent]
       ↓
 [MCP Client]
       ↓  Streamable HTTP
@@ -342,20 +371,20 @@ agent.register_tool(backtest_tool)`;
               {/* Step 1: Connect */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">1</span>
-                  <h3 className="text-sm font-medium text-gray-900">在 Agent 中接入</h3>
+                  <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>1</span>
+                  <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>在 Agent 中接入</h3>
                 </div>
-                <p className="text-xs text-gray-500 mb-1.5">MCP 端点地址：<code className="bg-gray-100 px-1 rounded">https://quantgpt.online/mcp</code></p>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5`}>MCP 端点地址：<code className={`${isDark ? "bg-gray-800" : "bg-gray-100"} px-1 rounded`}>https://quantgpt.online/mcp</code></p>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5 font-medium">方式 A：原生 MCP Client（推荐）</p>
+                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5 font-medium`}>方式 A：原生 MCP Client（推荐）</p>
                     <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
                       <CopyButton text={openclawNativeCode} />
                       <pre className="whitespace-pre-wrap">{openclawNativeCode}</pre>
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1.5 font-medium">方式 B：手动封装（兼容旧版本）</p>
+                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5 font-medium`}>方式 B：手动封装（兼容旧版本）</p>
                     <div className="relative bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-100 leading-relaxed">
                       <CopyButton text={openclawManualCode} />
                       <pre className="whitespace-pre-wrap">{openclawManualCode}</pre>
@@ -367,8 +396,8 @@ agent.register_tool(backtest_tool)`;
               {/* Tips */}
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="h-5 w-5 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center font-medium">2</span>
-                  <h3 className="text-sm font-medium text-gray-900">注意事项</h3>
+                  <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>2</span>
+                  <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>注意事项</h3>
                 </div>
                 <div className="space-y-1.5">
                   {[
@@ -377,7 +406,7 @@ agent.register_tool(backtest_tool)`;
                     "返回值保持精简，避免大 JSON",
                     "工具数量建议 ≤ 10 个，过多会导致调用混乱",
                   ].map((tip, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                    <div key={i} className={`flex items-start gap-2 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                       <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
                       {tip}
                     </div>
@@ -389,7 +418,7 @@ agent.register_tool(backtest_tool)`;
 
           {/* Available tools - shared */}
           <div>
-            <h3 className="text-sm font-medium text-gray-900 mb-2">可用工具（8 个）</h3>
+            <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"} mb-2`}>可用工具（8 个）</h3>
             <div className="grid grid-cols-2 gap-1.5">
               {[
                 { name: "list_operators", desc: "查看算子列表" },
@@ -401,7 +430,7 @@ agent.register_tool(backtest_tool)`;
                 { name: "run_anti_overfit", desc: "抗过拟合检测" },
                 { name: "run_rolling_validation", desc: "滚动验证" },
               ].map((tool) => (
-                <div key={tool.name} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-gray-50">
+                <div key={tool.name} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
                   <code className="text-xs text-orange-600 font-medium">{tool.name}</code>
                   <span className="text-xs text-gray-400">{tool.desc}</span>
                 </div>
@@ -411,19 +440,19 @@ agent.register_tool(backtest_tool)`;
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+        <div className={`px-5 py-3 border-t ${isDark ? "border-gray-700" : "border-gray-100"} flex items-center justify-between`}>
           <a
             href="https://github.com/Miasyster/QuantGPT"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            className={`flex items-center gap-1.5 text-sm ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"} transition-colors`}
           >
             <ExternalLink className="h-3.5 w-3.5" />
             GitHub
           </a>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-600 hover:bg-gray-100"} transition-colors`}
           >
             关闭
           </button>
@@ -434,11 +463,11 @@ agent.register_tool(backtest_tool)`;
 }
 
 function ColorModeToggle() {
-  const { colorMode, toggleColorMode } = useColorMode();
+  const { colorMode, toggleColorMode, isDark } = useColorMode();
   return (
     <button
       onClick={toggleColorMode}
-      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-gray-200 hover:bg-gray-50 transition-colors"
+      className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"} transition-colors`}
       title={colorMode === "cn" ? "当前：红涨绿跌（中国）" : "当前：绿涨红跌（西方）"}
     >
       <span className={colorMode === "cn" ? "text-red-500" : "text-emerald-500"}>涨</span>
@@ -448,33 +477,48 @@ function ColorModeToggle() {
   );
 }
 
+function DarkModeToggle() {
+  const { isDark, toggleDark } = useColorMode();
+  return (
+    <button
+      onClick={toggleDark}
+      className={`p-1.5 rounded-md border ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"} transition-colors`}
+      title={isDark ? "切换到浅色模式" : "切换到深色模式"}
+    >
+      {isDark ? <Sun className="h-3.5 w-3.5 text-amber-400" /> : <Moon className="h-3.5 w-3.5 text-gray-500" />}
+    </button>
+  );
+}
+
 export default function Header() {
   const { user, isGuest, logout } = useAuth();
+  const { isDark } = useColorMode();
   const navigate = useNavigate();
   const [showChangelog, setShowChangelog] = useState(false);
   const [showMcpGuide, setShowMcpGuide] = useState(false);
 
   return (
     <>
-      <header className="border-b border-gray-200 bg-white">
+      <header className={`border-b ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"}`}>
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BarChart3 className="h-6 w-6 text-blue-600" />
+            <BarChart3 className={`h-6 w-6 ${isDark ? "text-amber-400" : "text-blue-600"}`} />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold text-gray-900">QuantGPT</h1>
+                <h1 className={`text-lg font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>QuantGPT</h1>
                 <button
                   onClick={() => setShowChangelog(true)}
-                  className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors font-mono"
+                  className={`text-xs px-1.5 py-0.5 rounded ${isDark ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" : "bg-blue-50 text-blue-600 hover:bg-blue-100"} transition-colors font-mono`}
                 >
                   {APP_VERSION}
                 </button>
               </div>
-              <p className="text-sm text-gray-500">用自然语言描述你的因子策略，一键回测</p>
+              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>用自然语言描述你的因子策略，一键回测</p>
             </div>
           </div>
           {isGuest ? (
             <div className="flex items-center gap-3">
+              <DarkModeToggle />
               <ColorModeToggle />
               <button
                 onClick={() => setShowMcpGuide(true)}
@@ -497,6 +541,7 @@ export default function Header() {
             </div>
           ) : user ? (
             <div className="flex items-center gap-3">
+              <DarkModeToggle />
               <ColorModeToggle />
               <button
                 onClick={() => setShowMcpGuide(true)}
@@ -506,10 +551,10 @@ export default function Header() {
                 <Terminal className="h-4 w-4" />
                 <span className="hidden sm:inline">MCP</span>
               </button>
-              <span className="text-sm text-gray-600">{user.email}</span>
+              <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>{user.email}</span>
               <button
                 onClick={logout}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"} transition-colors`}
               >
                 <LogOut className="h-4 w-4" />
                 退出
@@ -525,17 +570,17 @@ export default function Header() {
           onClick={() => setShowChangelog(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
+            className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">更新日志</h2>
+                <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>更新日志</h2>
                 <p className="text-xs text-gray-400 mt-0.5">当前版本 {APP_VERSION}</p>
               </div>
               <button
                 onClick={() => setShowChangelog(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                className={`p-1.5 rounded-lg text-gray-400 ${isDark ? "hover:text-gray-300 hover:bg-gray-800" : "hover:text-gray-600 hover:bg-gray-100"} transition-colors`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -544,15 +589,15 @@ export default function Header() {
               {CHANGELOG.map((release) => (
                 <div key={release.version}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold text-gray-900 font-mono">{release.version}</span>
+                    <span className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"} font-mono`}>{release.version}</span>
                     <span className="text-xs text-gray-400">{release.date}</span>
                     {release.version === APP_VERSION && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">当前</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-blue-50 text-blue-600"}`}>当前</span>
                     )}
                   </div>
                   <ul className="space-y-1">
                     {release.items.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                      <li key={i} className={`flex items-start gap-2 text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-gray-300 shrink-0" />
                         {item}
                       </li>

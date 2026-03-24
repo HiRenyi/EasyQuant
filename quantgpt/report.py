@@ -18,6 +18,7 @@ def generate_report(
     benchmark_returns: Optional[pd.Series] = None,
     title: str = "Factor Long-Short Backtest",
     output_dir: Optional[str] = None,
+    periods_per_year: int = 252,
 ) -> dict:
     """Generate QuantStats HTML report and extract key metrics.
 
@@ -64,6 +65,7 @@ def generate_report(
         title=title,
         rf=0.03,
         match_dates=False,
+        periods_per_year=periods_per_year,
     )
 
     # Patch QuantStats HTML: fix layout for iframe embedding
@@ -74,18 +76,18 @@ def generate_report(
     # Extract metrics
     metrics = {
         "total_return": float(qs.stats.comp(returns)),
-        "cagr": float(qs.stats.cagr(returns)),
-        "sharpe": float(qs.stats.sharpe(returns, rf=0.03)),
-        "sortino": float(qs.stats.sortino(returns, rf=0.03)),
+        "cagr": float(qs.stats.cagr(returns, periods=periods_per_year)),
+        "sharpe": float(qs.stats.sharpe(returns, rf=0.03, periods=periods_per_year)),
+        "sortino": float(qs.stats.sortino(returns, rf=0.03, periods=periods_per_year)),
         "max_drawdown": float(qs.stats.max_drawdown(returns)),
-        "volatility": float(qs.stats.volatility(returns)),
+        "volatility": float(qs.stats.volatility(returns, periods=periods_per_year)),
         "win_rate": float(qs.stats.win_rate(returns)),
         "profit_factor": float(qs.stats.profit_factor(returns)),
     }
 
     if benchmark_returns is not None:
         metrics["benchmark_total_return"] = float(qs.stats.comp(benchmark_returns))
-        metrics["benchmark_cagr"] = float(qs.stats.cagr(benchmark_returns))
+        metrics["benchmark_cagr"] = float(qs.stats.cagr(benchmark_returns, periods=periods_per_year))
 
     return {"report_path": report_path, "metrics": metrics}
 

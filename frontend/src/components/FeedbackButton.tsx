@@ -1,12 +1,14 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { MessageSquarePlus, X, Image, Send, CheckCircle } from "lucide-react";
 import { submitFeedback } from "../api/client";
+import { useColorMode } from "../contexts/ColorModeContext";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
 const SEEN_KEY = "quantgpt_feedback_seen";
 
 export default function FeedbackButton() {
+  const { isDark } = useColorMode();
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -137,14 +139,14 @@ export default function FeedbackButton() {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+            className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden`}
             onClick={(e) => e.stopPropagation()}
             onPaste={handlePaste}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-base font-semibold text-gray-900">问题反馈</h3>
-              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+              <h3 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>问题反馈</h3>
+              <button onClick={handleClose} className={`text-gray-400 ${isDark ? "hover:text-gray-200" : "hover:text-gray-600"} transition-colors`}>
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -152,7 +154,7 @@ export default function FeedbackButton() {
             {/* Body */}
             <div className="px-5 py-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">问题描述</label>
+                <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1.5`}>问题描述</label>
                 <textarea
                   ref={textareaRef}
                   value={description}
@@ -160,16 +162,16 @@ export default function FeedbackButton() {
                   placeholder="描述你遇到的问题..."
                   rows={4}
                   maxLength={2000}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className={`w-full rounded-lg border ${isDark ? "border-gray-700 bg-gray-800 text-gray-100 placeholder-gray-500 focus:ring-amber-500" : "border-gray-200 bg-white text-gray-900 focus:ring-blue-500"} px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:border-transparent resize-none`}
                 />
                 <p className="mt-1 text-xs text-gray-400 text-right">{description.length}/2000</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">截图（可选）</label>
+                <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1.5`}>截图（可选）</label>
                 {screenshot ? (
                   <div className="relative group">
-                    <img src={screenshot} alt="截图预览" className="w-full max-h-48 object-contain rounded-lg border border-gray-200 bg-gray-50" />
+                    <img src={screenshot} alt="截图预览" className={`w-full max-h-48 object-contain rounded-lg border ${isDark ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-gray-50"}`} />
                     <button
                       onClick={() => setScreenshot(null)}
                       className="absolute top-2 right-2 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -180,21 +182,21 @@ export default function FeedbackButton() {
                 ) : (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center gap-2 py-6 rounded-lg border-2 border-dashed border-gray-200 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                    className={`flex flex-col items-center justify-center gap-2 py-6 rounded-lg border-2 border-dashed ${isDark ? "border-gray-700 cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/5" : "border-gray-200 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30"} transition-colors`}
                   >
-                    <Image className="h-6 w-6 text-gray-300" />
-                    <p className="text-xs text-gray-400">粘贴截图 <span className="text-gray-300">(Ctrl+V)</span> 或点击上传</p>
+                    <Image className={`h-6 w-6 ${isDark ? "text-gray-600" : "text-gray-300"}`} />
+                    <p className="text-xs text-gray-400">粘贴截图 <span className={isDark ? "text-gray-600" : "text-gray-300"}>(Ctrl+V)</span> 或点击上传</p>
                   </div>
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
               </div>
 
-              {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+              {errorMsg && <p className={`text-sm ${isDark ? "text-red-400" : "text-red-600"}`}>{errorMsg}</p>}
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
-              <button onClick={handleClose} disabled={status === "submitting"} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors">
+            <div className={`px-5 py-3 border-t ${isDark ? "border-gray-700" : "border-gray-100"} flex justify-end gap-2`}>
+              <button onClick={handleClose} disabled={status === "submitting"} className={`px-4 py-2 text-sm ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-600 hover:text-gray-800"} transition-colors`}>
                 取消
               </button>
               <button

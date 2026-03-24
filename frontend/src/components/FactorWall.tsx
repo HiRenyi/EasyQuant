@@ -27,12 +27,28 @@ interface Props {
   onTryFactor?: (expression: string) => void;
 }
 
-const GRADE_STYLES: Record<string, { bg: string; text: string; ring: string }> = {
-  A: { bg: "bg-emerald-50", text: "text-emerald-700", ring: "ring-emerald-200" },
-  B: { bg: "bg-blue-50", text: "text-blue-700", ring: "ring-blue-200" },
-  C: { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200" },
-  D: { bg: "bg-gray-50", text: "text-gray-500", ring: "ring-gray-200" },
-};
+const getGradeStyles = (isDark: boolean): Record<string, { bg: string; text: string; ring: string }> => ({
+  A: {
+    bg: isDark ? "bg-emerald-500/10" : "bg-emerald-50",
+    text: isDark ? "text-emerald-400" : "text-emerald-700",
+    ring: "ring-emerald-200",
+  },
+  B: {
+    bg: isDark ? "bg-amber-500/10" : "bg-blue-50",
+    text: isDark ? "text-amber-400" : "text-blue-700",
+    ring: "ring-blue-200",
+  },
+  C: {
+    bg: isDark ? "bg-amber-500/10" : "bg-amber-50",
+    text: isDark ? "text-amber-400" : "text-amber-700",
+    ring: "ring-amber-200",
+  },
+  D: {
+    bg: isDark ? "bg-gray-800" : "bg-gray-50",
+    text: isDark ? "text-gray-400" : "text-gray-500",
+    ring: isDark ? "ring-gray-700" : "ring-gray-200",
+  },
+});
 
 const RANK_STYLES = [
   "bg-amber-400 text-white",    // #1
@@ -42,13 +58,15 @@ const RANK_STYLES = [
 
 export default function FactorWall({ onTryFactor }: Props) {
   const { isGuest, user } = useAuth();
-  const { positiveClass, negativeClass } = useColorMode();
+  const { isDark, positiveClass, negativeClass } = useColorMode();
+  const GRADE_STYLES = getGradeStyles(isDark);
   const [factors, setFactors] = useState<WallFactor[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/factor-library/wall?limit=20")
+    setLoading(true);
+    fetch(`/api/v1/factor-library/wall?limit=20`)
       .then((res) => res.json())
       .then((data) => setFactors(data.factors ?? []))
       .catch(() => {})
@@ -75,9 +93,9 @@ export default function FactorWall({ onTryFactor }: Props) {
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
             <Trophy className="h-6 w-6 text-amber-500" />
-            <h2 className="text-lg font-bold text-gray-900">因子排行榜</h2>
+            <h2 className={`text-lg font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>因子排行榜</h2>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
             社区精选高分因子，一键复刻回测验证。评分基于 Sharpe、单调性、IC 等综合指标。
           </p>
         </div>
@@ -95,7 +113,7 @@ export default function FactorWall({ onTryFactor }: Props) {
       {factors.length === 0 ? (
         <div className="text-center py-16">
           <Trophy className="h-12 w-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">暂无精选因子</p>
+          <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>暂无精选因子</p>
           <p className="text-xs text-gray-400 mt-1">回测后点击"投稿因子墙"，审核通过即上榜</p>
         </div>
       ) : (
@@ -106,12 +124,12 @@ export default function FactorWall({ onTryFactor }: Props) {
             const score = m.score ?? 0;
             const gs = GRADE_STYLES[grade] || GRADE_STYLES.D;
             const isExpanded = expandedId === f.id;
-            const rankClass = i < 3 ? RANK_STYLES[i] : "bg-gray-100 text-gray-500";
+            const rankClass = i < 3 ? RANK_STYLES[i] : (isDark ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500");
 
             return (
               <div
                 key={f.id}
-                className="rounded-xl border border-gray-200 bg-white hover:shadow-md transition-all overflow-hidden"
+                className={`rounded-xl border ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"} hover:shadow-md transition-all overflow-hidden`}
               >
                 {/* Main row */}
                 <div className="flex items-center gap-4 px-4 py-3.5">
@@ -123,7 +141,7 @@ export default function FactorWall({ onTryFactor }: Props) {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-semibold text-gray-900 truncate">
+                      <span className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"} truncate`}>
                         {f.title || f.expression.slice(0, 40)}
                       </span>
                       {/* Grade badge */}
@@ -132,10 +150,10 @@ export default function FactorWall({ onTryFactor }: Props) {
                         {score > 0 && <span className="font-normal opacity-75">{score.toFixed(0)}分</span>}
                       </span>
                       {f.source === "official" && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">官方</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-600"} font-medium`}>官方</span>
                       )}
                     </div>
-                    <code className="text-xs font-mono text-blue-600 truncate block">
+                    <code className={`text-xs font-mono ${isDark ? "text-amber-400" : "text-blue-600"} truncate block`}>
                       {f.expression}
                     </code>
                   </div>
@@ -144,7 +162,7 @@ export default function FactorWall({ onTryFactor }: Props) {
                   <div className="hidden sm:flex items-center gap-4 text-xs shrink-0">
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">Sharpe</div>
-                      <div className={`font-bold ${m.sharpe >= 0.5 ? positiveClass : m.sharpe >= 0 ? "text-gray-700" : negativeClass}`}>
+                      <div className={`font-bold ${m.sharpe >= 0.5 ? positiveClass : m.sharpe >= 0 ? (isDark ? "text-gray-300" : "text-gray-700") : negativeClass}`}>
                         {m.sharpe?.toFixed(2)}
                       </div>
                     </div>
@@ -162,7 +180,7 @@ export default function FactorWall({ onTryFactor }: Props) {
                     </div>
                     <div className="text-center">
                       <div className="text-gray-400 mb-0.5">IC</div>
-                      <div className={`font-bold ${(m.ic_mean ?? 0) > 0.03 ? positiveClass : "text-gray-700"}`}>
+                      <div className={`font-bold ${(m.ic_mean ?? 0) > 0.03 ? positiveClass : (isDark ? "text-gray-300" : "text-gray-700")}`}>
                         {(m.ic_mean ?? 0).toFixed(3)}
                       </div>
                     </div>
@@ -173,14 +191,14 @@ export default function FactorWall({ onTryFactor }: Props) {
                     {onTryFactor && (
                       <button
                         onClick={() => onTryFactor(f.expression)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-blue-50 text-blue-600"} text-xs font-medium hover:bg-blue-100 transition-colors`}
                       >
                         复刻回测 <ArrowRight className="h-3 w-3" />
                       </button>
                     )}
                     <button
                       onClick={() => toggleExpand(f.id)}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                      className={`p-1.5 rounded-lg text-gray-400 hover:text-gray-600 ${isDark ? "hover:bg-gray-800" : "hover:bg-gray-100"} transition-colors`}
                     >
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </button>
@@ -189,13 +207,13 @@ export default function FactorWall({ onTryFactor }: Props) {
 
                 {/* Expanded: description + mobile metrics */}
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 border-t border-gray-100">
+                  <div className={`px-4 pb-4 pt-0 border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>
                     {f.description && (
-                      <p className="text-sm text-gray-600 mt-3 leading-relaxed">{f.description}</p>
+                      <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} mt-3 leading-relaxed`}>{f.description}</p>
                     )}
                     {/* Mobile metrics */}
                     <div className="flex flex-wrap gap-3 mt-3 sm:hidden text-xs">
-                      <span>Sharpe <b className={m.sharpe >= 0.5 ? positiveClass : "text-gray-700"}>{m.sharpe?.toFixed(2)}</b></span>
+                      <span>Sharpe <b className={m.sharpe >= 0.5 ? positiveClass : (isDark ? "text-gray-300" : "text-gray-700")}>{m.sharpe?.toFixed(2)}</b></span>
                       <span>年化 <b className={m.cagr >= 0 ? positiveClass : negativeClass}>{(m.cagr * 100).toFixed(1)}%</b></span>
                       <span>回撤 <b className={negativeClass}>{(m.max_drawdown * 100).toFixed(1)}%</b></span>
                       <span>IC <b>{(m.ic_mean ?? 0).toFixed(3)}</b></span>
@@ -214,10 +232,10 @@ export default function FactorWall({ onTryFactor }: Props) {
 
       {/* Submit section */}
       {!isGuest && user && (
-        <div id="submit" className="rounded-xl border border-dashed border-blue-200 bg-blue-50/50 p-6 text-center">
+        <div id="submit" className={`rounded-xl border border-dashed ${isDark ? "border-amber-500/30 bg-amber-500/5" : "border-blue-200 bg-blue-50/50"} p-6 text-center`}>
           <Trophy className="h-8 w-8 text-blue-400 mx-auto mb-2" />
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">我的因子也要上榜</h3>
-          <p className="text-xs text-gray-500 mb-3">
+          <h3 className={`text-sm font-semibold ${isDark ? "text-gray-100" : "text-gray-900"} mb-1`}>我的因子也要上榜</h3>
+          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-3`}>
             回测完成后，在结果页点击「投稿因子墙」按钮提交你的因子。<br/>
             审核通过后即可上榜，展示给所有用户。
           </p>
