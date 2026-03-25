@@ -67,6 +67,11 @@ def run_factor_backtest(
     else:
         raise ValueError("必须提供 expression 或 precomputed_factor")
 
+    # Save raw factor values for IC computation (before neutralization).
+    # IC should be computed on raw values (industry standard), while group
+    # formation uses neutralized values to control sector/cap risk.
+    raw_factor_for_ic = market_df["factor_value"].copy()
+
     # 1b. Neutralize factor values (optional)
     if neutralize_industry or neutralize_cap:
         from .neutralize import neutralize_factor
@@ -247,7 +252,11 @@ def run_factor_backtest(
         spread = -spread
 
     # 9. IC / Rank IC / IR / IC win rate
-    ic_series, rank_ic_series = _calc_ic_series(work, holding_period)
+    # Use raw (pre-neutralization) factor values for IC — industry standard.
+    # Neutralization is for portfolio construction only, not IC measurement.
+    work_ic = work.copy()
+    work_ic["factor_value"] = raw_factor_for_ic.reindex(work_ic.index)
+    ic_series, rank_ic_series = _calc_ic_series(work_ic, holding_period)
     ic_mean = float(ic_series.mean()) if len(ic_series) > 0 else 0.0
     ic_std = float(ic_series.std()) if len(ic_series) > 0 else 0.0
     ic_ir = float(ic_mean / ic_std) if ic_std > 0 else 0.0
