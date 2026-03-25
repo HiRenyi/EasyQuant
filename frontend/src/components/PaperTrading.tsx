@@ -164,6 +164,11 @@ export default function PaperTrading(_props: Props) {
                       <NavChart data={detail.nav_curve} initialCapital={s.initial_capital} />
                     )}
 
+                    {/* Daily returns table */}
+                    {detail?.nav_curve && detail.nav_curve.length > 0 && (
+                      <DailyReturnsTable data={detail.nav_curve} />
+                    )}
+
                     {/* Orders */}
                     {orders.length > 0 && (
                       <div>
@@ -236,6 +241,46 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${map[status] ?? fallback}`}>
       {labels[status] ?? status}
     </span>
+  );
+}
+
+function DailyReturnsTable({ data }: {
+  data: { date: string; value: number; daily_return: number | null }[];
+}) {
+  const { isDark, positiveClass, negativeClass } = useColorMode();
+  // Show newest first
+  const sorted = [...data].reverse();
+
+  return (
+    <div>
+      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-2`}>每日收益率</p>
+      <div className={`rounded-lg border ${isDark ? "border-gray-700" : "border-gray-200"} overflow-hidden ${isDark ? "bg-gray-900" : "bg-white"}`}>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className={`${isDark ? "bg-gray-800" : "bg-gray-50"} ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+              <th className="px-3 py-2 text-left">日期</th>
+              <th className="px-3 py-2 text-right">净值</th>
+              <th className="px-3 py-2 text-right">每日收益率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((d) => {
+              const r = d.daily_return;
+              const isPositive = r !== null && r >= 0;
+              return (
+                <tr key={d.date} className={`border-t ${isDark ? "border-gray-700" : "border-gray-100"}`}>
+                  <td className={`px-3 py-1.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{d.date}</td>
+                  <td className={`px-3 py-1.5 text-right ${isDark ? "text-gray-300" : "text-gray-700"}`}>{fmt(d.value)}</td>
+                  <td className={`px-3 py-1.5 text-right font-medium ${r === null ? (isDark ? "text-gray-500" : "text-gray-400") : isPositive ? positiveClass : negativeClass}`}>
+                    {r === null ? "-" : `${isPositive ? "+" : ""}${pct(r)}`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
