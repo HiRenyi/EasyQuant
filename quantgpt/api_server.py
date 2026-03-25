@@ -109,6 +109,20 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(_paper_settlement_job, CronTrigger(hour=16, minute=30, day_of_week="mon-fri", timezone=CST), id="paper_settlement")
     register_job("paper_settlement", "模拟盘日结算", "每个交易日收盘后结算模拟持仓盈亏", "周一至周五 16:30 CST")
 
+    # Market data refresh: every weekday 15:10 CST (after market close at 15:00)
+    async def _market_data_refresh_job():
+        import asyncio
+        from .market_data import refresh_all_cached_stocks
+        try:
+            await asyncio.to_thread(refresh_all_cached_stocks)
+            record_job_run("market_data_refresh", "success")
+        except Exception as e:
+            logger.error(f"Market data refresh failed: {e}")
+            record_job_run("market_data_refresh", "failed", str(e))
+
+    scheduler.add_job(_market_data_refresh_job, CronTrigger(hour=15, minute=10, day_of_week="mon-fri", timezone=CST), id="market_data_refresh")
+    register_job("market_data_refresh", "行情数据更新", "收盘后从 baostock 增量更新所有缓存股票数据", "周一至周五 15:10 CST")
+
     # Factor deep research report: every Monday 9:03 CST = 01:03 UTC
     async def _weekly_report_job():
         from .weekly_report import get_latest_report_content, send_weekly_report

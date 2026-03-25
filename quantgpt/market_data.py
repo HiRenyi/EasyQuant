@@ -678,3 +678,68 @@ def fetch_benchmark_returns(
             return ret
         finally:
             _baostock_logout()
+
+
+def refresh_all_cached_stocks():
+    """Refresh all cached stock data with incremental updates from baostock.
+
+    Scans the stock cache directory for existing parquet files, determines
+    the last cached date for each stock, and fetches missing data up to today.
+    Designed to run as a daily cron job after market close (e.g. 15:10 CST).
+    """
+    fetcher = MarketDataFetcher()
+    cache_dir = fetcher.stock_cache_dir
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Collect all cached stock codes and their last dates
+    parquet_files = [f for f in os.listdir(cache_dir) if f.endswith(".parquet")]
+    if not parquet_files:
+        logger.info("[refresh] No cached stocks found, skipping")
+        return
+
+    stocks_to_update: List[tuple] = []  # (bs_code, start_date)
+    for fname in parquet_files:
+        bs_code = fname.replace(".parquet", "").replace("_", ".", 1)  # sh_600519 → sh.600519
+        try:
+            df = pd.read_parquet(os.path.join(cache_dir, fname))
+            last_date = pd.to_datetime(df["trade_date"]).max()
+            # Need update if last cached date is before today
+            if last_date.strftime("%Y-%m-%d") < today:
+                # Fetch from the day after last cached date
+                fetch_start = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
+                stocks_to_update.append((bs_code, fetch_start))
+        except Exception as e:
+            logger.warning(f"[refresh] Failed to read {fname}: {e}")
+            continue
+
+    if not stocks_to_update:
+        logger.info("[refresh] All stocks up to date")
+        return
+
+    logger.info(f"[refresh] Updating {len(stocks_to_update)} stocks up to {today}")
+
+    updated = 0
+    failed = 0
+
+    with _bs_lock:
+        _baostock_login()
+        try:
+            for bs_code, start_date in stocks_to_update:
+                try:
+                    new_data = fetcher._fetch_remote_bs(bs_code, start_date, today, already_logged_in=True)
+                    if new_data is not None and len(new_data) > 0:
+                        existing = fetcher._load_cache(bs_code)
+                        if existing is not None:
+                            merged = pd.concat([existing, new_data]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                        else:
+                            merged = new_data
+                        fetcher._save_cache(bs_code, merged)
+                        updated += 1
+                    # No new data is normal (weekends/holidays)
+                except Exception as e:
+                    logger.warning(f"[refresh] Failed to update {bs_code}: {e}")
+                    failed += 1
+        finally:
+            _baostock_logout()
+
+    logger.info(f"[refresh] Done: {updated} updated, {failed} failed, {len(stocks_to_update) - updated - failed} no new data")
