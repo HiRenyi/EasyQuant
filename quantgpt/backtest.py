@@ -91,7 +91,7 @@ def run_factor_backtest(
 
     # 5. On each rebalance date, assign groups based on factor value
     #    Build a mapping: (trade_date, stock_code) -> group
-    work = market_df[["trade_date", "stock_code", "factor_value", "daily_ret"]].dropna(
+    work = market_df[["trade_date", "stock_code", "factor_value", "daily_ret", "close"]].dropna(
         subset=["factor_value"]
     ).copy()
 
@@ -254,14 +254,18 @@ def run_factor_backtest(
     # 9. IC / Rank IC / IR / IC win rate
     # Use raw (pre-neutralization) factor values for IC — industry standard.
     # Neutralization is for portfolio construction only, not IC measurement.
+    # Primary IC metric is Rank IC (Spearman) — more robust to outliers,
+    # consistent with industry convention (聚宽, Barra, ai-quant, etc.).
     work_ic = work.copy()
     work_ic["factor_value"] = raw_factor_for_ic.reindex(work_ic.index)
-    ic_series, rank_ic_series = _calc_ic_series(work_ic, holding_period)
-    ic_mean = float(ic_series.mean()) if len(ic_series) > 0 else 0.0
-    ic_std = float(ic_series.std()) if len(ic_series) > 0 else 0.0
+    pearson_ic_series, rank_ic_series = _calc_ic_series(work_ic, holding_period)
+    # Main IC metrics use Rank IC (Spearman)
+    ic_mean = float(rank_ic_series.mean()) if len(rank_ic_series) > 0 else 0.0
+    ic_std = float(rank_ic_series.std()) if len(rank_ic_series) > 0 else 0.0
     ic_ir = float(ic_mean / ic_std) if ic_std > 0 else 0.0
-    ic_win_rate = float((ic_series > 0).sum() / len(ic_series)) if len(ic_series) > 0 else 0.0
-    rank_ic_mean = float(rank_ic_series.mean()) if len(rank_ic_series) > 0 else 0.0
+    ic_win_rate = float((rank_ic_series > 0).sum() / len(rank_ic_series)) if len(rank_ic_series) > 0 else 0.0
+    rank_ic_mean = ic_mean  # same as ic_mean now (both Spearman)
+    pearson_ic_mean = float(pearson_ic_series.mean()) if len(pearson_ic_series) > 0 else 0.0
 
     # 10. Turnover rate
     turnover = _calc_turnover(work, top_g, rebalance_dates_set)
@@ -366,23 +370,22 @@ def _calc_ic_series(
     Returns (ic_series, rank_ic_series) as pd.Series indexed by date.
     """
     # Compute forward N-day return per stock
-    # For day T: fwd_ret = ret[T+1] + ret[T+2] + ... + ret[T+holding_period]
+    # For day T: fwd_ret = (close[T+N] - close[T]) / close[T]
+    # Using pct_change(N).shift(-N) for clean, industry-standard forward returns.
     work = work.copy()
     work = work.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
-    shifted = work.groupby("stock_code")["daily_ret"].shift(-1)
-    rolled = shifted.groupby(work["stock_code"]).rolling(
-        holding_period, min_periods=holding_period
-    ).sum()
-    # rolling produces MultiIndex (stock_code, orig_index), extract orig_index level
-    rolled = rolled.droplevel(0)
-    work["fwd_ret"] = rolled.groupby(work["stock_code"]).shift(-(holding_period - 1))
+    work["fwd_ret"] = (
+        work.groupby("stock_code")["close"]
+        .pct_change(holding_period)
+        .shift(-holding_period)
+    )
 
     valid = work.dropna(subset=["factor_value", "fwd_ret"])
     if valid.empty:
         return pd.Series(dtype=float), pd.Series(dtype=float)
 
     def _pearson(g):
-        if len(g) < 5:
+        if len(g) < 10:
             return np.nan
         fv = g["factor_value"]
         fr = g["fwd_ret"]
@@ -391,7 +394,7 @@ def _calc_ic_series(
         return fv.corr(fr)
 
     def _spearman(g):
-        if len(g) < 5:
+        if len(g) < 10:
             return np.nan
         fv = g["factor_value"]
         fr = g["fwd_ret"]
@@ -399,13 +402,6 @@ def _calc_ic_series(
             return np.nan
         corr, _ = sp_stats.spearmanr(fv.values, fr.values)
         return corr if not np.isnan(corr) else 0.0
-
-    # Subsample dates for large datasets to avoid O(N*M) slowness
-    all_ic_dates = sorted(valid["trade_date"].unique())
-    if len(all_ic_dates) > 300:
-        step = max(1, len(all_ic_dates) // 300)
-        sampled_dates = set(all_ic_dates[::step])
-        valid = valid[valid["trade_date"].isin(sampled_dates)]
 
     ic_series = valid.groupby("trade_date")[["factor_value", "fwd_ret"]].apply(_pearson).dropna()
     rank_ic_series = valid.groupby("trade_date")[["factor_value", "fwd_ret"]].apply(_spearman).dropna()
