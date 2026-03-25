@@ -45,10 +45,7 @@ def combine_factors(
         col_name = f"_factor_{i}"
 
         func = parse_expression(expr)
-        vals = df.groupby("stock_code", group_keys=False).apply(
-            lambda g: _safe_apply_factor(g, func)
-        )
-        df[col_name] = vals
+        df[col_name] = _safe_apply_factor(df, func)
         factor_cols.append(col_name)
         weights.append(w)
 
@@ -108,10 +105,7 @@ def compute_factor_correlation(
         labels.append(f.get("label", expr[:40]))
 
         func = parse_expression(expr)
-        vals = df.groupby("stock_code", group_keys=False).apply(
-            lambda g: _safe_apply_factor(g, func)
-        )
-        df[col_name] = vals
+        df[col_name] = _safe_apply_factor(df, func)
         factor_cols.append(col_name)
 
     # Cross-sectional rank per date, then compute correlation

@@ -143,13 +143,15 @@ class ExpressionParser:
         'month': lambda df: pd.Series(df['trade_date'].dt.month, index=df.index, dtype=float),
     }
 
+    # Cross-sectional operators that need per-date grouping.
+    # These are handled specially in _build_function() — they are NOT in _UNARY_OPS.
+    _CROSS_SECTIONAL_OPS = {'rank', 'zscore'}
+
     # Supported unary functions (column -> Series)
     _UNARY_OPS = {
-        'rank': lambda s: s.rank(pct=True),
         'log': lambda s: np.log(s.clip(lower=1e-10)),
         'abs': lambda s: s.abs(),
         'sign': lambda s: np.sign(s),
-        'zscore': lambda s: (s - s.mean()) / (s.std() + 1e-10),
         'scale': lambda s: (s - s.min()) / (s.max() - s.min() + 1e-10),  # normalize to [0, 1]
         'tanh': lambda s: np.tanh(s),
         'sigmoid': lambda s: 1.0 / (1.0 + np.exp(-s.clip(-500, 500))),
@@ -190,6 +192,8 @@ class ExpressionParser:
         return tr.rolling(w, min_periods=1).mean()
 
     # Supported time-series functions (column, window -> Series)
+    # When the DataFrame has a 'stock_code' column, these automatically
+    # apply per-stock via groupby to avoid mixing different stocks' data.
     _TS_OPS = {
         'ts_mean': lambda s, w: s.rolling(w, min_periods=1).mean(),
         'ts_std': lambda s, w: s.rolling(w, min_periods=1).std(),
@@ -217,6 +221,14 @@ class ExpressionParser:
             raw=True
         ),  # weighted moving average (same as decay_linear)
     }
+
+    @staticmethod
+    def _apply_ts_op_per_stock(df, inner_fn, op, window):
+        """Apply a time-series operation per-stock when DataFrame has stock_code."""
+        s = inner_fn(df)
+        if 'stock_code' in df.columns:
+            return s.groupby(df['stock_code']).transform(lambda x: op(x, window))
+        return op(s, window)
 
     # Supported dual-column time-series functions (col1, col2, window -> Series)
     _TS_DUAL_OPS = {
@@ -320,6 +332,25 @@ class ExpressionParser:
         # Apply operator aliases (e.g., delta -> ts_delta, delay -> ts_shift)
         func_name = self._OPERATOR_ALIASES.get(func_name, func_name)
 
+        # Cross-sectional ops: rank() and zscore() group by trade_date
+        if func_name in self._CROSS_SECTIONAL_OPS:
+            inner = self._sub_parse(args_str)
+            if func_name == 'rank':
+                def _cs_rank(df, _inner=inner):
+                    s = _inner(df)
+                    if 'trade_date' in df.columns:
+                        return s.groupby(df['trade_date']).rank(pct=True)
+                    return s.rank(pct=True)
+                return _cs_rank
+            else:  # zscore
+                def _cs_zscore(df, _inner=inner):
+                    s = _inner(df)
+                    if 'trade_date' in df.columns:
+                        g = s.groupby(df['trade_date'])
+                        return (s - g.transform('mean')) / (g.transform('std') + 1e-10)
+                    return (s - s.mean()) / (s.std() + 1e-10)
+                return _cs_zscore
+
         if func_name in self._UNARY_OPS:
             inner = self._sub_parse(args_str)
             op = self._UNARY_OPS[func_name]
@@ -332,9 +363,15 @@ class ExpressionParser:
                     f"{func_name} requires exactly 2 arguments: (column, window)"
                 )
             inner = self._sub_parse(parts[0].strip())
-            window = self._validate_window(int(parts[1].strip()), func_name)
+            try:
+                window = self._validate_window(int(parts[1].strip()), func_name)
+            except ValueError:
+                raise ValueError(
+                    f"{func_name} 的窗口参数必须是整数，不能是表达式。"
+                    f"收到: {parts[1].strip()!r}"
+                )
             op = self._TS_OPS[func_name]
-            return lambda df, _op=op, _inner=inner, _w=window: _op(_inner(df), _w)
+            return lambda df, _op=op, _inner=inner, _w=window: ExpressionParser._apply_ts_op_per_stock(df, _inner, _op, _w)
 
         if func_name in self._TS_DUAL_OPS:
             parts = self._split_top_level(args_str)
@@ -344,9 +381,24 @@ class ExpressionParser:
                 )
             inner1 = self._sub_parse(parts[0].strip())
             inner2 = self._sub_parse(parts[1].strip())
-            window = self._validate_window(int(parts[2].strip()), func_name)
+            try:
+                window = self._validate_window(int(parts[2].strip()), func_name)
+            except ValueError:
+                raise ValueError(
+                    f"{func_name} 的窗口参数必须是整数，不能是表达式。"
+                    f"收到: {parts[2].strip()!r}"
+                )
             op = self._TS_DUAL_OPS[func_name]
-            return lambda df, _op=op, _i1=inner1, _i2=inner2, _w=window: _op(_i1(df), _i2(df), _w)
+            def _ts_dual(df, _op=op, _i1=inner1, _i2=inner2, _w=window):
+                s1, s2 = _i1(df), _i2(df)
+                if 'stock_code' in df.columns:
+                    # Apply per-stock: build temporary frame, groupby, apply
+                    tmp = pd.DataFrame({'s1': s1, 's2': s2, 'sc': df['stock_code']}, index=df.index)
+                    return tmp.groupby('sc', group_keys=False).apply(
+                        lambda g: _op(g['s1'], g['s2'], _w)
+                    )
+                return _op(s1, s2, _w)
+            return _ts_dual
 
         if func_name in self._BINARY_OPS:
             parts = self._split_top_level(args_str)
@@ -368,7 +420,13 @@ class ExpressionParser:
             if len(parts) != 1:
                 raise ValueError("atr requires exactly 1 argument: (window)")
             window = self._validate_window(int(parts[0].strip()), func_name)
-            return lambda df, _w=window: ExpressionParser._calc_atr(df, _w)
+            def _atr(df, _w=window):
+                if 'stock_code' in df.columns:
+                    return df.groupby('stock_code', group_keys=False).apply(
+                        lambda g: ExpressionParser._calc_atr(g, _w)
+                    )
+                return ExpressionParser._calc_atr(df, _w)
+            return _atr
 
         # BOLL bands: boll_upper(col, N) / boll_lower(col, N) / boll_mid(col, N)
         if func_name in ('boll_upper', 'boll_lower', 'boll_mid'):

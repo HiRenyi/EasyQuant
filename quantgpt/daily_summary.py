@@ -63,15 +63,15 @@ def _load_factor_templates() -> list:
         return json.load(f)
 
 
-def _safe_apply_factor(group_df: pd.DataFrame, factor_func) -> pd.Series:
-    """Apply factor function to a single stock's data, returning NaN on error."""
+def _safe_apply_factor(df: pd.DataFrame, factor_func) -> pd.Series:
+    """Apply factor function to a DataFrame, returning NaN on error."""
     try:
-        result = factor_func(group_df)
+        result = factor_func(df)
         if isinstance(result, pd.Series):
-            result.index = group_df.index
+            result.index = df.index
         return result
     except Exception:
-        return pd.Series(np.nan, index=group_df.index)
+        return pd.Series(np.nan, index=df.index)
 
 
 def _compute_factor_signals(
@@ -99,10 +99,7 @@ def _compute_factor_signals(
     for tmpl in templates:
         try:
             factor_func = parse_expression(tmpl["expression"])
-            factor_values = market_df.groupby("stock_code", group_keys=False).apply(
-                lambda g: _safe_apply_factor(g, factor_func)
-            )
-            market_df["_fv"] = factor_values
+            market_df["_fv"] = _safe_apply_factor(market_df, factor_func)
 
             # Today's cross-section
             today_mask = market_df["trade_date"] == today

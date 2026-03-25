@@ -116,14 +116,18 @@ def _compute_marginal_contributions(
         return []
 
     # Compute factor values for each sub-factor
+    df_sorted = market_df.sort_values(["stock_code", "trade_date"]) if "stock_code" in market_df.columns else market_df.sort_values(["code", "trade_date"])
+    stock_col = "stock_code" if "stock_code" in market_df.columns else "code"
     factor_values = {}
     for i, sf in enumerate(sub_factors):
         label = sf.get("label", f"Factor_{i+1}")
         try:
             func = parse_expression(sf["expression"])
-            vals = market_df.groupby("code", group_keys=False).apply(func)
+            vals = func(df_sorted)
+            if isinstance(vals, pd.Series):
+                vals.index = df_sorted.index
             # Cross-sectional rank per date
-            ranked = vals.groupby(market_df["trade_date"]).rank(pct=True)
+            ranked = vals.groupby(df_sorted["trade_date"]).rank(pct=True)
             factor_values[label] = ranked
         except Exception:
             continue

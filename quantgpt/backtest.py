@@ -60,10 +60,10 @@ def run_factor_backtest(
         market_df["factor_value"] = precomputed_factor.values if hasattr(precomputed_factor, 'values') else precomputed_factor
     elif expression is not None:
         factor_func = parse_expression(expression)
-        factor_values = market_df.groupby("stock_code", group_keys=False).apply(
-            lambda g: _safe_apply_factor(g, factor_func)
-        )
-        market_df["factor_value"] = factor_values
+        # Apply factor to full DataFrame (sorted by stock_code, trade_date).
+        # Time-series ops internally groupby stock_code; cross-sectional ops
+        # (rank, zscore) groupby trade_date. This ensures correct behaviour.
+        market_df["factor_value"] = _safe_apply_factor(market_df, factor_func)
     else:
         raise ValueError("必须提供 expression 或 precomputed_factor")
 
@@ -326,16 +326,16 @@ def run_factor_backtest(
     }
 
 
-def _safe_apply_factor(group_df: pd.DataFrame, factor_func) -> pd.Series:
-    """Apply factor function to a single stock's data, returning NaN on error."""
+def _safe_apply_factor(df: pd.DataFrame, factor_func) -> pd.Series:
+    """Apply factor function to a DataFrame, returning NaN on error."""
     try:
-        result = factor_func(group_df)
+        result = factor_func(df)
         if isinstance(result, pd.Series):
-            result.index = group_df.index
+            result.index = df.index
         return result
     except Exception as e:
-        logger.warning(f"Factor computation failed for stock: {e}")
-        return pd.Series(np.nan, index=group_df.index)
+        logger.warning(f"Factor computation failed: {e}")
+        return pd.Series(np.nan, index=df.index)
 
 
 def _calc_max_drawdown(returns: pd.Series) -> float:

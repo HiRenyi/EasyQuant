@@ -149,35 +149,26 @@ async def _rebalance(
                 if div_df is not None and len(div_df) > 0:
                     market_df = fund_fetcher.align_dividends_to_daily(div_df, market_df)
 
-    # Compute factor on latest date
+    # Compute factor on full history (cross-sectional ops need all stocks)
     func = parse_expression(strategy.expression)
     latest_date = market_df["trade_date"].max()
-    latest_df = market_df[market_df["trade_date"] == latest_date].copy()
+
+    market_sorted = market_df.sort_values(["stock_code", "trade_date"])
+    try:
+        fv = func(market_sorted)
+        if isinstance(fv, pd.Series):
+            fv.index = market_sorted.index
+        market_sorted["_fv"] = fv
+    except Exception:
+        market_sorted["_fv"] = np.nan
+
+    latest_df = market_sorted[market_sorted["trade_date"] == latest_date].copy()
 
     if len(latest_df) < 10:
         logger.warning(f"Paper: too few stocks ({len(latest_df)}) for rebalance")
         return {}
 
-    # Need full history for time-series operators
-    factor_values = {}
-    for code in latest_df["stock_code"].unique():
-        stock_data = market_df[market_df["stock_code"] == code].sort_values("trade_date")
-        if len(stock_data) < 5:
-            continue
-        try:
-            vals = func(stock_data)
-            if hasattr(vals, "iloc"):
-                factor_values[code] = vals.iloc[-1]
-            else:
-                factor_values[code] = float(vals) if np.isfinite(vals) else np.nan
-        except Exception:
-            continue
-
-    if not factor_values:
-        return {}
-
-    # Rank and select top group
-    factor_series = pd.Series(factor_values).dropna()
+    factor_series = latest_df.set_index("stock_code")["_fv"].dropna()
     n_per_group = max(1, len(factor_series) // strategy.n_groups)
     top_stocks = factor_series.nlargest(n_per_group).index.tolist()
 
