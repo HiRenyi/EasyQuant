@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
             record_job_run("market_data_refresh", "failed", str(e))
 
     scheduler.add_job(_market_data_refresh_job, CronTrigger(hour=15, minute=10, day_of_week="mon-fri", timezone=CST), id="market_data_refresh")
-    register_job("market_data_refresh", "行情数据更新", "收盘后从 baostock 增量更新所有缓存股票数据", "周一至周五 15:10 CST")
+    register_job("market_data_refresh", "行情数据增量更新", "收盘后从 akshare/baostock 增量更新缓存（禁用 rqdatac）", "周一至周五 15:10 CST")
 
     # Factor deep research report: every Monday 9:03 CST = 01:03 UTC
     async def _weekly_report_job():
@@ -184,7 +184,7 @@ _cors_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app = FastAPI(
     title="QuantGPT API",
-    version="2.3.0",
+    version="2.4.0",
     description="QuantGPT — 用自然语言回测 A 股因子",
     docs_url=None,
     redoc_url=None,

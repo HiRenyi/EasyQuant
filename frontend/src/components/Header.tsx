@@ -4,9 +4,19 @@ import { useAuth } from "../contexts/AuthContext";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v2.3.0";
+export const APP_VERSION = "v2.4.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.4.0",
+    date: "2026-03-26",
+    items: [
+      "日报新增行业轮动分析，定位具体强势/弱势板块及配置建议",
+      "日报新增信号追踪与验证，对比前几日建议的有效性",
+      "日报因子信号准确性优化，反映真实市场变化",
+      "模拟盘新增每日收益率表格",
+    ],
+  },
   {
     version: "v2.3.0",
     date: "2026-03-24",

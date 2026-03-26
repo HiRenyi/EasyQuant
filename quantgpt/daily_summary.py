@@ -663,6 +663,7 @@ _SYSTEM_PROMPT = """你是一位资深量化策略师，擅长用因子模型刻
 2. **先结论后展开**：每个章节开头用 1-2 句加粗文字给出该段核心结论，方便快速阅读。
 3. **因子→经济含义→操作建议**：每个因子不只报数字，要解读"这意味着什么"。
 4. **多角色视角**：从散户（情绪/追涨杀跌）、游资（短线博弈/题材轮动）、机构（风格切换/配置调整）角度分析。
+5. **信号追踪**：如果提供了近期历史信号，必须对比今日与前几日的信号变化，验证之前建议的有效性，指出信号的延续或反转。
 
 ## 排版规范（极其重要，必须严格遵守）
 
@@ -679,7 +680,7 @@ _SYSTEM_PROMPT = """你是一位资深量化策略师，擅长用因子模型刻
 2. 严禁出现任何个股代码或个股名称，只能用"多头组Top 10%""分位90%"等分组表达
 3. 使用 **加粗** 突出关键数字和结论
 4. 每个因子的解读必须用 Markdown 无序列表（`- ` 开头），禁止直接写成段落
-5. 字数控制在 1500-2200 字
+5. 字数控制在 1800-2500 字
 6. 不要编造数据中没有的信息
 7. 重点解读分位数异常（>80 或 <20）和 Z-Score 异常（|z|>1.5）的因子
 8. 行业轮动分析必须基于提供的行业因子数据，给出具体行业名称和因子逻辑
@@ -692,6 +693,7 @@ def _build_llm_prompt(
     factor_signals: List[FactorSignal],
     regime_data: dict | None = None,
     industry_signals: list[dict] | None = None,
+    history_summaries: list[dict] | None = None,
 ) -> str:
     """Build a rich LLM prompt with real factor data (no individual stock codes)."""
     lines = [f"今日日期：{date}\n"]
@@ -704,6 +706,55 @@ def _build_llm_prompt(
         lines.append(f"- **风险等级**: {regime_data.get('risk_level', '未知')}")
         lines.append(f"- **一句话**: {regime_data.get('headline', '')}")
         lines.append("")
+
+    # Historical signal tracking (past 3 days)
+    if history_summaries:
+        lines.append("## 近期信号回顾（用于验证和追踪）\n")
+        for hist in history_summaries:
+            h_date = hist["date"]
+            h_metrics = hist["metrics"]
+            h_signals = h_metrics.get("factor_signals", [])
+            h_industries = h_metrics.get("industry_signals", [])
+            h_regime = h_metrics.get("headline", "")
+
+            lines.append(f"### {h_date}")
+            if h_regime:
+                lines.append(f"**市场状态**: {h_regime}")
+
+            # Factor signal summary
+            if h_signals:
+                h_up = sum(1 for s in h_signals if s.get("direction") == "转强")
+                h_down = sum(1 for s in h_signals if s.get("direction") == "转弱")
+                signal_parts = []
+                for s in h_signals:
+                    d = s.get("direction", "持平")
+                    if d != "持平":
+                        signal_parts.append(f"{s.get('factor_name', '')}({d})")
+                lines.append(f"**因子**: {h_up}强 {h_down}弱 — {', '.join(signal_parts[:6])}")
+
+            # Top/bottom industries
+            if h_industries:
+                top3 = [i["industry"] for i in h_industries[:3]]
+                bot3 = [i["industry"] for i in h_industries[-3:]]
+                lines.append(f"**强势行业**: {', '.join(top3)} | **弱势行业**: {', '.join(bot3)}")
+
+            # Extract key recommendations from past content (last section)
+            h_content = hist.get("content", "")
+            # Find investment advice section
+            advice_lines = []
+            in_advice = False
+            for cl in h_content.split("\n"):
+                if "投资建议" in cl or "操作建议" in cl:
+                    in_advice = True
+                    continue
+                if in_advice and cl.strip().startswith("- **"):
+                    advice_lines.append(cl.strip())
+                if in_advice and cl.strip().startswith("#"):
+                    break
+            if advice_lines:
+                lines.append(f"**当日建议**: {' | '.join(a[:40] for a in advice_lines[:3])}")
+
+            lines.append("")
 
     # Index changes
     lines.append("## 大盘数据\n")
@@ -787,6 +838,15 @@ def _build_llm_prompt(
     lines.append("2. 解读：结合趋势因子方向，判断市场风险偏好（Risk-on/Risk-off）")
     lines.append("3. 资金面：结合量价因子判断资金活跃度和流向\n")
 
+    if history_summaries:
+        lines.append("## 一点五、信号追踪与验证\n")
+        lines.append("**基于上方提供的近期信号回顾数据，完成以下分析：**\n")
+        lines.append("1. **建议验证**：前几日给出的投资建议，今天市场是否验证了？哪些建议命中了，哪些失效了？")
+        lines.append("2. **信号延续性**：哪些因子信号连续多天保持同一方向？连续信号比单日信号更可靠")
+        lines.append("3. **信号反转**：哪些因子今天方向发生了反转？反转意味着什么？")
+        lines.append("4. **行业轮动追踪**：哪些行业连续多天出现在强势/弱势名单中？新进入的行业值得关注")
+        lines.append("注意：如果没有历史数据则跳过此章节\n")
+
     lines.append("## 二、核心因子信号深度拆解\n")
     lines.append('**开头用 1 句话概括因子信号全貌**（如\u201c本报告通过X个维度监测了市场背后的逻辑\u201d）\n')
     lines.append("按类别逐一解读，每个类别：")
@@ -847,7 +907,7 @@ def _call_llm(prompt: str) -> str:
             {"role": "user", "content": prompt},
         ],
         temperature=0.4,
-        max_tokens=4000,
+        max_tokens=5000,
     )
     text = resp.choices[0].message.content.strip()
 
@@ -902,7 +962,7 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
     Returns the summary dict or None if already exists for that date.
     """
     from .models import DailySummary
-    from sqlalchemy import select
+    from sqlalchemy import select, desc
     import uuid
 
     today = date or datetime.now().strftime("%Y-%m-%d")
@@ -979,8 +1039,29 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
     if regime_data:
         logger.info(f"[daily_summary] Regime: {regime_data.get('headline', '')}")
 
+    # Step 4b: Fetch past 3 days' summaries for signal tracking
+    history_summaries = []
+    try:
+        past_start = (pd.Timestamp(today) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+        hist_result = await db.execute(
+            select(DailySummary).where(
+                DailySummary.date >= past_start,
+                DailySummary.date < today,
+                DailySummary.market == market,
+            ).order_by(desc(DailySummary.date)).limit(3)
+        )
+        for s in hist_result.scalars().all():
+            history_summaries.append({
+                "date": s.date,
+                "metrics": s.metrics or {},
+                "content": s.content or "",
+            })
+        logger.info(f"[daily_summary] Loaded {len(history_summaries)} historical summaries")
+    except Exception as e:
+        logger.warning(f"[daily_summary] Failed to load history: {e}")
+
     # Step 5: Build prompt and call LLM
-    prompt = _build_llm_prompt(today, index_changes, factor_signals, regime_data, industry_signals)
+    prompt = _build_llm_prompt(today, index_changes, factor_signals, regime_data, industry_signals, history_summaries)
     logger.info(f"[daily_summary] LLM prompt: {len(prompt)} chars, calling DeepSeek...")
     content = _call_llm(prompt)
     logger.info(f"[daily_summary] LLM response: {len(content)} chars")

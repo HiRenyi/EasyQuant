@@ -31,6 +31,7 @@ except ImportError:
 # rqdatac lazy initialization
 _rq_lock = threading.Lock()
 _rq_initialized = False
+_rq_disabled = False  # Set True during incremental refresh to prevent rqdatac login conflicts
 
 # Project root for default paths
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -86,6 +87,8 @@ def _from_rq_code(rq_code: str) -> str:
 def _rqdatac_init() -> bool:
     """Lazy-init rqdatac session. Returns True if ready to use."""
     global _rq_initialized
+    if _rq_disabled:
+        return False
     if not HAS_RQDATAC:
         return False
     if _rq_initialized:
@@ -734,10 +737,19 @@ def refresh_all_cached_stocks():
     """Refresh all cached stock data with incremental updates.
 
     Data source priority: akshare (same-day data) → baostock (fallback).
-    Scans the stock cache directory for existing parquet files, determines
-    the last cached date for each stock, and fetches missing data up to today.
+    rqdatac is DISABLED during this process to avoid login conflicts.
     Designed to run as a daily cron job after market close (e.g. 15:10 CST).
     """
+    global _rq_disabled
+    _rq_disabled = True
+    try:
+        _refresh_all_cached_stocks_impl()
+    finally:
+        _rq_disabled = False
+
+
+def _refresh_all_cached_stocks_impl():
+    """Incremental refresh implementation: akshare → baostock."""
     fetcher = MarketDataFetcher()
     cache_dir = fetcher.stock_cache_dir
     today = datetime.now().strftime("%Y-%m-%d")
@@ -818,3 +830,119 @@ def refresh_all_cached_stocks():
 
     no_data = len(stocks_to_update) - updated - failed
     logger.info(f"[refresh] Done: {updated} updated (akshare: {updated - bs_fallback}, baostock: {bs_fallback}), {failed} failed, {no_data} no new data")
+
+
+def refresh_all_stocks_full(stock_codes: List[str] | None = None, start_date: str | None = None, end_date: str | None = None):
+    """Full refresh via rqdatac. Manual trigger only.
+
+    Fetches complete history for given stocks (or all cached stocks) and
+    overwrites the cache. Uses rqdatac batch API for efficiency.
+    """
+    if not _rqdatac_init():
+        raise RuntimeError("rqdatac not available — check credentials")
+
+    fetcher = MarketDataFetcher()
+    cache_dir = fetcher.stock_cache_dir
+    today = end_date or datetime.now().strftime("%Y-%m-%d")
+    start = start_date or "2020-01-01"
+
+    # Default: all cached stocks
+    if stock_codes is None:
+        parquet_files = [f for f in os.listdir(cache_dir) if f.endswith(".parquet")]
+        stock_codes = [f.replace(".parquet", "").replace("_", ".", 1) for f in parquet_files]
+
+    if not stock_codes:
+        logger.info("[full_refresh] No stocks to update")
+        return
+
+    logger.info(f"[full_refresh] rqdatac full refresh: {len(stock_codes)} stocks, {start} to {today}")
+
+    updated = 0
+    failed = 0
+    chunk_size = 50  # rqdatac batch limit
+
+    for i in range(0, len(stock_codes), chunk_size):
+        chunk = stock_codes[i:i + chunk_size]
+        try:
+            results = fetcher._fetch_remote_rq(chunk, start, today)
+            for bs_code, df in results.items():
+                if df is not None and len(df) > 0:
+                    fetcher._save_cache(bs_code, df)
+                    updated += 1
+        except Exception as e:
+            logger.warning(f"[full_refresh] Chunk failed: {e}")
+            failed += len(chunk)
+
+        if (i + chunk_size) % 500 == 0:
+            logger.info(f"[full_refresh] Progress: {min(i + chunk_size, len(stock_codes))}/{len(stock_codes)}")
+
+    logger.info(f"[full_refresh] Done: {updated} updated, {failed} failed")
+
+
+def refresh_all_stocks_rqdatac_incremental():
+    """Incremental refresh via rqdatac. Manual trigger only.
+
+    Same logic as the daily akshare/baostock refresh, but uses rqdatac
+    as the data source. Only fetches data from last cached date to today.
+    """
+    if not _rqdatac_init():
+        raise RuntimeError("rqdatac not available — check credentials")
+
+    fetcher = MarketDataFetcher()
+    cache_dir = fetcher.stock_cache_dir
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    parquet_files = [f for f in os.listdir(cache_dir) if f.endswith(".parquet")]
+    if not parquet_files:
+        logger.info("[rq_incr] No cached stocks found")
+        return
+
+    stocks_to_update: List[tuple] = []
+    for fname in parquet_files:
+        bs_code = fname.replace(".parquet", "").replace("_", ".", 1)
+        try:
+            df = pd.read_parquet(os.path.join(cache_dir, fname))
+            last_date = pd.to_datetime(df["trade_date"]).max()
+            if last_date.strftime("%Y-%m-%d") < today:
+                fetch_start = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
+                stocks_to_update.append((bs_code, fetch_start))
+        except Exception:
+            continue
+
+    if not stocks_to_update:
+        logger.info("[rq_incr] All stocks up to date")
+        return
+
+    logger.info(f"[rq_incr] rqdatac incremental: {len(stocks_to_update)} stocks to {today}")
+
+    updated = 0
+    failed = 0
+    chunk_size = 50
+
+    # Group by start_date for efficient batch fetching
+    from collections import defaultdict
+    by_start: defaultdict[str, list] = defaultdict(list)
+    for bs_code, start_date in stocks_to_update:
+        by_start[start_date].append(bs_code)
+
+    for start_date, codes in by_start.items():
+        for i in range(0, len(codes), chunk_size):
+            chunk = codes[i:i + chunk_size]
+            try:
+                results = fetcher._fetch_remote_rq(chunk, start_date, today)
+                for bs_code, df in results.items():
+                    if df is not None and len(df) > 0:
+                        existing = fetcher._load_cache(bs_code)
+                        if existing is not None:
+                            merged = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                        else:
+                            merged = df
+                        fetcher._save_cache(bs_code, merged)
+                        updated += 1
+            except Exception as e:
+                logger.warning(f"[rq_incr] Chunk failed: {e}")
+                failed += len(chunk)
+
+        logger.info(f"[rq_incr] start_date={start_date}: processed {len(codes)} stocks")
+
+    logger.info(f"[rq_incr] Done: {updated} updated, {failed} failed, {len(stocks_to_update) - updated - failed} no new data")

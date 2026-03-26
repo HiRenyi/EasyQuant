@@ -510,3 +510,29 @@ async def admin_trigger_job(job_id: str):
         return {"message": f"任务 {job_id} 已触发"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/market-data/full-refresh", dependencies=[Depends(require_admin)])
+async def admin_full_refresh():
+    """Manually trigger rqdatac full refresh for all cached stocks."""
+    import asyncio
+    from ..market_data import refresh_all_stocks_full
+
+    try:
+        await asyncio.to_thread(refresh_all_stocks_full)
+        return {"message": "rqdatac 全量刷新完成"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/market-data/rqdatac-incremental", dependencies=[Depends(require_admin)])
+async def admin_rqdatac_incremental():
+    """Manually trigger rqdatac incremental refresh."""
+    import asyncio
+    from ..market_data import refresh_all_stocks_rqdatac_incremental
+
+    try:
+        await asyncio.to_thread(refresh_all_stocks_rqdatac_incremental)
+        return {"message": "rqdatac 增量刷新完成"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
