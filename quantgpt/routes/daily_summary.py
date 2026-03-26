@@ -71,12 +71,13 @@ async def get_summary(
 
 @router.post("/generate", status_code=201)
 async def trigger_generate(
+    date: str = Query(None, description="Target date YYYY-MM-DD, defaults to today"),
     db: AsyncSession = Depends(get_db),
 ):
-    """手动触发生成当日盘后总结（调试用）。"""
+    """手动触发生成盘后总结（可指定日期）。"""
     from ..daily_summary import generate_daily_summary
 
-    result = await generate_daily_summary(db, market="a_share")
+    result = await generate_daily_summary(db, market="a_share", date=date)
     if result is None:
-        return {"message": "今日总结已存在，无需重复生成"}
+        return {"message": "该日期总结已存在，无需重复生成"}
     return result

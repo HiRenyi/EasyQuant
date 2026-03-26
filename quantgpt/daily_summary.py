@@ -74,6 +74,34 @@ def _safe_apply_factor(df: pd.DataFrame, factor_func) -> pd.Series:
         return pd.Series(np.nan, index=df.index)
 
 
+def _strip_outer_rank(expression: str) -> str:
+    """Remove outer rank() wrapper from expression for signal analysis.
+
+    rank() normalizes values to [0, 1] percentiles, making cross-sectional
+    means ~0.5 every day. For day-over-day signal detection we need raw values.
+    Examples:
+        "rank(close/ts_mean(close,20))" -> "close/ts_mean(close,20)"
+        "rank(-1 * x) - rank(y)"        -> "rank(-1 * x) - rank(y)"  (not simple wrapper)
+    """
+    stripped = expression.strip()
+    if not stripped.startswith("rank("):
+        return expression
+    # Check if the entire expression is rank(...) by matching parentheses
+    depth = 0
+    for i, ch in enumerate(stripped):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                # If we're at the end, the whole thing is rank(...)
+                if i == len(stripped) - 1:
+                    return stripped[5:i]  # strip "rank(" and ")"
+                else:
+                    return expression  # rank(...) is only part of expr
+    return expression
+
+
 def _compute_factor_signals(
     market_df: pd.DataFrame,
     templates: list,
@@ -98,7 +126,12 @@ def _compute_factor_signals(
     signals = []
     for tmpl in templates:
         try:
-            factor_func = parse_expression(tmpl["expression"])
+            # Strip outer rank() for signal analysis — rank() normalizes to
+            # ~0.5 mean every day, hiding real cross-sectional changes.
+            # Raw factor values are needed to detect day-over-day shifts.
+            expr = tmpl["expression"]
+            raw_expr = _strip_outer_rank(expr)
+            factor_func = parse_expression(raw_expr)
             market_df["_fv"] = _safe_apply_factor(market_df, factor_func)
 
             # Today's cross-section
@@ -218,9 +251,9 @@ def _compute_factor_signals(
 # ─── Benchmark index changes ─────────────────────────────────────
 
 
-def _get_today_index_changes() -> dict:
-    """Fetch today's benchmark index changes."""
-    today = datetime.now().strftime("%Y-%m-%d")
+def _get_today_index_changes(date: str | None = None) -> dict:
+    """Fetch benchmark index changes for a given date."""
+    today = date or datetime.now().strftime("%Y-%m-%d")
     start = (pd.Timestamp(today) - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
 
     metrics = {}
@@ -544,16 +577,21 @@ def _fix_markdown_spacing(text: str) -> str:
 # ─── Main pipeline ────────────────────────────────────────────────
 
 
-async def generate_daily_summary(db, market: str = "a_share") -> dict | None:
+async def generate_daily_summary(db, market: str = "a_share", date: str | None = None) -> dict | None:
     """Generate and store daily market summary using factor signals.
 
-    Returns the summary dict or None if already exists for today.
+    Args:
+        db: async DB session.
+        market: "a_share" or "crypto".
+        date: target date "YYYY-MM-DD". Defaults to today.
+
+    Returns the summary dict or None if already exists for that date.
     """
     from .models import DailySummary
     from sqlalchemy import select
     import uuid
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = date or datetime.now().strftime("%Y-%m-%d")
 
     # Check if already generated
     existing = await db.execute(
@@ -569,7 +607,7 @@ async def generate_daily_summary(db, market: str = "a_share") -> dict | None:
     logger.info(f"[daily_summary] Starting factor-driven summary for {today} ({market})")
 
     # Step 1: Get index changes
-    index_changes = _get_today_index_changes()
+    index_changes = _get_today_index_changes(today)
     logger.info(f"[daily_summary] Index changes: {index_changes}")
 
     # Step 2: Load market data for factor computation (last 70 trading days)
