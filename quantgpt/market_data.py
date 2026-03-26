@@ -680,9 +680,60 @@ def fetch_benchmark_returns(
             _baostock_logout()
 
 
-def refresh_all_cached_stocks():
-    """Refresh all cached stock data with incremental updates from baostock.
+def _fetch_akshare(bs_code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+    """Fetch single stock daily data from akshare (东方财富).
 
+    Args:
+        bs_code: baostock format code, e.g. "sh.600519"
+        start_date: "YYYY-MM-DD"
+        end_date: "YYYY-MM-DD"
+
+    Returns DataFrame with columns matching cache format, or None.
+    """
+    try:
+        import akshare as ak
+    except ImportError:
+        return None
+
+    try:
+        # Convert bs_code (sh.600519) to akshare symbol (600519)
+        symbol = bs_code.split(".")[1]
+        ak_start = start_date.replace("-", "")
+        ak_end = end_date.replace("-", "")
+
+        df = ak.stock_zh_a_hist(
+            symbol=symbol, period="daily",
+            start_date=ak_start, end_date=ak_end, adjust="qfq",
+        )
+        if df is None or len(df) == 0:
+            return None
+
+        df = df.rename(columns={
+            "日期": "trade_date",
+            "开盘": "open",
+            "最高": "high",
+            "最低": "low",
+            "收盘": "close",
+            "成交量": "volume",
+            "成交额": "amount",
+            "涨跌幅": "pct_change",
+        })
+        df["stock_code"] = bs_code
+        df["trade_date"] = pd.to_datetime(df["trade_date"])
+        for col in ("open", "high", "low", "close", "volume", "amount", "pct_change"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df[["trade_date", "stock_code", "open", "high", "low", "close", "volume", "amount", "pct_change"]]
+        return df.sort_values("trade_date")
+    except Exception as e:
+        logger.warning(f"[akshare] Failed to fetch {bs_code}: {e}")
+        return None
+
+
+def refresh_all_cached_stocks():
+    """Refresh all cached stock data with incremental updates.
+
+    Data source priority: akshare (same-day data) → baostock (fallback).
     Scans the stock cache directory for existing parquet files, determines
     the last cached date for each stock, and fetches missing data up to today.
     Designed to run as a daily cron job after market close (e.g. 15:10 CST).
@@ -720,26 +771,50 @@ def refresh_all_cached_stocks():
 
     updated = 0
     failed = 0
+    bs_fallback = 0
 
-    with _bs_lock:
-        _baostock_login()
+    # Phase 1: Try akshare (supports same-day data)
+    bs_remaining: List[tuple] = []
+    for bs_code, start_date in stocks_to_update:
         try:
-            for bs_code, start_date in stocks_to_update:
-                try:
-                    new_data = fetcher._fetch_remote_bs(bs_code, start_date, today, already_logged_in=True)
-                    if new_data is not None and len(new_data) > 0:
-                        existing = fetcher._load_cache(bs_code)
-                        if existing is not None:
-                            merged = pd.concat([existing, new_data]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
-                        else:
-                            merged = new_data
-                        fetcher._save_cache(bs_code, merged)
-                        updated += 1
-                    # No new data is normal (weekends/holidays)
-                except Exception as e:
-                    logger.warning(f"[refresh] Failed to update {bs_code}: {e}")
-                    failed += 1
-        finally:
-            _baostock_logout()
+            new_data = _fetch_akshare(bs_code, start_date, today)
+            if new_data is not None and len(new_data) > 0:
+                existing = fetcher._load_cache(bs_code)
+                if existing is not None:
+                    merged = pd.concat([existing, new_data]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                else:
+                    merged = new_data
+                fetcher._save_cache(bs_code, merged)
+                updated += 1
+            else:
+                bs_remaining.append((bs_code, start_date))
+        except Exception as e:
+            logger.warning(f"[refresh] akshare failed for {bs_code}: {e}")
+            bs_remaining.append((bs_code, start_date))
 
-    logger.info(f"[refresh] Done: {updated} updated, {failed} failed, {len(stocks_to_update) - updated - failed} no new data")
+    # Phase 2: Fallback to baostock for remaining stocks
+    if bs_remaining and HAS_BAOSTOCK:
+        logger.info(f"[refresh] Falling back to baostock for {len(bs_remaining)} stocks")
+        with _bs_lock:
+            _baostock_login()
+            try:
+                for bs_code, start_date in bs_remaining:
+                    try:
+                        new_data = fetcher._fetch_remote_bs(bs_code, start_date, today, already_logged_in=True)
+                        if new_data is not None and len(new_data) > 0:
+                            existing = fetcher._load_cache(bs_code)
+                            if existing is not None:
+                                merged = pd.concat([existing, new_data]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                            else:
+                                merged = new_data
+                            fetcher._save_cache(bs_code, merged)
+                            updated += 1
+                            bs_fallback += 1
+                    except Exception as e:
+                        logger.warning(f"[refresh] baostock failed for {bs_code}: {e}")
+                        failed += 1
+            finally:
+                _baostock_logout()
+
+    no_data = len(stocks_to_update) - updated - failed
+    logger.info(f"[refresh] Done: {updated} updated (akshare: {updated - bs_fallback}, baostock: {bs_fallback}), {failed} failed, {no_data} no new data")

@@ -29,6 +29,33 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATES_PATH = Path(__file__).resolve().parent / "templates" / "factors.json"
 
+
+def _json_default(obj):
+    """Convert numpy types to native Python for JSON serialization."""
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        v = float(obj)
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return v
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+def _sanitize_for_json(obj):
+    """Recursively replace NaN/Inf with None for JSON compatibility."""
+    if isinstance(obj, float):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
 _DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 _DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 _DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
@@ -248,6 +275,244 @@ def _compute_factor_signals(
     return signals
 
 
+# ─── Industry-level signal computation ───────────────────────────
+
+# Map verbose CSRC industry names to short display names
+_INDUSTRY_SHORT_NAMES = {
+    "C39计算机、通信和其他电子设备制造业": "电子",
+    "J66货币金融服务": "银行",
+    "C38电气机械和器材制造业": "电力设备",
+    "J67资本市场服务": "券商",
+    "C27医药制造业": "医药",
+    "C26化学原料和化学制品制造业": "化工",
+    "C35专用设备制造业": "机械",
+    "C15酒、饮料和精制茶制造业": "食品饮料",
+    "I65软件和信息技术服务业": "计算机",
+    "C36汽车制造业": "汽车",
+    "D44电力、热力生产和供应业": "公用事业",
+    "E48土木工程建筑业": "建筑",
+    "C32有色金属冶炼和压延加工业": "有色金属",
+    "C30非金属矿物制品业": "建材",
+    "K70房地产业": "房地产",
+    "J68保险业": "保险",
+    "C37铁路、船舶、航空航天和其他运输设备制造业": "军工",
+    "G56航空运输业": "航空",
+    "B06煤炭开采和洗选业": "煤炭",
+    "I64互联网和相关服务": "互联网",
+    "I63电信、广播电视和卫星传输服务": "通信",
+    "C13农副食品加工业": "农业",
+    "B09有色金属矿采选业": "矿业",
+    "C31黑色金属冶炼和压延加工业": "钢铁",
+    "C29橡胶和塑料制品业": "化纤",
+    "C28化学纤维制造业": "纺织",
+    "M73研究和试验发展": "科研",
+    "Q84卫生": "医疗",
+    "C34通用设备制造业": "通用设备",
+    "B07石油和天然气开采业": "石油",
+    "G54道路运输业": "交运",
+    "R86广播、电视、电影和录音制作业": "传媒",
+    "C14食品制造业": "食品",
+    "C33金属制品业": "金属制品",
+    "N77生态保护和环境治理业": "环保",
+    "F51批发业": "商贸",
+    "F52零售业": "零售",
+    "L72商务服务业": "商务服务",
+    "G55水上运输业": "航运",
+}
+
+
+def _shorten_industry_name(name: str) -> str:
+    """Convert verbose CSRC industry name to short display name."""
+    return _INDUSTRY_SHORT_NAMES.get(name, name)
+
+
+def _compute_industry_signals(
+    market_df: pd.DataFrame,
+    templates: list,
+) -> list[dict]:
+    """Compute per-industry factor signals for sector rotation analysis.
+
+    For each factor template, computes the industry-level mean of raw factor
+    values on the latest trading day, then ranks industries across all factors
+    to produce a composite score.
+
+    Returns a list of dicts sorted by composite_score descending, each with:
+        industry, stock_count, composite_score, direction, factor_details, top_factors
+    """
+    from .neutralize import get_industry_data
+
+    market_df = market_df.copy()
+    market_df["trade_date"] = pd.to_datetime(market_df["trade_date"])
+    market_df = market_df.sort_values(["stock_code", "trade_date"])
+
+    all_dates = sorted(market_df["trade_date"].unique())
+    if len(all_dates) < 2:
+        return []
+
+    today = all_dates[-1]
+    yesterday = all_dates[-2]
+
+    # Get industry classification
+    stock_codes = market_df["stock_code"].unique().tolist()
+    ind_data = get_industry_data(stock_codes)
+    if ind_data is None or len(ind_data) == 0:
+        logger.warning("[industry_signals] No industry data available")
+        return []
+
+    # Merge industry into market_df
+    market_df = market_df.merge(
+        ind_data[["stock_code", "industry"]], on="stock_code", how="left"
+    )
+    market_df["industry"] = market_df["industry"].fillna("其他")
+
+    # Compute per-industry factor means for today and yesterday
+    industry_records: dict[str, dict] = {}  # industry -> {factor_details, ...}
+
+    for tmpl in templates:
+        try:
+            expr = tmpl["expression"]
+            raw_expr = _strip_outer_rank(expr)
+            factor_func = parse_expression(raw_expr)
+            market_df["_fv"] = _safe_apply_factor(market_df, factor_func)
+
+            for day_label, day_date in [("today", today), ("yesterday", yesterday)]:
+                day_df = market_df.loc[
+                    market_df["trade_date"] == day_date,
+                    ["stock_code", "industry", "_fv"],
+                ].dropna(subset=["_fv"])
+
+                if len(day_df) < 10:
+                    continue
+
+                ind_means = day_df.groupby("industry")["_fv"].mean()
+                for ind_name, mean_val in ind_means.items():
+                    if ind_name not in industry_records:
+                        industry_records[ind_name] = {
+                            "factor_details": {},
+                            "stock_count": 0,
+                        }
+                    fid = tmpl["id"]
+                    if fid not in industry_records[ind_name]["factor_details"]:
+                        industry_records[ind_name]["factor_details"][fid] = {
+                            "name": tmpl["name"],
+                        }
+                    industry_records[ind_name]["factor_details"][fid][
+                        f"{day_label}_mean"
+                    ] = round(float(mean_val), 6)
+
+            # Count stocks per industry (today only)
+            today_df = market_df.loc[
+                market_df["trade_date"] == today,
+                ["stock_code", "industry"],
+            ]
+            for ind_name, cnt in today_df.groupby("industry").size().items():
+                if ind_name in industry_records:
+                    industry_records[ind_name]["stock_count"] = int(cnt)
+
+        except Exception as e:
+            logger.warning(f"[industry_signals] Factor {tmpl['id']} failed: {e}")
+
+    if "_fv" in market_df.columns:
+        market_df.drop(columns=["_fv"], inplace=True)
+
+    if not industry_records:
+        return []
+
+    # Rank industries per factor and compute composite score
+    # For each factor, rank industries by today_mean (higher = stronger)
+    factor_ids = list({
+        fid
+        for rec in industry_records.values()
+        for fid in rec["factor_details"]
+    })
+    industries = list(industry_records.keys())
+
+    # Build matrix: rows=industries, cols=factors, values=today_mean
+    for fid in factor_ids:
+        vals = {}
+        for ind in industries:
+            fd = industry_records[ind]["factor_details"].get(fid, {})
+            vals[ind] = fd.get("today_mean", np.nan)
+
+        # Rank across industries (percentile rank 0-1)
+        series = pd.Series(vals)
+        ranked = series.rank(pct=True, na_option="keep")
+        for ind in industries:
+            fd = industry_records[ind]["factor_details"].get(fid)
+            if fd:
+                fd["rank"] = round(float(ranked.get(ind, 0.5)), 3)
+
+    # Composite score: average rank across all factors, scaled to [-2, +2]
+    results = []
+    for ind in industries:
+        rec = industry_records[ind]
+        if rec["stock_count"] < 3:
+            continue  # skip tiny industries
+
+        ranks = [
+            fd["rank"]
+            for fd in rec["factor_details"].values()
+            if "rank" in fd and not np.isnan(fd["rank"])
+        ]
+        if not ranks:
+            continue
+
+        avg_rank = float(np.mean(ranks))
+        # Scale: 0.5 = neutral, map to [-2, +2]
+        composite = round((avg_rank - 0.5) * 4, 2)
+
+        # Direction
+        if composite > 0.2:
+            direction = "偏强"
+        elif composite < -0.2:
+            direction = "偏弱"
+        else:
+            direction = "中性"
+
+        # Top factors: sort by rank, pick top 3 most extreme
+        factor_list = []
+        for fid, fd in rec["factor_details"].items():
+            if "rank" not in fd:
+                continue
+            deviation = fd["rank"] - 0.5
+            today_val = fd.get("today_mean", 0)
+            yest_val = fd.get("yesterday_mean", 0)
+            change = today_val - yest_val if yest_val else 0
+            factor_list.append({
+                "id": fid,
+                "name": fd["name"],
+                "rank": fd["rank"],
+                "deviation": round(deviation, 3),
+                "today_mean": today_val,
+                "change": round(change, 6),
+            })
+        factor_list.sort(key=lambda x: abs(x["deviation"]), reverse=True)
+        top_factors = factor_list[:3]
+
+        results.append({
+            "industry": _shorten_industry_name(ind),
+            "stock_count": rec["stock_count"],
+            "composite_score": composite,
+            "direction": direction,
+            "top_factors": top_factors,
+            "factor_details": {
+                fid: {
+                    "name": fd["name"],
+                    "rank": fd.get("rank", 0.5),
+                    "today_mean": fd.get("today_mean", 0),
+                    "yesterday_mean": fd.get("yesterday_mean", 0),
+                }
+                for fid, fd in rec["factor_details"].items()
+            },
+        })
+
+    results.sort(key=lambda x: x["composite_score"], reverse=True)
+    logger.info(
+        f"[industry_signals] Computed signals for {len(results)} industries"
+    )
+    return _sanitize_for_json(json.loads(json.dumps(results, default=_json_default)))
+
+
 # ─── Benchmark index changes ─────────────────────────────────────
 
 
@@ -414,10 +679,11 @@ _SYSTEM_PROMPT = """你是一位资深量化策略师，擅长用因子模型刻
 2. 严禁出现任何个股代码或个股名称，只能用"多头组Top 10%""分位90%"等分组表达
 3. 使用 **加粗** 突出关键数字和结论
 4. 每个因子的解读必须用 Markdown 无序列表（`- ` 开头），禁止直接写成段落
-5. 字数控制在 1200-1800 字
+5. 字数控制在 1500-2200 字
 6. 不要编造数据中没有的信息
 7. 重点解读分位数异常（>80 或 <20）和 Z-Score 异常（|z|>1.5）的因子
-8. 报告末尾必须有总结+投资建议+免责声明"""
+8. 行业轮动分析必须基于提供的行业因子数据，给出具体行业名称和因子逻辑
+9. 报告末尾必须有总结+投资建议+免责声明"""
 
 
 def _build_llm_prompt(
@@ -425,6 +691,7 @@ def _build_llm_prompt(
     index_changes: dict,
     factor_signals: List[FactorSignal],
     regime_data: dict | None = None,
+    industry_signals: list[dict] | None = None,
 ) -> str:
     """Build a rich LLM prompt with real factor data (no individual stock codes)."""
     lines = [f"今日日期：{date}\n"]
@@ -474,6 +741,41 @@ def _build_llm_prompt(
             )
         lines.append("")
 
+    # Industry rotation signals
+    if industry_signals:
+        n_top = min(5, len(industry_signals))
+        n_bot = min(5, len(industry_signals))
+        top_industries = industry_signals[:n_top]
+        bottom_industries = industry_signals[-n_bot:]
+
+        lines.append("## 行业轮动信号（基于沪深300成分股，申万一级行业）\n")
+
+        lines.append("### 强势行业（综合因子得分 Top 5）")
+        for ind in top_industries:
+            factors_str = "、".join(
+                f"{f['name']}({f['today_mean'] or 0:+.4f})"
+                for f in ind["top_factors"][:3]
+            )
+            lines.append(
+                f"- **{ind['industry']}**（{ind['stock_count']}只）"
+                f"综合得分{ind['composite_score']:+.2f}[{ind['direction']}]："
+                f"{factors_str}"
+            )
+        lines.append("")
+
+        lines.append("### 弱势行业（综合因子得分 Bottom 5）")
+        for ind in reversed(bottom_industries):
+            factors_str = "、".join(
+                f"{f['name']}({f['today_mean'] or 0:+.4f})"
+                for f in ind["top_factors"][:3]
+            )
+            lines.append(
+                f"- **{ind['industry']}**（{ind['stock_count']}只）"
+                f"综合得分{ind['composite_score']:+.2f}[{ind['direction']}]："
+                f"{factors_str}"
+            )
+        lines.append("")
+
     # Writing instructions
     lines.append("## 输出格式要求\n")
     lines.append("严格按以下结构输出，不要有任何开场白：\n")
@@ -504,7 +806,19 @@ def _build_llm_prompt(
     lines.append("2. **游资视角**：基于成交量异动+日内动量判断短线博弈强度，高分化因子判断题材轮动")
     lines.append("3. **机构视角**：基于低波动+均线偏离+估值因子判断机构风格切换和配置调整\n")
 
-    lines.append("## 四、总结与操作建议\n")
+    if industry_signals:
+        lines.append("## 四、行业轮动与板块建议\n")
+        lines.append("**开头用 1 句话概括今日行业轮动格局**\n")
+        lines.append("基于上方提供的行业因子数据，分析：")
+        lines.append("1. **强势板块解读**：逐一解读 Top 3-5 强势行业，说明哪些因子驱动了该行业走强，经济含义是什么")
+        lines.append("2. **弱势板块解读**：逐一解读 Bottom 3-5 弱势行业，说明弱势原因")
+        lines.append("3. **板块轮动建议**：基于因子信号给出 2-3 条具体的板块配置建议")
+        lines.append("   - 例：**关注电子板块：** 动量转强+成交量异动+价格突破三因子共振，资金持续流入")
+        lines.append("   - 例：**回避银行板块：** 低波动因子偏弱+动量转弱，机构可能在减配\n")
+
+        lines.append("## 五、总结与操作建议\n")
+    else:
+        lines.append("## 四、总结与操作建议\n")
     lines.append("### 1. 核心结论")
     lines.append('用 2-3 句话总结今日市场全貌，提炼关键词（如\u201c情绪驱动\u201d\u201c中小盘领头\u201d\u201c动能加速\u201d等）\n')
     lines.append("### 2. 投资建议")
@@ -652,13 +966,21 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
     else:
         logger.warning("[daily_summary] No market data, generating summary with index data only")
 
+    # Step 3b: Compute industry-level signals
+    industry_signals = []
+    if market_df is not None and len(market_df) > 0 and templates:
+        try:
+            industry_signals = _compute_industry_signals(market_df, templates)
+        except Exception as e:
+            logger.warning(f"[daily_summary] Industry signal computation failed: {e}")
+
     # Step 4: Derive market regime from factor signals
     regime_data = _derive_market_regime(factor_signals, index_changes)
     if regime_data:
         logger.info(f"[daily_summary] Regime: {regime_data.get('headline', '')}")
 
     # Step 5: Build prompt and call LLM
-    prompt = _build_llm_prompt(today, index_changes, factor_signals, regime_data)
+    prompt = _build_llm_prompt(today, index_changes, factor_signals, regime_data, industry_signals)
     logger.info(f"[daily_summary] LLM prompt: {len(prompt)} chars, calling DeepSeek...")
     content = _call_llm(prompt)
     logger.info(f"[daily_summary] LLM response: {len(content)} chars")
@@ -669,6 +991,7 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
         **regime_data,
         "factor_signals": [asdict(s) for s in factor_signals],
         "factor_count": len(factor_signals),
+        "industry_signals": industry_signals,
     }
 
     summary = DailySummary(
