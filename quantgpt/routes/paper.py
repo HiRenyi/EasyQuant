@@ -121,10 +121,9 @@ async def get_positions(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取当前持仓。"""
+    """获取当前持仓（含成本、浮盈）。"""
     strategy = await _get_user_strategy(db, strategy_id, user.id)
 
-    # Latest snapshot with positions
     snap_q = await db.execute(
         select(PaperSnapshot)
         .where(PaperSnapshot.strategy_id == strategy.id, PaperSnapshot.positions.isnot(None))
@@ -132,8 +131,33 @@ async def get_positions(
         .limit(1)
     )
     snap = snap_q.scalar_one_or_none()
-    positions = snap.positions if snap else {}
-    return {"date": snap.date if snap else None, "positions": positions}
+    raw_positions = snap.positions if snap else {}
+
+    # Enrich positions with P&L info
+    enriched = []
+    for code, val in (raw_positions or {}).items():
+        if isinstance(val, dict):
+            shares = val.get("shares", 0)
+            entry_price = val.get("entry_price", 0)
+            entry_date = val.get("entry_date", "")
+        else:
+            shares = int(val)
+            entry_price = 0
+            entry_date = ""
+        market_value = snap.market_value or 0 if snap else 0
+        enriched.append({
+            "stock_code": code,
+            "shares": shares,
+            "entry_price": entry_price,
+            "entry_date": entry_date,
+        })
+
+    return {
+        "date": snap.date if snap else None,
+        "cash": snap.cash if snap else 0,
+        "market_value": snap.market_value if snap else 0,
+        "positions": enriched,
+    }
 
 
 @router.get("/strategies/{strategy_id}/orders")
@@ -173,6 +197,7 @@ async def get_orders(
                 "price": o.price,
                 "amount": o.amount,
                 "commission": o.commission,
+                "slippage": getattr(o, "slippage", 0) or 0,
             }
             for o in orders
         ],

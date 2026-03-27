@@ -1,5 +1,5 @@
 """Entry point:
-  python -m quantgpt --transport http --port 8002
+  python -m quantgpt --transport http --port 8003
   python -m quantgpt --prefetch hs300 csi500
 """
 
@@ -48,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser(description="QuantGPT Server")
     parser.add_argument("--transport", choices=["stdio", "sse", "streamable-http", "http"], default="stdio")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8002)
+    parser.add_argument("--port", type=int, default=8003)
     parser.add_argument("--prefetch", nargs="+", metavar="UNIVERSE", help="Pre-download data: hs300 csi500 small_scale")
     args = parser.parse_args()
 

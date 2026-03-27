@@ -2,23 +2,23 @@ import { useState, useCallback, useEffect } from "react";
 import type { Task } from "../types/backtest";
 import { fetchTasks } from "../api/client";
 
-export function useTaskHistory(sessionId: string | null) {
+export function useTaskHistory(sessionId: string | null, taskType?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  // Reload tasks when sessionId changes
+  // Reload tasks when sessionId or taskType changes
   useEffect(() => {
     if (!sessionId) {
       setTasks([]);
       return;
     }
-    fetchTasks(1, 50, sessionId)
+    fetchTasks(1, 50, sessionId, taskType)
       .then(({ tasks: loaded }) => {
         setTasks(loaded);
       })
       .catch(() => {
         setTasks([]);
       });
-  }, [sessionId]);
+  }, [sessionId, taskType]);
 
   const addTask = useCallback((task: Task) => {
     setTasks((prev) => {

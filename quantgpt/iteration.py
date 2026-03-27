@@ -1,15 +1,16 @@
 """Factor iteration optimization — scoring, prompt building, candidate generation.
 
-Migrated and simplified from XTQuant/ai-quant-research-execution/experiments/case60.
+Refactored with QuantaAlpha three-phase evolution architecture:
+  Phase 1: TrajectoryAnalyzer — trajectory quality metrics
+  Phase 2: MetaEvolutionSelector — adaptive strategy selection
+  Phase 3: Strategy execution (Mutation / Crossover / Explore)
 """
 
 import hashlib
 import logging
 import os
 import re
-import threading
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -19,72 +20,51 @@ import pandas as pd
 from .backtest import run_factor_backtest
 from .expression_parser import parse_expression
 from .mutation_engine import MutationEngine
+from .meta_evolution import EvolutionStrategy, select_strategy
+from .trajectory_analyzer import analyze_trajectory
+from .crossover_engine import extract_top_segments, build_crossover_prompt
 from .report import generate_report
 
 logger = logging.getLogger(__name__)
 
 
-# ---- Factor scoring ----
+# ---- Factor scoring (unchanged) ----
 
 def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_overfit_score: float | None = None) -> dict:
     """Compute a composite 0-100 score for a factor backtest result.
 
-    5-component scoring aligned with XTQuant factor_scorer.py:
-        IC Mean 25%, IC IR 25%, Stability 20%, Anti-Overfit 15%, Group Backtest 15%
-
-    Absolute return constraint: if CAGR < 0 or Sharpe < 0, grade capped at C.
+    5-component scoring: IC Mean 25%, IC IR 25%, Stability 20%, Anti-Overfit 15%, Group Backtest 15%
     """
-
-    def _clamp(v: float, lo: float, hi: float) -> float:
+    def _clamp(v, lo, hi):
         return max(lo, min(hi, v))
 
-    # --- Component 1: IC Mean (25%) ---
     ic_mean = backtest_summary.get("ic_mean", 0.0) or backtest_summary.get("rank_ic_mean", 0.0)
     ic_mean_score = min(abs(ic_mean) / 0.05, 1.0) * 100
 
-    # --- Component 2: IC IR (25%) ---
     ic_ir = backtest_summary.get("ic_ir", 0.0)
     ic_ir_score = min(abs(ic_ir) / 1.0, 1.0) * 100
 
-    # --- Component 3: Stability (20%) ---
     ic_win_rate = backtest_summary.get("ic_win_rate", 0.5)
-    ic_wr_sub = min(max(ic_win_rate - 0.5, 0) / 0.2, 1.0) * 100  # 50%->0, 70%->100
+    ic_wr_sub = min(max(ic_win_rate - 0.5, 0) / 0.2, 1.0) * 100
     ls_sharpe = backtest_summary.get("long_short_sharpe", 0.0)
     ls_consistency_sub = min(abs(ls_sharpe) / 2.0, 1.0) * 100
     stability_score = ic_wr_sub * 0.6 + ls_consistency_sub * 0.4
 
-    # --- Component 4: Anti-Overfit (15%) ---
     ao_score = _clamp(anti_overfit_score, 0, 100) if anti_overfit_score is not None else 50.0
 
-    # --- Component 5: Group Backtest (15%) ---
-    ls_sharpe_gb = min(max(ls_sharpe, 0) / 1.0, 1.0) * 100  # >=1.0 is excellent
+    ls_sharpe_gb = min(max(ls_sharpe, 0) / 1.0, 1.0) * 100
     mono = backtest_summary.get("monotonicity_score", 0.0)
     mono_sub = _clamp(mono, 0, 1) * 100
     spread = backtest_summary.get("spread", 0.0)
     top_positive_sub = 100.0 if spread > 0 else 0.0
     group_bt_score = ls_sharpe_gb * 0.4 + mono_sub * 0.4 + top_positive_sub * 0.2
 
-    # --- Weighted composite ---
-    score = (
-        ic_mean_score * 0.25
-        + ic_ir_score * 0.25
-        + stability_score * 0.20
-        + ao_score * 0.15
-        + group_bt_score * 0.15
-    )
+    score = (ic_mean_score * 0.25 + ic_ir_score * 0.25 + stability_score * 0.20
+             + ao_score * 0.15 + group_bt_score * 0.15)
     score = round(_clamp(score, 0, 100), 1)
 
-    # --- Grade ---
-    if score >= 80:
-        grade = "A"
-    elif score >= 60:
-        grade = "B"
-    elif score >= 40:
-        grade = "C"
-    else:
-        grade = "D"
+    grade = "A" if score >= 80 else "B" if score >= 60 else "C" if score >= 40 else "D"
 
-    # --- Absolute return constraint ---
     capped = False
     cap_reason = None
     cagr = report_metrics.get("cagr", 0.0)
@@ -96,23 +76,23 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
             capped = True
             cap_reason = "negative_cagr" if cagr < 0 else "negative_sharpe"
 
-    components = {
-        "ic_mean": round(ic_mean_score, 1),
-        "ic_ir": round(ic_ir_score, 1),
-        "stability": round(stability_score, 1),
-        "anti_overfit": round(ao_score, 1),
-        "group_backtest": round(group_bt_score, 1),
+    return {
+        "score": score, "grade": grade,
+        "component_scores": {
+            "ic_mean": round(ic_mean_score, 1), "ic_ir": round(ic_ir_score, 1),
+            "stability": round(stability_score, 1), "anti_overfit": round(ao_score, 1),
+            "group_backtest": round(group_bt_score, 1),
+        },
+        "capped": capped, "cap_reason": cap_reason,
     }
 
-    return {"score": score, "grade": grade, "component_scores": components, "capped": capped, "cap_reason": cap_reason}
 
-
-# ---- Iterate prompt building ----
+# ---- Prompt building ----
 
 _FACTOR_CATEGORIES = [
     ("Momentum", "rank(ts_delta(close, 20) / ts_shift(close, 20))"),
     ("Reversal", "rank(-1 * ts_delta(close, 5) / ts_shift(close, 5))"),
-    ("Volatility", "rank(ts_std(returns, 20))"),
+    ("Volatility", "rank(ts_std(close/ts_shift(close,1)-1, 20))"),
     ("Volume", "rank(volume / ts_mean(volume, 20))"),
     ("Value", "rank((close - ts_min(close, 60)) / (ts_max(close, 60) - ts_min(close, 60) + 1e-8))"),
     ("Correlation", "rank(ts_corr(close, volume, 20))"),
@@ -124,348 +104,210 @@ _FACTOR_CATEGORIES = [
     ("Conditional", "rank(where(ts_rank(volume, 20) > 0.7, ts_delta(close, 10) / close, 0))"),
 ]
 
-_DIVERSITY_GUIDE = """
+_SYSTEM_PROMPT_TEMPLATE = """你是一个量化因子表达式优化专家。
+
+{operators_doc}
+
 ## 多样性与非线性原则
-1. 🚨 只能使用 SUPPORTED OPERATORS 中列出的函数，禁止使用 rsi, macd, ema, sma, bbands, atr, obv, adx 等未列出的技术指标
+1. 只能使用上述 SUPPORTED OPERATORS 中列出的函数
 2. 优先使用非线性变换（sign_power, tanh, sigmoid, log）捕捉市场动态
 3. 组合不同类别的信号（动量+量价+波动率），而非仅调整单一信号的参数
-3. 使用交互项（乘法组合）来增强因子区分度
-4. 考虑条件因子（where）来捕捉不同市场状态
-5. 改变时间窗口（5/10/20/40/60日）来覆盖不同周期
+4. 使用交互项（乘法组合）来增强因子区分度
+5. 考虑条件因子（where）来捕捉不同市场状态
 6. 使用衰减加权（decay_linear）来对近期数据赋予更高权重
-"""
 
-_OUTPUT_FORMAT_RULES = """
 ## 输出格式要求（必须严格遵守）
 只返回一个因子表达式，不要任何解释、分析或推理过程。
 不要使用 markdown 代码块、反引号或引号包裹。
-不要以"根据分析"、"我将"、"改进的因子"等开头。
-你的回复必须是恰好一行可执行的因子表达式，不要任何其他内容。
+你的回复必须是恰好一行可执行的因子表达式。
 
-## 复杂度限制（必须遵守）
+## 复杂度限制
 - 函数嵌套层数不能超过 10 层
 - 表达式总长度不能超过 500 个字符
-- 鼓励组合多种信号（动量+量价+波动率等），适度的复杂度有助于捕捉非线性关系
 """
 
 
-def _select_categories(task_id: str, iteration_index: int, n: int = 5) -> list[tuple[str, str]]:
-    """Deterministically select n factor categories based on task_id + iteration_index."""
+def _build_explore_prompt(
+    expression: str, score: float, metrics: dict,
+    previous_expressions: list[str], iteration_index: int,
+    task_id: str, direction: str | None,
+) -> str:
+    """Build user prompt for EXPLORE strategy (try completely different approach)."""
+    # Select rotated category examples
     seed_str = f"{task_id}:{iteration_index}"
     h = int(hashlib.md5(seed_str.encode()).hexdigest(), 16)
-    indices = []
-    total = len(_FACTOR_CATEGORIES)
-    for i in range(total):
-        indices.append((h >> (i * 3)) % 1000)
-    ranked = sorted(range(total), key=lambda i: indices[i])
-    return [_FACTOR_CATEGORIES[i] for i in ranked[:n]]
+    indices = [(h >> (i * 3)) % 1000 for i in range(len(_FACTOR_CATEGORIES))]
+    ranked = sorted(range(len(_FACTOR_CATEGORIES)), key=lambda i: indices[i])
+    selected = [_FACTOR_CATEGORIES[i] for i in ranked[:5]]
 
-
-def build_iterate_prompt(
-    expression: str,
-    metrics: dict,
-    score: float,
-    grade: str,
-    iteration_index: int,
-    previous_expressions: list[str],
-    task_id: str = "",
-    anti_overfit: dict | None = None,
-    direction: str | None = None,
-) -> tuple[str, str]:
-    """Build system and user prompts for iteration LLM call.
-
-    Uses MutationEngine for targeted diagnosis when available,
-    falls back to score-based heuristics.
-
-    Args:
-        direction: Optional iteration direction hint from user, e.g.
-            "加入量价信息", "增加低波暴露", "做行业中性版本".
-
-    Returns:
-        (system_prompt, user_prompt)
-    """
-    from .api_server import _FACTOR_OPERATORS
-
-    # Try mutation engine for targeted prompts
-    engine = MutationEngine(
-        expression=expression,
-        metrics=metrics,
-        score=score,
-        anti_overfit=anti_overfit,
-    )
-    diagnosis = engine.diagnose_failure()
-    system_prompt, user_prompt = engine.build_mutation_prompt(operators_doc=_FACTOR_OPERATORS)
-
-    # Append diversity guide and anti-repeat to user prompt
-    user_parts = [user_prompt]
-
-    # Category examples (rotated)
-    selected = _select_categories(task_id, iteration_index, n=5)
-    user_parts.append("")
-    user_parts.append("## 参考因子类别示例（可选方向）")
+    parts = [
+        f"当前因子: {expression}",
+        f"评分: {score}/100 — 需要完全不同的方向",
+        "",
+        "## 参考因子类别（请选择一个全新方向）",
+    ]
     for name, example in selected:
-        user_parts.append(f"- {name}: {example}")
+        parts.append(f"- {name}: {example}")
 
-    # Anti-repeat
     if previous_expressions:
-        user_parts.append("")
-        user_parts.append("## 禁止重复（以下表达式已使用，不能再用或仅微调参数）")
-        for expr in previous_expressions:
-            user_parts.append(f"- {expr}")
+        parts.append("")
+        parts.append("## 禁止重复（以下表达式已使用）")
+        for expr in previous_expressions[-10:]:
+            parts.append(f"- {expr}")
 
-    # Anti-overfit feedback
-    if anti_overfit:
-        user_parts.append("")
-        user_parts.append(f"## 反过拟合检测结果: {anti_overfit.get('recommendation', 'N/A')} (得分: {anti_overfit.get('score', 'N/A')})")
-        for test in anti_overfit.get("tests", []):
-            status = "✓" if test.get("passed") else "✗"
-            user_parts.append(f"  {status} {test.get('name', '')}")
-
-    user_parts.append("")
     if direction:
-        user_parts.append(f"## 用户指定的迭代方向")
-        user_parts.append(f"请重点朝以下方向改进：{direction}")
-        user_parts.append("")
-    user_parts.append("请生成一个改进的因子表达式：")
-    user_prompt = "\n".join(user_parts)
+        parts.append(f"\n## 用户指定方向\n请重点朝以下方向改进：{direction}")
 
-    return system_prompt, user_prompt
+    parts.append("\n请生成一个全新方向的因子表达式：")
+    return "\n".join(parts)
 
 
 # ---- Duplicate detection ----
 
 def _normalize_expression(expr: str) -> str:
-    """Normalize expression for comparison: lowercase, strip spaces."""
     return re.sub(r"\s+", "", expr.lower())
 
 
 def is_duplicate_expression(expr: str, existing: list[str]) -> bool:
-    """Check if an expression is a duplicate of any in the existing list."""
     norm = _normalize_expression(expr)
     return any(_normalize_expression(e) == norm for e in existing)
 
 
-# ---- Candidate generation ----
+# ---- Single candidate evaluation ----
 
-def _generate_single_candidate(
-    parent_expression: str,
-    parent_metrics: dict,
-    parent_score: float,
-    parent_grade: str,
-    params: dict,
-    market_df: pd.DataFrame,
-    iteration_index: int,
-    shared_expressions: list[str],
-    expressions_lock: threading.Lock,
-    user_id: str,
-    task_id: str = "",
-    max_dedup_retries: int = 4,
-    direction: str | None = None,
+def _evaluate_candidate(
+    expression: str, params: dict, market_df: pd.DataFrame, user_id: str,
 ) -> dict:
-    """Generate a single iteration candidate: LLM -> validate -> backtest -> score.
+    """Run backtest + anti-overfit + report + score for a single expression."""
+    n_groups = params.get("n_groups", 5)
+    holding_period = params.get("holding_period", 5)
+    result = run_factor_backtest(market_df, expression, n_groups, holding_period)
 
-    Uses shared_expressions (protected by expressions_lock) for dedup across workers.
-    Retries LLM call up to max_dedup_retries times if a duplicate is generated.
-    """
+    # Fast anti-overfit (IC stability + half-life only)
+    anti_overfit_result = None
+    factor_df = result.get("_factor_df")
+    if factor_df is not None and len(factor_df) > 100:
+        try:
+            from .anti_overfit import AntiOverfitDetector
+            detector = AntiOverfitDetector(factor_df, holding_period)
+            t1 = detector.test_ic_stability()
+            t4 = detector.test_half_life()
+            fast_passed = sum(1 for t in [t1, t4] if t.passed)
+            anti_overfit_result = {
+                "score": fast_passed / 2 * 100,
+                "recommendation": "推荐" if fast_passed == 2 else "谨慎" if fast_passed == 1 else "需改进",
+                "tests": [{"name": t.name, "passed": t.passed, "details": t.details} for t in [t1, t4]],
+            }
+        except Exception as e:
+            logger.warning(f"Anti-overfit failed: {e}")
+
+    # Generate report
+    from .market_data import fetch_benchmark_returns
+    bm_returns = None
+    try:
+        bm_returns = fetch_benchmark_returns(
+            params.get("benchmark", "hs300"),
+            params.get("start_date", "2023-01-01"),
+            params.get("end_date", "2025-12-31"),
+        )
+    except Exception:
+        pass
+
+    user_report_dir = Path(__file__).resolve().parent.parent / "reports" / user_id
+    user_report_dir.mkdir(parents=True, exist_ok=True)
+    report_result = generate_report(
+        result["strategy_returns"], benchmark_returns=bm_returns,
+        title="Factor Top-Group Backtest", output_dir=str(user_report_dir),
+    )
+    report_filename = Path(report_result["report_path"]).name
+
+    # Score
+    ao_val = anti_overfit_result.get("score") if anti_overfit_result else None
+    backtest_summary = {
+        "long_short_sharpe": result["long_short_sharpe"],
+        "monotonicity_score": result["monotonicity_score"],
+        "spread": result["spread"],
+        "ic_mean": result.get("ic_mean", 0),
+        "rank_ic_mean": result.get("rank_ic_mean", 0),
+        "ic_ir": result.get("ic_ir", 0),
+        "ic_win_rate": result.get("ic_win_rate", 0),
+        "long_short_annual": result.get("long_short_annual", 0),
+        "top_group_sharpe": result.get("top_group_sharpe", 0),
+        "group_returns": result["group_returns"],
+        "turnover": result.get("turnover", 0),
+    }
+    scoring = compute_factor_score(backtest_summary, report_result["metrics"], ao_val)
+
+    return {
+        "expression": expression,
+        "status": "success",
+        "score": scoring["score"],
+        "grade": scoring["grade"],
+        "component_scores": scoring["component_scores"],
+        "backtest_summary": backtest_summary,
+        "anti_overfit": anti_overfit_result,
+        "report_metrics": report_result["metrics"],
+        "report_url": f"/api/v1/reports/{report_filename}",
+        "report_filename": report_filename,
+        "metrics": {"backtest_summary": backtest_summary, "report_metrics": report_result["metrics"]},
+    }
+
+
+# ---- Main adaptive iteration loop ----
+
+def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> str:
+    """Call LLM and return cleaned expression string."""
     import time as _time
     from openai import OpenAI
-    from .api_server import _clean_expression, _validate_parentheses
+    from .api_server import _clean_expression
 
-    raw_expression = "unknown"
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY not set")
+    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+    client = OpenAI(api_key=api_key, base_url=base_url)
 
-    try:
-        # Stagger concurrent calls to reduce duplicates
-        _time.sleep(iteration_index * 3)
-
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
-        if not api_key:
-            raise RuntimeError("DEEPSEEK_API_KEY not set")
-        base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-        client = OpenAI(api_key=api_key, base_url=base_url)
-
-        # Retry loop for dedup — get a fresh snapshot each attempt
-        for dedup_attempt in range(max_dedup_retries + 1):
-            # 1. Build prompt with latest shared expressions
-            with expressions_lock:
-                previous_expressions = list(shared_expressions)
-
-            system_prompt, user_prompt = build_iterate_prompt(
-                expression=parent_expression,
-                metrics=parent_metrics,
-                score=parent_score,
-                grade=parent_grade,
-                iteration_index=iteration_index + dedup_attempt * 100,
-                previous_expressions=previous_expressions,
-                task_id=task_id,
-                direction=direction,
-            )
-
-            # 2. Call LLM with retry
-            # Increase temperature on dedup retries for more diversity
-            temp = min(0.9 + dedup_attempt * 0.3, 1.8)
-            last_err = None
-            for attempt in range(3):
-                try:
-                    resp = client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        temperature=temp,
-                        max_tokens=256,
-                        timeout=60,
-                    )
-                    raw_expression = _clean_expression(resp.choices[0].message.content)
-                    last_err = None
-                    break
-                except Exception as e:
-                    last_err = e
-                    logger.warning(f"LLM call attempt {attempt+1} failed: {e}")
-                    _time.sleep(3 * (attempt + 1))
-
-            if last_err:
-                raise last_err
-
-            # 3. Validate
-            paren_err = _validate_parentheses(raw_expression)
-            if paren_err:
-                return {"expression": raw_expression, "status": "failed", "error": f"括号错误: {paren_err}"}
-
-            try:
-                from .fundamental_data import ALL_FUNDAMENTAL_NAMES as _FUND_NAMES
-                dummy = pd.DataFrame({
-                    "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
-                    "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
-                    "volume": [100, 200, 300], "amount": [100, 400, 900],
-                    "pct_change": [0, 100, 50],
-                    "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
-                    **{name: [1.0, 1.1, 1.2] for name in _FUND_NAMES},
-                })
-                func = parse_expression(raw_expression)
-                func(dummy)
-            except Exception as e:
-                return {"expression": raw_expression, "status": "failed", "error": f"表达式验证失败: {e}"}
-
-            # 4. Atomic duplicate check-and-register
-            with expressions_lock:
-                if is_duplicate_expression(raw_expression, shared_expressions):
-                    if dedup_attempt < max_dedup_retries:
-                        logger.info(f"[{task_id}] candidate {iteration_index} duplicate on attempt {dedup_attempt}, retrying")
-                        continue
-                    return {"expression": raw_expression, "status": "failed", "error": "重复表达式"}
-                # Claim this expression immediately so other workers see it
-                shared_expressions.append(raw_expression)
-
-            break  # got a unique, valid expression
-
-        # 5. Run backtest
-        n_groups = params.get("n_groups", 5)
-        holding_period = params.get("holding_period", 5)
-        result = run_factor_backtest(market_df, raw_expression, n_groups, holding_period)
-
-        # 5a. Run anti-overfit detection (lightweight: skip placebo in iteration)
-        anti_overfit_result = None
-        factor_df = result.get("_factor_df")
-        if factor_df is not None and len(factor_df) > 100:
-            try:
-                from .anti_overfit import AntiOverfitDetector
-                detector = AntiOverfitDetector(factor_df, holding_period)
-                # Only run fast tests (IC stability + half-life), skip expensive placebo/stress
-                t1 = detector.test_ic_stability()
-                t4 = detector.test_half_life()
-                fast_passed = sum(1 for t in [t1, t4] if t.passed)
-                fast_score = fast_passed / 2 * 100
-                anti_overfit_result = {
-                    "score": fast_score,
-                    "recommendation": "推荐" if fast_score >= 75 else "谨慎" if fast_score >= 50 else "需改进",
-                    "passed_count": fast_passed,
-                    "total_count": 2,
-                    "tests": [
-                        {"name": t.name, "passed": t.passed, "details": t.details}
-                        for t in [t1, t4]
-                    ],
-                    "mode": "fast",
-                }
-            except Exception as e:
-                logger.warning(f"Anti-overfit detection failed: {e}")
-
-        # 6. Generate report
-        from .market_data import fetch_benchmark_returns
-        bm_returns = None
+    for attempt in range(3):
         try:
-            bm_returns = fetch_benchmark_returns(
-                params.get("benchmark", "hs300"),
-                params.get("start_date", "2023-01-01"),
-                params.get("end_date", "2025-12-31"),
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temperature,
+                max_tokens=256,
+                timeout=60,
             )
-        except Exception:
-            pass
+            return _clean_expression(resp.choices[0].message.content)
+        except Exception as e:
+            logger.warning(f"LLM call attempt {attempt+1} failed: {e}")
+            _time.sleep(3 * (attempt + 1))
+    raise RuntimeError("LLM call failed after 3 attempts")
 
-        user_report_dir = Path(__file__).resolve().parent.parent / "reports" / user_id
-        user_report_dir.mkdir(parents=True, exist_ok=True)
 
-        report_result = generate_report(
-            result["strategy_returns"],
-            benchmark_returns=bm_returns,
-            title="Factor Top-Group Backtest",
-            output_dir=str(user_report_dir),
-            periods_per_year=252,
-        )
-        report_filename = Path(report_result["report_path"]).name
-
-        # 7. Score
-        ao_score_val = anti_overfit_result.get("score") if anti_overfit_result else None
-        scoring = compute_factor_score(
-            backtest_summary={
-                "long_short_sharpe": result["long_short_sharpe"],
-                "monotonicity_score": result["monotonicity_score"],
-                "spread": result["spread"],
-                "ic_mean": result.get("ic_mean", 0),
-                "rank_ic_mean": result.get("rank_ic_mean", 0),
-                "ic_ir": result.get("ic_ir", 0),
-                "ic_win_rate": result.get("ic_win_rate", 0),
-            },
-            report_metrics=report_result["metrics"],
-            anti_overfit_score=ao_score_val,
-        )
-
-        return {
-            "expression": raw_expression,
-            "status": "success",
-            "score": scoring["score"],
-            "grade": scoring["grade"],
-            "component_scores": scoring["component_scores"],
-            "backtest_summary": {
-                "long_short_sharpe": result["long_short_sharpe"],
-                "long_short_annual": result.get("long_short_annual", 0),
-                "top_group_sharpe": result.get("top_group_sharpe", 0),
-                "monotonicity_score": result["monotonicity_score"],
-                "spread": result["spread"],
-                "group_returns": result["group_returns"],
-                "ic_mean": result.get("ic_mean", 0),
-                "rank_ic_mean": result.get("rank_ic_mean", 0),
-                "ic_ir": result.get("ic_ir", 0),
-                "ic_win_rate": result.get("ic_win_rate", 0),
-                "turnover": result.get("turnover", 0),
-                "cost_adjusted": result.get("cost_adjusted", False),
-                "cost_rate": result.get("cost_rate", 0),
-                "total_cost_drag": result.get("total_cost_drag", 0),
-            },
-            "anti_overfit": anti_overfit_result,
-            "report_metrics": report_result["metrics"],
-            "report_url": f"/api/v1/reports/{report_filename}",
-            "report_filename": report_filename,
-        }
-
+def _validate_expression(expr: str) -> str | None:
+    """Validate expression syntax. Returns error string or None if valid."""
+    from .api_server import _validate_parentheses
+    paren_err = _validate_parentheses(expr)
+    if paren_err:
+        return f"括号错误: {paren_err}"
+    try:
+        from .fundamental_data import ALL_FUNDAMENTAL_NAMES as _FN
+        dummy = pd.DataFrame({
+            "open": [1.0, 2.0, 3.0], "high": [1.1, 2.1, 3.1],
+            "low": [0.9, 1.9, 2.9], "close": [1.0, 2.0, 3.0],
+            "volume": [100, 200, 300], "amount": [100, 400, 900],
+            "pct_change": [0, 100, 50],
+            "trade_date": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+            **{name: [1.0, 1.1, 1.2] for name in _FN},
+        })
+        func = parse_expression(expr)
+        func(dummy)
+        return None
     except Exception as e:
-        logger.error(f"Candidate generation failed: {traceback.format_exc()}")
-        return {
-            "expression": raw_expression,
-            "status": "failed",
-            "error": str(e),
-        }
+        return f"表达式验证失败: {e}"
 
 
 def generate_iteration_candidates(
@@ -482,58 +324,126 @@ def generate_iteration_candidates(
     task_id: str = "",
     direction: str | None = None,
 ) -> list[dict]:
-    """Generate N candidate factor improvements in parallel.
+    """Generate N candidate factor improvements using adaptive evolution.
 
-    Args:
-        parent_expression: Current factor expression.
-        parent_metrics: Dict with backtest_summary and report_metrics.
-        parent_score: Current factor score (0-100).
-        parent_grade: Current grade (A/B/C/D).
-        params: Backtest params (universe, dates, n_groups, etc.).
-        market_df: Pre-loaded market data DataFrame.
-        user_id: User ID for report directory.
-        n_candidates: Number of candidates to generate.
-        max_concurrent: Max parallel workers.
-        on_progress: Callback(done_count, candidate_result) for progress updates.
-        task_id: Task ID for deterministic category selection.
-        direction: Optional iteration direction hint from user.
-
-    Returns:
-        List of candidate dicts sorted by score descending.
+    Serial-adaptive loop: generate → evaluate → analyze trajectory → select strategy → repeat.
+    Each candidate builds on the trajectory of all previous candidates.
     """
-    previous_expressions = [parent_expression]
-    expressions_lock = threading.Lock()
-    candidates = []
-    done_count = 0
+    from .api_server import _FACTOR_OPERATORS
 
-    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
-        futures = {}
-        for i in range(n_candidates):
-            f = pool.submit(
-                _generate_single_candidate,
-                parent_expression=parent_expression,
-                parent_metrics=parent_metrics,
-                parent_score=parent_score,
-                parent_grade=parent_grade,
-                params=params,
-                market_df=market_df,
-                iteration_index=i,
-                shared_expressions=previous_expressions,
-                expressions_lock=expressions_lock,
-                user_id=user_id,
-                task_id=task_id,
-                direction=direction,
-            )
-            futures[f] = i
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(operators_doc=_FACTOR_OPERATORS)
+    all_expressions = [parent_expression]
+    trajectory: list[dict] = [{
+        "expression": parent_expression,
+        "score": parent_score,
+        "metrics": parent_metrics,
+        "strategy": "parent",
+    }]
+    candidates: list[dict] = []
 
-        for f in as_completed(futures):
-            result = f.result()
+    for i in range(n_candidates):
+        try:
+            # Phase 1: Analyze trajectory
+            traj_metrics = analyze_trajectory(trajectory)
+
+            # Phase 2: Select strategy
+            current_score = trajectory[-1]["score"] if trajectory else parent_score
+            nesting = sum(1 for c in parent_expression if c == '(')
+            strategy = select_strategy(traj_metrics, current_score, nesting)
+            logger.info(f"[{task_id}] candidate {i}: strategy={strategy.value}, "
+                        f"traj_score={current_score}, best={traj_metrics.best_score}")
+
+            # Phase 3: Build prompt based on strategy
+            if strategy == EvolutionStrategy.RECOMBINE:
+                segments = extract_top_segments(trajectory)
+                if len(segments) >= 2:
+                    _, user_prompt = build_crossover_prompt(
+                        segments, parent_expression, current_score, _FACTOR_OPERATORS)
+                else:
+                    strategy = EvolutionStrategy.EXPLORE
+
+            if strategy == EvolutionStrategy.EXPLORE:
+                user_prompt = _build_explore_prompt(
+                    parent_expression, current_score, parent_metrics,
+                    all_expressions, i, task_id, direction)
+
+            elif strategy in (EvolutionStrategy.EXPLOIT, EvolutionStrategy.SIMPLIFY):
+                # Use best expression as base for mutation
+                base_expr = traj_metrics.best_expression or parent_expression
+                base_metrics = parent_metrics
+                for t in trajectory:
+                    if t["expression"] == base_expr:
+                        base_metrics = t.get("metrics", parent_metrics)
+                        break
+                engine = MutationEngine(base_expr, base_metrics, traj_metrics.best_score)
+                _, user_prompt = engine.build_mutation_prompt(_FACTOR_OPERATORS)
+
+                # Append anti-repeat and direction
+                extra = []
+                if all_expressions:
+                    extra.append("\n## 禁止重复")
+                    for expr in all_expressions[-10:]:
+                        extra.append(f"- {expr}")
+                if direction:
+                    extra.append(f"\n## 用户指定方向\n请重点朝以下方向改进：{direction}")
+                user_prompt += "\n".join(extra)
+
+            # Generate expression via LLM (with dedup retries)
+            temp = 0.9 if strategy != EvolutionStrategy.EXPLORE else 1.2
+            raw_expression = None
+            for dedup_attempt in range(4):
+                expr = _call_llm(system_prompt, user_prompt, temperature=min(temp + dedup_attempt * 0.2, 1.8))
+                err = _validate_expression(expr)
+                if err:
+                    logger.warning(f"[{task_id}] candidate {i} validation failed: {err}")
+                    raw_expression = expr
+                    break
+                if not is_duplicate_expression(expr, all_expressions):
+                    raw_expression = expr
+                    break
+                logger.info(f"[{task_id}] candidate {i} duplicate, retry {dedup_attempt+1}")
+            if raw_expression is None:
+                raw_expression = expr  # last attempt even if duplicate
+
+            # Validate
+            err = _validate_expression(raw_expression)
+            if err:
+                result = {"expression": raw_expression, "status": "failed", "error": err, "score": 0}
+                candidates.append(result)
+                trajectory.append({"expression": raw_expression, "score": 0, "strategy": strategy.value})
+                if on_progress:
+                    on_progress(len(candidates), result)
+                continue
+
+            all_expressions.append(raw_expression)
+
+            # Evaluate
+            result = _evaluate_candidate(raw_expression, params, market_df, user_id)
+            result["strategy_used"] = strategy.value
             candidates.append(result)
 
-            done_count += 1
-            if on_progress:
-                on_progress(done_count, result)
+            # Record in trajectory
+            trajectory.append({
+                "expression": raw_expression,
+                "score": result.get("score", 0),
+                "metrics": result.get("metrics", {}),
+                "strategy": strategy.value,
+            })
 
-    # Sort: successful first by score descending, then failed
+            if on_progress:
+                on_progress(len(candidates), result)
+
+        except Exception as e:
+            logger.error(f"[{task_id}] candidate {i} failed: {traceback.format_exc()}")
+            result = {"expression": "unknown", "status": "failed", "error": str(e), "score": 0}
+            candidates.append(result)
+            trajectory.append({"expression": "unknown", "score": 0, "strategy": "error"})
+            if on_progress:
+                on_progress(len(candidates), result)
+
     candidates.sort(key=lambda c: (c.get("status") == "success", c.get("score", 0)), reverse=True)
     return candidates
+
+
+# Legacy alias
+build_iterate_prompt = None  # Removed — prompts now built inside generate_iteration_candidates

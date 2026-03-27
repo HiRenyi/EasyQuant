@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect } from "react";
 import type { Task } from "./types/backtest";
+import type { StrategyTask } from "./types/strategy";
 import { useBacktest } from "./hooks/useBacktest";
 import { useTaskHistory } from "./hooks/useTaskHistory";
 import { useSession } from "./hooks/useSession";
@@ -20,15 +21,17 @@ import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
 import PaperTrading from "./components/PaperTrading";
 import DailySummary from "./components/DailySummary";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart, Newspaper } from "lucide-react";
+import StrategyBacktest from "./components/StrategyBacktest";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart, Newspaper, Code } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "daily" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
+type MainTab = "backtest" | "strategy" | "daily" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
+  { id: "strategy", label: "策略回测", icon: Code, color: "orange" },
   { id: "daily", label: "盘后日报", icon: Newspaper, color: "rose" },
   { id: "templates", label: "因子模板库", icon: BookOpen, color: "indigo" },
   { id: "leaderboard", label: "因子榜", icon: Trophy, color: "amber" },
@@ -65,6 +68,18 @@ export default function App() {
   } = useSession();
 
   const { tasks, addTask } = useTaskHistory(activeSessionId);
+
+  // Strategy backtest history (separate from factor tasks)
+  const { tasks: strategyTasks, addTask: addStrategyTask } = useTaskHistory(activeSessionId, "strategy_backtest");
+  const [restoredStrategyTask, setRestoredStrategyTask] = useState<StrategyTask | null>(null);
+
+  const onStrategyComplete = useCallback(
+    (task: StrategyTask) => {
+      addStrategyTask(task as unknown as Task);
+      refreshSessions();
+    },
+    [addStrategyTask, refreshSessions]
+  );
 
   const onComplete = useCallback(
     (task: Task) => {
@@ -244,7 +259,7 @@ export default function App() {
 
       <div className="mx-auto max-w-7xl px-6 py-6 flex gap-6">
         {/* Main content area — changes per tab */}
-        <main className={`min-w-0 space-y-4 ${activeTab === "backtest" ? "flex-1" : "w-full"}`}>
+        <main className={`min-w-0 space-y-4 ${(activeTab === "backtest" || activeTab === "strategy") ? "flex-1" : "w-full"}`}>
           {activeTab === "backtest" && (
             <>
               <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
@@ -299,6 +314,15 @@ export default function App() {
             </>
           )}
 
+          {activeTab === "strategy" && (
+            <StrategyBacktest
+              sessionId={activeSessionId}
+              onComplete={onStrategyComplete}
+              restoredTask={restoredStrategyTask}
+              onClearRestored={() => setRestoredStrategyTask(null)}
+            />
+          )}
+
           {activeTab === "daily" && (
             <DailySummary />
           )}
@@ -328,32 +352,54 @@ export default function App() {
           )}
         </main>
 
-        {/* Sidebar — only visible on backtest tab for logged-in users */}
-        {activeTab === "backtest" && !isGuest && (
+        {/* Sidebar — visible on backtest and strategy tabs for logged-in users */}
+        {(activeTab === "backtest" || activeTab === "strategy") && !isGuest && (
           <aside className="w-72 shrink-0 hidden lg:block">
             <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
-              <div className="flex gap-1 mb-3 shrink-0">
-                <button
-                  onClick={() => setSidebarTab("sessions")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
-                  }`}
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  会话
-                </button>
-                <button
-                  onClick={() => setSidebarTab("factors")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
-                  }`}
-                >
-                  <Star className="h-3.5 w-3.5" />
-                  因子库
-                </button>
-              </div>
+              {activeTab === "backtest" && (
+                <div className="flex gap-1 mb-3 shrink-0">
+                  <button
+                    onClick={() => setSidebarTab("sessions")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    会话
+                  </button>
+                  <button
+                    onClick={() => setSidebarTab("factors")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    因子库
+                  </button>
+                </div>
+              )}
+              {activeTab === "strategy" && (
+                <div className="flex gap-1 mb-3 shrink-0">
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-50 text-orange-700">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    策略历史
+                  </span>
+                </div>
+              )}
               <div className="overflow-y-auto min-h-0">
-                {sidebarTab === "sessions" ? (
+                {activeTab === "strategy" ? (
+                  <SessionSidebar
+                    sessions={sessions}
+                    activeSessionId={activeSessionId}
+                    tasks={strategyTasks}
+                    activeTaskId={restoredStrategyTask?.task_id}
+                    onCreateSession={handleCreateSession}
+                    onSwitchSession={(id) => { switchSession(id); setRestoredStrategyTask(null); }}
+                    onRenameSession={renameSession}
+                    onDeleteSession={deleteSession}
+                    onSelectTask={(task) => setRestoredStrategyTask(task as unknown as StrategyTask)}
+                  />
+                ) : sidebarTab === "sessions" ? (
                   <SessionSidebar
                     sessions={sessions}
                     activeSessionId={activeSessionId}

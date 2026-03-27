@@ -4,9 +4,21 @@ import { useAuth } from "../contexts/AuthContext";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v2.4.0";
+export const APP_VERSION = "v2.5.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.5.0",
+    date: "2026-03-27",
+    items: [
+      "策略回测移除频率设置，统一为日频回测",
+      "净值曲线统一为日级别显示",
+      "聚宽浏览器切换为无头模式",
+      "策略代码 API 传输加密，防止爬取泄露",
+      "新增 robots.txt 和 noindex 防爬保护",
+      "服务端口迁移至 8003",
+    ],
+  },
   {
     version: "v2.4.0",
     date: "2026-03-26",

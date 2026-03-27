@@ -172,6 +172,9 @@ class PaperStrategy(Base):
     n_groups = Column(Integer, nullable=False, default=5)
     initial_capital = Column(Float, nullable=False, default=1_000_000.0)
     current_value = Column(Float, nullable=False, default=1_000_000.0)
+    commission_rate = Column(Float, nullable=False, default=0.0003)
+    stamp_tax_rate = Column(Float, nullable=False, default=0.001)
+    slippage_rate = Column(Float, nullable=False, default=0.002)
     status = Column(String(20), nullable=False, default="active")  # active | paused | stopped
     last_rebalance_date = Column(String(10), nullable=True)
     next_rebalance_date = Column(String(10), nullable=True)
@@ -192,8 +195,10 @@ class PaperSnapshot(Base):
     strategy_id = Column(UUID(as_uuid=True), ForeignKey("paper_strategies.id"), nullable=False, index=True)
     date = Column(String(10), nullable=False)
     portfolio_value = Column(Float, nullable=False)
+    cash = Column(Float, nullable=True, default=0.0)
+    market_value = Column(Float, nullable=True, default=0.0)
     daily_return = Column(Float, nullable=True)
-    positions = Column(JSON, nullable=True)  # {stock_code: shares}
+    positions = Column(JSON, nullable=True)  # {code: {shares, entry_price, entry_date}}
 
     strategy = relationship("PaperStrategy", back_populates="snapshots")
 
@@ -214,6 +219,7 @@ class PaperOrder(Base):
     price = Column(Float, nullable=False)
     amount = Column(Float, nullable=False)
     commission = Column(Float, nullable=False, default=0.0)
+    slippage = Column(Float, nullable=False, default=0.0)
 
     strategy = relationship("PaperStrategy", back_populates="orders")
 

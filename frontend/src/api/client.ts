@@ -167,9 +167,10 @@ export function getReportUrl(reportUrl: string): string {
   return `${BASE}${reportUrl}${token ? `${sep}token=${token}` : ""}`;
 }
 
-export async function fetchTasks(page = 1, pageSize = 20, sessionId?: string): Promise<{ tasks: Task[]; page: number; page_size: number }> {
+export async function fetchTasks(page = 1, pageSize = 20, sessionId?: string, taskType?: string): Promise<{ tasks: Task[]; page: number; page_size: number }> {
   let url = `${BASE}/api/v1/tasks?page=${page}&page_size=${pageSize}`;
   if (sessionId) url += `&session_id=${sessionId}`;
+  if (taskType) url += `&task_type=${taskType}`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error(`Tasks fetch failed: ${res.status}`);
   return res.json();

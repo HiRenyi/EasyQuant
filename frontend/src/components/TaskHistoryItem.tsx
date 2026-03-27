@@ -10,8 +10,21 @@ interface Props {
 
 export default function TaskHistoryItem({ task, isActive, onClick }: Props) {
   const { isDark } = useColorMode();
-  const prompt = task.params?.prompt ?? task.result?.llm?.prompt ?? "—";
+  const prompt = (task.params as any)?.prompt ?? task.result?.llm?.prompt ?? (task.result?.params as any)?.prompt ?? "—";
   const expression = task.expression ?? task.result?.params?.expression;
+  const isStrategy = task.task_type === "strategy_backtest";
+
+  // For strategy tasks: show key metrics as subtitle instead of expression
+  let subtitle: string | undefined;
+  if (isStrategy && task.status === "completed" && task.result?.metrics) {
+    const m = task.result.metrics as unknown as Record<string, number>;
+    const parts: string[] = [];
+    if (m.annual_return != null) parts.push(`年化 ${(m.annual_return * 100).toFixed(1)}%`);
+    if (m.sharpe_ratio != null) parts.push(`夏普 ${m.sharpe_ratio.toFixed(2)}`);
+    subtitle = parts.join(" | ") || undefined;
+  } else if (!isStrategy && expression) {
+    subtitle = expression;
+  }
 
   return (
     <button
@@ -34,8 +47,8 @@ export default function TaskHistoryItem({ task, isActive, onClick }: Props) {
         </div>
         <div className="min-w-0 flex-1">
           <p className={`text-sm ${isDark ? "text-gray-200" : "text-gray-800"} truncate`}>{prompt}</p>
-          {expression && (
-            <p className="text-xs text-gray-400 font-mono truncate mt-0.5">{expression}</p>
+          {subtitle && (
+            <p className={`text-xs ${isStrategy ? "text-orange-400" : "text-gray-400"} font-mono truncate mt-0.5`}>{subtitle}</p>
           )}
         </div>
       </div>

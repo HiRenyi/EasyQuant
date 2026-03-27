@@ -15,7 +15,7 @@ Endpoints:
     GET  /api/v1/auth/me                 — 当前用户信息
     GET  /api/v1/health                  — 健康检查
 
-启动: DEEPSEEK_API_KEY=sk-xxx python -m quantgpt --transport http --port 8002
+启动: DEEPSEEK_API_KEY=sk-xxx python -m quantgpt --transport http --port 8003
 """
 
 import asyncio
@@ -27,6 +27,8 @@ import re
 import time
 import traceback
 import uuid
+import hashlib
+import hmac as _hmac_mod
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -60,8 +62,40 @@ from .routes.composite import router as composite_router
 from .routes.comparison import router as comparison_router
 from .routes.paper import router as paper_router
 from .routes.daily_summary import router as daily_summary_router
+from .routes.strategy_backtest import router as strategy_backtest_router
 
 logger = logging.getLogger(__name__)
+
+# ---- Strategy code obfuscation ----
+
+_CODE_OBF_KEY = os.environ.get("CODE_OBF_KEY", "qgpt2026xk9")
+
+
+def _obfuscate_code(code: str) -> str:
+    """XOR + base64 encode strategy code to prevent casual scraping."""
+    key = _CODE_OBF_KEY.encode("utf-8")
+    data = code.encode("utf-8")
+    xored = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+    return base64.b64encode(xored).decode("ascii")
+
+
+def _sanitize_task_response(task_dict: dict) -> dict:
+    """Replace raw strategy_code with obfuscated version in task API responses."""
+    if not isinstance(task_dict, dict):
+        return task_dict
+    out = dict(task_dict)
+    # Top-level strategy_code
+    if "strategy_code" in out and isinstance(out["strategy_code"], str):
+        out["strategy_code_encrypted"] = _obfuscate_code(out["strategy_code"])
+        del out["strategy_code"]
+    # Nested result.strategy_code
+    if isinstance(out.get("result"), dict) and "strategy_code" in out["result"]:
+        out["result"] = dict(out["result"])
+        if isinstance(out["result"]["strategy_code"], str):
+            out["result"]["strategy_code_encrypted"] = _obfuscate_code(out["result"]["strategy_code"])
+            del out["result"]["strategy_code"]
+    return out
+
 
 # ---- Configuration ----
 
@@ -170,7 +204,33 @@ async def lifespan(app: FastAPI):
     _mcp_server.streamable_http_app()  # lazy-init session manager
     async with _mcp_server.session_manager.run():
         logger.info("MCP streamable-http session manager started")
+
+        # Start JoinQuant browser (if credentials configured)
+        jq_username = os.environ.get("JQ_USERNAME", "")
+        jq_password = os.environ.get("JQ_PASSWORD", "")
+        if jq_username and jq_password:
+            try:
+                from .jq_automation import get_jq_service
+                jq = get_jq_service()
+                ok = await jq.startup()
+                if ok:
+                    logger.info("JoinQuant browser started and logged in")
+                else:
+                    logger.warning("JoinQuant browser login failed — strategy backtest may not work")
+            except Exception as e:
+                logger.error(f"JoinQuant browser startup error: {e}")
+        else:
+            logger.info("JQ_USERNAME/JQ_PASSWORD not set — skipping JoinQuant browser")
+
         yield
+
+    # Shutdown JQ browser
+    try:
+        from .jq_automation import get_jq_service
+        jq = get_jq_service()
+        await jq.shutdown()
+    except Exception:
+        pass
 
     scheduler.shutdown(wait=False)
     await close_db()
@@ -184,7 +244,7 @@ _cors_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app = FastAPI(
     title="QuantGPT API",
-    version="2.4.0",
+    version="2.5.0",
     description="QuantGPT — 用自然语言回测 A 股因子",
     docs_url=None,
     redoc_url=None,
@@ -209,6 +269,7 @@ app.include_router(composite_router)
 app.include_router(comparison_router)
 app.include_router(paper_router)
 app.include_router(daily_summary_router)
+app.include_router(strategy_backtest_router)
 
 
 # ---- Rate limiter (in-memory, per IP) ----
@@ -663,6 +724,7 @@ def _persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_file
                     user_id=user_id,
                     session_id=session_id,
                     status=task_data.get("status", "failed"),
+                    task_type=task_data.get("task_type", "backtest"),
                     params=task_data.get("params"),
                     expression=task_data.get("expression"),
                     result=task_data.get("result"),
@@ -1100,6 +1162,7 @@ async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session_id: str | None = Query(None, description="按会话 ID 过滤"),
+    task_type: str | None = Query(None, description="按任务类型过滤: backtest / strategy_backtest / iteration"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1114,6 +1177,8 @@ async def list_tasks(
             if t.get("user_id") == user_id:
                 if session_id is not None and t.get("session_id") != session_id:
                     continue
+                if task_type is not None and t.get("task_type") != task_type:
+                    continue
                 safe = {k: v for k, v in t.items() if k not in ("created_at", "user_id")}
                 memory_tasks.append(safe)
 
@@ -1121,6 +1186,8 @@ async def list_tasks(
     query = select(TaskModel).where(TaskModel.user_id == user.id)
     if session_id is not None:
         query = query.where(TaskModel.session_id == session_id)
+    if task_type is not None:
+        query = query.where(TaskModel.task_type == task_type)
     query = query.order_by(desc(TaskModel.created_at)).offset(offset).limit(page_size)
     result = await db.execute(query)
     db_tasks = result.scalars().all()
@@ -1133,6 +1200,7 @@ async def list_tasks(
             merged.append({
                 "task_id": dt.id,
                 "status": dt.status,
+                "task_type": dt.task_type,
                 "session_id": str(dt.session_id) if dt.session_id else None,
                 "params": dt.params,
                 "expression": dt.expression,
@@ -1140,7 +1208,7 @@ async def list_tasks(
                 "error": dt.error,
             })
 
-    return {"tasks": merged, "page": page, "page_size": page_size}
+    return {"tasks": [_sanitize_task_response(t) for t in merged], "page": page, "page_size": page_size}
 
 
 @app.get("/api/v1/tasks/{task_id}")
@@ -1158,7 +1226,7 @@ async def get_task(
         if task.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="Task not found")
         safe = {k: v for k, v in task.items() if k not in ("created_at", "user_id")}
-        return safe
+        return _sanitize_task_response(safe)
 
     # Fallback to DB
     result = await db.execute(
@@ -1171,6 +1239,7 @@ async def get_task(
     resp = {
         "task_id": db_task.id,
         "status": db_task.status,
+        "task_type": db_task.task_type,
         "params": db_task.params,
         "expression": db_task.expression,
         "result": db_task.result,
@@ -1183,7 +1252,7 @@ async def get_task(
         resp["candidates_total"] = len(resp["candidates"])
         resp["task_type"] = "iteration"
         resp["parent_task_id"] = db_task.result.get("parent_task_id")
-    return resp
+    return _sanitize_task_response(resp)
 
 
 @app.get("/api/v1/tasks/{task_id}/stream")
@@ -1234,6 +1303,7 @@ async def stream_task(task_id: str, request: Request):
                     last_status = current_status
                     last_candidates_done = current_candidates_done
                     safe = {k: v for k, v in task.items() if k not in ("created_at", "user_id")}
+                    safe = _sanitize_task_response(safe)
                     payload = json.dumps(safe, ensure_ascii=False, default=str)
                     yield f"event: update\ndata: {payload}\n\n"
 
@@ -1777,7 +1847,7 @@ async def submit_feedback(
         # Build screenshot URL for webhook message
         screenshot_url = ""
         if screenshot_path:
-            host = request.headers.get("host", "localhost:8002")
+            host = request.headers.get("host", "localhost:8003")
             scheme = request.headers.get("x-forwarded-proto", "http")
             screenshot_url = f"{scheme}://{host}/api/v1/feedback-screenshots/{feedback_id}"
 
@@ -1847,6 +1917,22 @@ async def get_feedback_screenshot(feedback_id: str):
     if not filepath.is_file():
         raise HTTPException(status_code=404, detail="Screenshot not found")
     return FileResponse(str(filepath), media_type="image/png")
+
+
+# ---- robots.txt (prevent crawlers from indexing API / strategy code) ----
+
+_ROBOTS_TXT = """\
+User-agent: *
+Disallow: /api/
+Disallow: /mcp/
+Disallow: /mcp-sse/
+Allow: /
+"""
+
+
+@app.get("/robots.txt")
+async def robots_txt():
+    return HTMLResponse(content=_ROBOTS_TXT, media_type="text/plain")
 
 
 # ---- SPA static files (production: serve frontend/dist) ----
