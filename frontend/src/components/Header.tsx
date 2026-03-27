@@ -11,12 +11,10 @@ const CHANGELOG = [
     version: "v2.5.0",
     date: "2026-03-27",
     items: [
-      "策略回测移除频率设置，统一为日频回测",
-      "净值曲线统一为日级别显示",
-      "聚宽浏览器切换为无头模式",
-      "策略代码 API 传输加密，防止爬取泄露",
-      "新增 robots.txt 和 noindex 防爬保护",
-      "服务端口迁移至 8003",
+      "新增策略一键回测：用自然语言描述交易策略，自动生成代码并在聚宽执行回测",
+      "支持净值曲线、交易明细、每日持仓等完整策略回测报告",
+      "新增策略代码安全保护，API 传输加密防爬取",
+      "新增因子进化引擎：交叉、变异、元进化多路径自动搜索",
     ],
   },
   {
@@ -536,7 +534,7 @@ export default function Header() {
                   {APP_VERSION}
                 </button>
               </div>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>用自然语言描述你的因子策略，一键回测</p>
+              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>用自然语言描述策略或因子，AI 一键回测</p>
             </div>
           </div>
           {isGuest ? (

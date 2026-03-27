@@ -327,7 +327,7 @@ function ReportShareButton({ content, date, isDark }: { content: string; date: s
   const [showModal, setShowModal] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const textWithAttribution = `${content}\n\n—— 来源：QuantGPT 因子研究日报 (quantgpt.online) | ${date}`;
+  const textWithAttribution = `${content}\n\n—— 来源：QuantGPT 量化研究日报 (quantgpt.online) | ${date}`;
 
   const copyText = useCallback(async () => {
     try {
@@ -369,7 +369,7 @@ function ReportShareButton({ content, date, isDark }: { content: string; date: s
     ctx.fillText("QuantGPT", 28, 36);
     ctx.fillStyle = "#475569";
     ctx.font = "13px -apple-system, system-ui, sans-serif";
-    ctx.fillText("因子研究日报", 120, 36);
+    ctx.fillText("量化研究日报", 120, 36);
     ctx.textAlign = "right";
     ctx.fillText(date, W - 28, 36);
     ctx.textAlign = "left";
@@ -430,7 +430,7 @@ function ReportShareButton({ content, date, isDark }: { content: string; date: s
     // Footer
     ctx.fillStyle = "#475569";
     ctx.font = "11px -apple-system, system-ui, sans-serif";
-    ctx.fillText("来源：QuantGPT 因子研究日报", 28, H - 20);
+    ctx.fillText("来源：QuantGPT 量化研究日报", 28, H - 20);
     ctx.textAlign = "right";
     ctx.fillText("quantgpt.online", W - 28, H - 20);
     ctx.textAlign = "left";
@@ -613,7 +613,7 @@ function DetailReport({ content, date, isDark }: { content: string; date: string
       <div className={`px-6 py-2.5 border-t text-[11px] ${
         isDark ? "border-gray-800 text-gray-500" : "border-gray-100 text-gray-400"
       }`}>
-        来源：QuantGPT 因子研究日报 · quantgpt.online
+        来源：QuantGPT 量化研究日报 · quantgpt.online
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
   ctx.fillText("QuantGPT", 24, 32);
   ctx.fillStyle = "#475569";
   ctx.font = "11px -apple-system, system-ui, sans-serif";
-  ctx.fillText("AI 量化因子回测", 100, 32);
+  ctx.fillText("AI 量化策略回测", 100, 32);
 
   // Expression
   ctx.fillStyle = "#60a5fa";
