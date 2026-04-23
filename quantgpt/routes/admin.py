@@ -234,6 +234,7 @@ async def admin_tasks(
             "task_type": task.task_type or "backtest",
             "status": task.status,
             "expression": task.expression,
+            "params": task.params,
             "error": task.error,
             "created_at": task.created_at.isoformat() if task.created_at else None,
         })

@@ -179,6 +179,6 @@ curl -s http://localhost:8002/api/v1/health || echo "FAILED (service may still b
 
 echo ""
 echo ""
-echo "Access: http://47.111.3.102"
+echo "Access: http://<YOUR_SERVER_IP>"
 echo "Logs:   journalctl -u quantgpt -f"
 echo ""

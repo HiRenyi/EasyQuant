@@ -50,7 +50,7 @@ async def strategy_backtest(
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    """提交聚宽策略回测任务（异步，立即返回 task_id）。"""
+    """提交策略回测任务（异步，立即返回 task_id）。"""
     from ..api_server import (
         _check_rate_limit, _active_task_count, _cleanup_tasks,
         _tasks, _tasks_lock, MAX_ACTIVE_TASKS,
@@ -66,7 +66,7 @@ async def strategy_backtest(
     jq_username = os.environ.get("JQ_USERNAME", "")
     jq_password = os.environ.get("JQ_PASSWORD", "")
     if not jq_username or not jq_password:
-        raise HTTPException(status_code=500, detail="聚宽账号未配置，请联系管理员")
+        raise HTTPException(status_code=500, detail="回测服务未配置，请联系管理员")
 
     _cleanup_tasks()
 
@@ -186,7 +186,7 @@ def _run_strategy_backtest_task(
 
         if not result.success:
             task["status"] = "failed"
-            task["error"] = result.error or "聚宽回测失败"
+            task["error"] = result.error or "策略回测执行失败"
             if result.screenshot_path:
                 task["screenshot"] = result.screenshot_path
             return
@@ -223,48 +223,44 @@ def _run_strategy_backtest_task(
 
 # ---- LLM helpers ----
 
-def _get_strategy_llm_config() -> tuple[str, str, str]:
+def _get_strategy_llm_config() -> dict:
     """Get LLM config for strategy generation.
 
-    Uses STRATEGY_LLM_* env vars if set, otherwise falls back to DEEPSEEK_*.
+    Priority: STRATEGY_LLM_* > DEEPSEEK_*.
+    Returns dict with keys: api_key, base_url, model, provider ('anthropic' or 'openai').
     """
+    provider = os.environ.get("STRATEGY_LLM_PROVIDER", "").lower()
     api_key = os.environ.get("STRATEGY_LLM_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
     base_url = os.environ.get("STRATEGY_LLM_BASE_URL") or os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     model = os.environ.get("STRATEGY_LLM_MODEL") or os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
+    # Auto-detect provider from model name
+    if not provider:
+        if "claude" in model.lower():
+            provider = "anthropic"
+        else:
+            provider = "openai"
+
     if not api_key:
         raise ValueError("STRATEGY_LLM_API_KEY 或 DEEPSEEK_API_KEY 未配置")
-    return api_key, base_url, model
+    return {"api_key": api_key, "base_url": base_url, "model": model, "provider": provider}
 
 
 def _call_deepseek_strategy(prompt: str, max_retries: int = 2) -> str:
-    """Call LLM to generate JoinQuant strategy code from natural language.
-
-    Retries up to max_retries times if the model returns empty content
-    (known issue with some OpenRouter models).
-    """
-    from openai import OpenAI
+    """Call LLM to generate strategy code from natural language."""
     from ..strategy_prompt import STRATEGY_SYSTEM_PROMPT
     from ..strategy_code_utils import extract_python_code
 
-    api_key, base_url, model = _get_strategy_llm_config()
-    client = OpenAI(api_key=api_key, base_url=base_url)
-
-    messages = [
-        {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
+    cfg = _get_strategy_llm_config()
+    logger.info(f"Strategy LLM: provider={cfg['provider']}, model={cfg['model']}, base_url={cfg['base_url'][:40]}")
 
     last_raw = ""
     for attempt in range(1, max_retries + 1):
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=2048,
-            timeout=90,
-        )
+        if cfg["provider"] == "anthropic":
+            raw = _call_anthropic(cfg, STRATEGY_SYSTEM_PROMPT, prompt)
+        else:
+            raw = _call_openai(cfg, STRATEGY_SYSTEM_PROMPT, prompt)
 
-        raw = resp.choices[0].message.content or ""
         logger.info(f"LLM response (attempt {attempt}): length={len(raw)}, first 200: {raw[:200]}")
 
         if not raw.strip():
@@ -280,31 +276,51 @@ def _call_deepseek_strategy(prompt: str, max_retries: int = 2) -> str:
     raise ValueError(f"LLM 未返回有效的 Python 代码（已重试{max_retries}次），原始内容前500字: {last_raw[:500]}")
 
 
+def _call_openai(cfg: dict, system_prompt: str, user_prompt: str) -> str:
+    """Call OpenAI-compatible API."""
+    from openai import OpenAI
+    client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+    resp = client.chat.completions.create(
+        model=cfg["model"],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.3,
+        max_tokens=4096,
+        timeout=120,
+    )
+    return resp.choices[0].message.content or ""
+
+
+def _call_anthropic(cfg: dict, system_prompt: str, user_prompt: str) -> str:
+    """Call Anthropic-compatible API (Nuoda / official)."""
+    import anthropic
+    client = anthropic.Anthropic(api_key=cfg["api_key"], base_url=cfg["base_url"])
+    resp = client.messages.create(
+        model=cfg["model"],
+        max_tokens=4096,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+        temperature=0.3,
+    )
+    return resp.content[0].text if resp.content else ""
+
+
 def _call_fix_strategy(code: str, errors: list[str], original_prompt: str) -> str | None:
     """Ask LLM to fix validation errors in the generated code. Returns fixed code or None."""
-    from openai import OpenAI
     from ..strategy_prompt import STRATEGY_SYSTEM_PROMPT, STRATEGY_FIX_PROMPT
     from ..strategy_code_utils import extract_python_code
 
-    api_key, base_url, model = _get_strategy_llm_config()
-
+    cfg = _get_strategy_llm_config()
     fix_prompt = STRATEGY_FIX_PROMPT.format(errors="\n".join(f"- {e}" for e in errors))
+    combined_prompt = f"原始需求：{original_prompt}\n\n之前生成的代码：\n```python\n{code}\n```\n\n{fix_prompt}"
 
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
-                {"role": "user", "content": original_prompt},
-                {"role": "assistant", "content": f"```python\n{code}\n```"},
-                {"role": "user", "content": fix_prompt},
-            ],
-            temperature=0.1,
-            max_tokens=4096,
-            timeout=90,
-        )
-        raw = resp.choices[0].message.content or ""
+        if cfg["provider"] == "anthropic":
+            raw = _call_anthropic(cfg, STRATEGY_SYSTEM_PROMPT, combined_prompt)
+        else:
+            raw = _call_openai(cfg, STRATEGY_SYSTEM_PROMPT, combined_prompt)
         return extract_python_code(raw)
     except Exception as e:
         logger.warning(f"Strategy fix LLM call failed: {e}")

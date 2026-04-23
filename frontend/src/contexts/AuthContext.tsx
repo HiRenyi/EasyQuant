@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const enterGuestMode = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.setItem(TOKEN_KEY, GUEST_TOKEN);
     localStorage.removeItem(REFRESH_KEY);
     setAccessToken(GUEST_TOKEN);
     setUser(null);
@@ -68,6 +68,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(TOKEN_KEY);
     const storedRefresh = localStorage.getItem(REFRESH_KEY);
     if (!stored) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Restore guest mode
+    if (stored === GUEST_TOKEN) {
+      setAccessToken(GUEST_TOKEN);
+      setIsGuest(true);
       setIsLoading(false);
       return;
     }

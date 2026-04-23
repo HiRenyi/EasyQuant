@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { Send, Loader2, Check, Circle, ChevronDown, ChevronUp, TrendingUp, Activity, AlertTriangle, Wallet, RefreshCw, Code, Copy, FileText } from "lucide-react";
+import { Send, Loader2, Check, Circle, ChevronDown, ChevronUp, TrendingUp, Activity, AlertTriangle, Wallet, RefreshCw, FileText, MessageSquarePlus } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useStrategyBacktest } from "../hooks/useStrategyBacktest";
 import { useColorMode } from "../contexts/ColorModeContext";
 import type { StrategyTask, StrategyTaskStatus, StrategyBacktestResult, EquityCurvePoint } from "../types/strategy";
-import { getStrategyCode } from "../utils/codeObfuscation";
 
 // ---- Props ----
 
@@ -201,9 +200,18 @@ export default function StrategyBacktest({
       {/* Error */}
       {displayTask?.status === "failed" && (
         <div className={`rounded-xl border ${isDark ? "border-red-800 bg-red-900/20" : "border-red-200 bg-red-50"} p-4`}>
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className={`h-4 w-4 ${isDark ? "text-red-400" : "text-red-600"}`} />
-            <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>回测失败</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={`h-4 w-4 ${isDark ? "text-red-400" : "text-red-600"}`} />
+              <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>回测失败</span>
+            </div>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("open-feedback", { detail: { prefill: `[策略回测失败] ${displayTask.error || "未知错误"}\n\n策略描述: ${prompt || displayTask.params?.prompt || ""}`, task_id: displayTask.task_id } }))}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${isDark ? "bg-red-800/50 text-red-300 hover:bg-red-800" : "bg-red-100 text-red-700 hover:bg-red-200"}`}
+            >
+              <MessageSquarePlus className="h-3 w-3" />
+              反馈问题
+            </button>
           </div>
           <p className={`text-sm ${isDark ? "text-red-300" : "text-red-700"}`}>{displayTask.error || "未知错误"}</p>
         </div>
@@ -280,23 +288,12 @@ function StrategyResults({ result, isDark, onRerun }: {
 }) {
   const [activeTab, setActiveTab] = useState<"chart" | "trades" | "positions">("chart");
   const [showDetails, setShowDetails] = useState(false);
-  const [showCode, setShowCode] = useState(false);
-  const [copied, setCopied] = useState(false);
   const border = isDark ? "border-gray-700" : "border-gray-200";
   const bg = isDark ? "bg-gray-900" : "bg-white";
   const muted = isDark ? "text-gray-400" : "text-gray-500";
 
   const metrics = result.metrics;
   const params = result.params;
-  const strategyCode = getStrategyCode(result);
-
-  const handleCopyCode = () => {
-    if (strategyCode) {
-      navigator.clipboard.writeText(strategyCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -338,36 +335,6 @@ function StrategyResults({ result, isDark, onRerun }: {
               <span>初始资金: ¥{(params?.initial_capital ?? INITIAL_CAPITAL).toLocaleString()}</span>
             </div>
           </div>
-          {/* Strategy code */}
-          {strategyCode && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className={`text-xs font-medium ${muted} flex items-center gap-1`}>
-                  <Code className="h-3 w-3" />
-                  策略代码
-                </p>
-                <button onClick={handleCopyCode} className={`text-xs ${muted} hover:${isDark ? "text-gray-300" : "text-gray-700"} flex items-center gap-1`}>
-                  <Copy className="h-3 w-3" />
-                  {copied ? "已复制" : "复制"}
-                </button>
-              </div>
-              <button
-                onClick={() => setShowCode(!showCode)}
-                className={`text-xs ${isDark ? "text-orange-400" : "text-orange-600"} hover:underline`}
-              >
-                {showCode ? "收起代码" : "展开代码"}
-              </button>
-              {showCode && (
-                <pre
-                  className={`mt-2 p-3 rounded-lg text-xs overflow-x-auto font-mono max-h-64 select-none ${isDark ? "bg-gray-950 text-gray-300" : "bg-gray-50 text-gray-800"}`}
-                  onCopy={(e) => e.preventDefault()}
-                  style={{ userSelect: "none", WebkitUserSelect: "none" }}
-                >
-                  <code>{strategyCode}</code>
-                </pre>
-              )}
-            </div>
-          )}
         </div>
       )}
 

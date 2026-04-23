@@ -66,35 +66,9 @@ from .routes.strategy_backtest import router as strategy_backtest_router
 
 logger = logging.getLogger(__name__)
 
-# ---- Strategy code obfuscation ----
-
-_CODE_OBF_KEY = os.environ.get("CODE_OBF_KEY", "qgpt2026xk9")
-
-
-def _obfuscate_code(code: str) -> str:
-    """XOR + base64 encode strategy code to prevent casual scraping."""
-    key = _CODE_OBF_KEY.encode("utf-8")
-    data = code.encode("utf-8")
-    xored = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
-    return base64.b64encode(xored).decode("ascii")
-
-
 def _sanitize_task_response(task_dict: dict) -> dict:
-    """Replace raw strategy_code with obfuscated version in task API responses."""
-    if not isinstance(task_dict, dict):
-        return task_dict
-    out = dict(task_dict)
-    # Top-level strategy_code
-    if "strategy_code" in out and isinstance(out["strategy_code"], str):
-        out["strategy_code_encrypted"] = _obfuscate_code(out["strategy_code"])
-        del out["strategy_code"]
-    # Nested result.strategy_code
-    if isinstance(out.get("result"), dict) and "strategy_code" in out["result"]:
-        out["result"] = dict(out["result"])
-        if isinstance(out["result"]["strategy_code"], str):
-            out["result"]["strategy_code_encrypted"] = _obfuscate_code(out["result"]["strategy_code"])
-            del out["result"]["strategy_code"]
-    return out
+    """Pass through task dict (obfuscation layer removed)."""
+    return task_dict if isinstance(task_dict, dict) else task_dict
 
 
 # ---- Configuration ----

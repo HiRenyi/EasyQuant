@@ -31,7 +31,7 @@ except ImportError:
 # rqdatac lazy initialization
 _rq_lock = threading.Lock()
 _rq_initialized = False
-_rq_disabled = False  # Set True during incremental refresh to prevent rqdatac login conflicts
+_rq_disabled = True  # rqdatac 默认禁用，仅手动触发时临时开启（避免占用账号登录设备数）
 
 # Project root for default paths
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -611,7 +611,7 @@ def fetch_benchmark_returns(
                     ret = ret[ret.index >= pd.Timestamp(start_date)]
                 if end_date:
                     ret = ret[ret.index <= pd.Timestamp(end_date)]
-                if len(ret) > 10:
+                if len(ret) > 1:
                     return ret
         except Exception:
             pass
@@ -737,15 +737,10 @@ def refresh_all_cached_stocks():
     """Refresh all cached stock data with incremental updates.
 
     Data source priority: akshare (same-day data) → baostock (fallback).
-    rqdatac is DISABLED during this process to avoid login conflicts.
+    rqdatac is globally disabled, only manual prefetch can use it.
     Designed to run as a daily cron job after market close (e.g. 15:10 CST).
     """
-    global _rq_disabled
-    _rq_disabled = True
-    try:
-        _refresh_all_cached_stocks_impl()
-    finally:
-        _rq_disabled = False
+    _refresh_all_cached_stocks_impl()
 
 
 def _refresh_all_cached_stocks_impl():

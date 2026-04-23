@@ -87,6 +87,7 @@ export interface AdminTask {
   task_type: string;
   status: string;
   expression: string | null;
+  params?: { prompt?: string; [key: string]: unknown } | null;
   error: string | null;
   created_at: string | null;
 }

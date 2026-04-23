@@ -40,7 +40,6 @@ export function useStrategyBacktest(
               status: task.status as StrategyTask["status"],
               task_type: "strategy_backtest",
               strategy_code: (task as any).strategy_code,
-              strategy_code_encrypted: (task as any).strategy_code_encrypted,
               validation: (task as any).validation,
               error: task.error,
               result: task.result as any,
@@ -52,8 +51,42 @@ export function useStrategyBacktest(
               onComplete?.(sTask);
             }
           },
-          () => { setIsLoading(false); },
-          () => { setIsLoading(false); },
+          () => {
+            // SSE closed — poll final state
+            setIsLoading(false);
+            import("../api/client").then(({ authFetch, BASE }) => {
+              authFetch(`${BASE}/api/v1/tasks/${task_id}`).then(r => r.json()).then(task => {
+                if (task?.status) {
+                  setActiveTask({
+                    task_id: task.task_id,
+                    status: task.status as StrategyTask["status"],
+                    task_type: "strategy_backtest",
+                    error: task.error,
+                    result: task.result as any,
+                    params: req,
+                  });
+                }
+              }).catch(() => {});
+            });
+          },
+          () => {
+            // SSE error — poll final state
+            setIsLoading(false);
+            import("../api/client").then(({ authFetch, BASE }) => {
+              authFetch(`${BASE}/api/v1/tasks/${task_id}`).then(r => r.json()).then(task => {
+                if (task?.status) {
+                  setActiveTask({
+                    task_id: task.task_id,
+                    status: task.status as StrategyTask["status"],
+                    task_type: "strategy_backtest",
+                    error: task.error,
+                    result: task.result as any,
+                    params: req,
+                  });
+                }
+              }).catch(() => {});
+            });
+          },
         );
       } catch (err) {
         setIsLoading(false);

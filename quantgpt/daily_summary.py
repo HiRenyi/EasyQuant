@@ -520,14 +520,21 @@ def _get_today_index_changes(date: str | None = None) -> dict:
     """Fetch benchmark index changes for a given date."""
     today = date or datetime.now().strftime("%Y-%m-%d")
     start = (pd.Timestamp(today) - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+    target = pd.Timestamp(today)
 
     metrics = {}
     for name, code in [("hs300", "hs300"), ("sz50", "sz50"), ("zz500", "zz500"), ("csi1000", "csi1000")]:
         try:
             ret = fetch_benchmark_returns(code, start, today)
             if ret is not None and len(ret) > 0:
-                latest = ret.iloc[-1]
-                metrics[f"{name}_change"] = round(float(latest) * 100, 2)
+                # Use exact date match, not last available
+                ret.index = pd.to_datetime(ret.index).normalize()
+                if target in ret.index:
+                    metrics[f"{name}_change"] = round(float(ret.loc[target]) * 100, 2)
+                else:
+                    # Fallback to last date, but log warning
+                    logger.warning(f"[daily_summary] {name} has no data for {today}, latest is {ret.index[-1].strftime('%Y-%m-%d')}")
+                    metrics[f"{name}_change"] = round(float(ret.iloc[-1]) * 100, 2)
             else:
                 metrics[f"{name}_change"] = 0.0
         except Exception as e:
@@ -830,7 +837,7 @@ def _build_llm_prompt(
     # Writing instructions
     lines.append("## 输出格式要求\n")
     lines.append("严格按以下结构输出，不要有任何开场白：\n")
-    lines.append(f"# A股市场因子研究日报 | {date}\n")
+    lines.append(f"# A股市场量化研究日报 | {date}\n")
     lines.append("## 一、市场全景解读\n")
     lines.append('**开头用 1-2 句加粗文字给出今日市场核心特征**（如\u201c这是一个典型的小盘风格占优交易日\u201d）。\n')
     lines.append("然后用编号列表展开：")

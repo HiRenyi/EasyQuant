@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 JQ_LOGIN_URL = "https://www.joinquant.com/user/login/index"
 JQ_ALGORITHM_URL = "https://www.joinquant.com/algorithm/index/edit"
-JQ_BACKTEST_TIMEOUT = int(os.environ.get("JQ_BACKTEST_TIMEOUT", "600"))  # seconds
+JQ_BACKTEST_TIMEOUT = int(os.environ.get("JQ_BACKTEST_TIMEOUT", "900"))  # seconds
 STEP_TIMEOUT = 30_000  # ms, per-step timeout for element detection
 POLL_INTERVAL = 3  # seconds, polling interval for backtest completion
 
@@ -180,6 +180,25 @@ async def _take_screenshot(page: Page, name: str) -> str | None:
     except Exception as e:
         logger.warning(f"Failed to take screenshot: {e}")
         return None
+
+
+def _sanitize_error(raw: str) -> str:
+    """Strip internal Playwright/browser details from error messages shown to users."""
+    if "Timeout" in raw and "exceeded" in raw:
+        return "回测执行超时，请稍后重试"
+    if "Target page, context or browser has been closed" in raw:
+        return "回测引擎异常断开，请稍后重试"
+    if "net::ERR_" in raw or "Navigation failed" in raw:
+        return "回测平台网络连接失败，请稍后重试"
+    if "intercepts pointer events" in raw or "introjs" in raw:
+        return "回测平台页面加载异常，请稍后重试"
+    # Fallback: hide raw Playwright details
+    if "ElementHandle" in raw or "Locator" in raw or "playwright" in raw.lower():
+        return "回测执行过程中发生异常，请稍后重试"
+    # Keep short, generic errors as-is
+    if len(raw) > 200:
+        return "回测执行过程中发生异常，请稍后重试"
+    return f"回测异常: {raw}"
 
 
 # ---- Main Service (persistent browser) ----
@@ -342,7 +361,7 @@ class JQAutomationService:
             _status("logging_in")
             ok = await self._startup_unlocked()
             if not ok:
-                result.error = "聚宽浏览器启动/登录失败"
+                result.error = "回测引擎启动失败，请稍后重试"
                 if self._page:
                     result.screenshot_path = await _take_screenshot(self._page, "login_failed")
                 return result
@@ -366,7 +385,7 @@ class JQAutomationService:
                 self._logged_in = False
                 ok = await self._startup_unlocked()
                 if not ok:
-                    result.error = "聚宽重新登录失败"
+                    result.error = "回测引擎连接失败，请稍后重试"
                     result.screenshot_path = await _take_screenshot(self._page, "relogin_failed")
                     return result
                 page = self._page
@@ -374,6 +393,9 @@ class JQAutomationService:
                 await page.goto(JQ_ALGORITHM_URL, wait_until="domcontentloaded", timeout=30000)
 
             await page.wait_for_timeout(500)  # brief pause for editor ready
+
+            # ---- Dismiss introjs overlay / tutorial popups ----
+            await self._dismiss_overlays(page)
 
             # ---- Set strategy code ----
             code_set = await self._set_strategy_code(page, strategy_code)
@@ -413,10 +435,12 @@ class JQAutomationService:
 
             # ---- Configure backtest params ----
             _status("configuring_backtest")
+            await self._dismiss_overlays(page)
             await self._configure_backtest_params(page, config)
 
             # ---- Run backtest ----
             _status("running_backtest")
+            await self._dismiss_overlays(page)
             run_clicked = await self._click_run_backtest(page)
             if not run_clicked:
                 result.error = "无法点击运行回测按钮"
@@ -434,7 +458,7 @@ class JQAutomationService:
             # Check for backtest errors
             error_text = await self._check_backtest_error(page)
             if error_text:
-                result.error = f"聚宽回测错误: {error_text}"
+                result.error = f"回测执行错误: {error_text}"
                 result.screenshot_path = await _take_screenshot(page, "backtest_error")
                 return result
 
@@ -453,7 +477,7 @@ class JQAutomationService:
 
         except Exception as e:
             logger.error(f"JQ automation error: {e}", exc_info=True)
-            result.error = f"浏览器自动化异常: {str(e)}"
+            result.error = _sanitize_error(str(e))
             if page and not page.is_closed():
                 result.screenshot_path = await _take_screenshot(page, "exception")
 
@@ -800,12 +824,55 @@ class JQAutomationService:
         except Exception:
             pass
 
+    async def _dismiss_overlays(self, page: Page):
+        """Dismiss introjs tutorial overlays and any modal popups that block interaction."""
+        try:
+            removed = await page.evaluate("""() => {
+                let count = 0;
+                // Remove introjs overlay & tooltip
+                document.querySelectorAll('.introjs-overlay, .introjs-helperLayer, .introjs-tooltipReferenceLayer, .introjs-tooltip, .introjs-fixedTooltip').forEach(el => {
+                    el.remove();
+                    count++;
+                });
+                // Click any "skip" / "不再提示" / "跳过" / "知道了" / "关闭" buttons
+                const skipTexts = ['不再提示', '跳过', '知道了', '关闭', 'Skip', 'Got it', 'Done'];
+                document.querySelectorAll('a, button, span').forEach(el => {
+                    const text = (el.textContent || '').trim();
+                    if (skipTexts.some(t => text.includes(t)) && el.offsetParent !== null) {
+                        el.click();
+                        count++;
+                    }
+                });
+                // Handle Element UI modal dialogs (JQ积分提示等)
+                document.querySelectorAll('.el-message-box__wrapper, .el-dialog__wrapper, .v-modal').forEach(el => {
+                    el.remove();
+                    count++;
+                });
+                // Remove any remaining overlay divs covering the page
+                document.querySelectorAll('[class*="overlay"]').forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    if (style.position === 'fixed' || style.position === 'absolute') {
+                        if (parseFloat(style.zIndex) > 999) {
+                            el.remove();
+                            count++;
+                        }
+                    }
+                });
+                return count;
+            }""")
+            if removed:
+                logger.info(f"Dismissed {removed} overlay element(s)")
+                await page.wait_for_timeout(300)
+        except Exception as e:
+            logger.warning(f"Failed to dismiss overlays: {e}")
+
     async def _click_run_backtest(self, page: Page) -> bool:
         """Click the '运行回测' button. Returns True on success."""
         # Record pre-click URL to detect navigation to result page
         self._pre_run_url = page.url
 
         try:
+            await self._dismiss_overlays(page)
             btn = await _find_element(page, SELECTORS["run_backtest_button"], timeout=10000)
             await btn.click()
             await page.wait_for_timeout(2000)
@@ -873,18 +940,52 @@ class JQAutomationService:
         return False
 
     async def _check_backtest_error(self, page: Page) -> str | None:
-        """Check if the backtest has an error on the results page."""
+        """Check if the backtest has an error on the results page.
+
+        Tries to extract the actual error from the log output tab.
+        """
         try:
             error = await page.evaluate("""() => {
                 const text = document.body.innerText || "";
-                if (text.includes("回测失败")) return "回测失败";
-                if (text.includes("编译错误")) {
-                    // Try to find the error message
-                    const errEl = document.querySelector(".error-message, .compile-error, .backtest-error");
-                    return errEl ? errEl.innerText.trim().substring(0, 500) : "编译错误";
+                if (!text.includes("回测失败") && !text.includes("编译错误")) return null;
+
+                // Try to find error details in log output
+                const logEl = document.querySelector('.log-content, .log-output, #log-content, .backtest-log');
+                if (logEl) {
+                    const logText = logEl.innerText.trim();
+                    if (logText) return logText.substring(0, 800);
                 }
-                return null;
+                // Try error message elements
+                const errEl = document.querySelector('.error-message, .compile-error, .backtest-error');
+                if (errEl) return errEl.innerText.trim().substring(0, 800);
+                // Fallback
+                return text.includes("编译错误") ? "编译错误" : "回测失败";
             }""")
+            if not error:
+                return None
+
+            # Try clicking "日志输出" tab to get more details
+            if error in ("回测失败", "编译错误"):
+                try:
+                    log_tab = await page.query_selector('text=日志输出')
+                    if log_tab:
+                        await log_tab.click()
+                        await page.wait_for_timeout(1500)
+                        log_detail = await page.evaluate("""() => {
+                            const el = document.querySelector('.log-content, .log-output, #log-content, .backtest-log, pre');
+                            if (el) return el.innerText.trim().substring(0, 800);
+                            // Fallback: look for any red/error text in the page
+                            const reds = document.querySelectorAll('[style*="color: red"], [style*="color:red"], .text-danger, .error');
+                            let msg = '';
+                            reds.forEach(r => { msg += r.innerText.trim() + '\\n'; });
+                            return msg.substring(0, 800) || null;
+                        }""")
+                        if log_detail:
+                            error = log_detail
+                except Exception as e:
+                    logger.warning(f"Could not read log tab: {e}")
+
+            logger.info(f"Backtest error detail: {error[:200]}")
             return error
         except Exception:
             return None

@@ -68,7 +68,6 @@ export interface StrategyBacktestResult {
   trades: StrategyTrade[];
   daily_positions: DailyPosition[];
   strategy_code?: string;
-  strategy_code_encrypted?: string;
   csv_path?: string;
   params: {
     prompt: string;
@@ -85,7 +84,6 @@ export interface StrategyTask {
   task_type?: "strategy_backtest";
   session_id?: string;
   strategy_code?: string;
-  strategy_code_encrypted?: string;
   validation?: {
     valid: boolean;
     errors: string[];

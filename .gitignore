@@ -9,6 +9,7 @@ build/
 # Environment
 .env
 .env.*
+!.env.example
 
 # Data & reports (generated)
 data/
@@ -36,6 +37,9 @@ logs/
 
 # Marketing (local only)
 marketing/
+
+# Claude Code
+.claude/
 
 # IDE
 .vscode/

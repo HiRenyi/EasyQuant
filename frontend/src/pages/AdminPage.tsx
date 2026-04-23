@@ -420,6 +420,7 @@ function TasksTab() {
   const typeLabel = (t: string) => {
     switch (t) {
       case "backtest": return "单因子";
+      case "strategy_backtest": return "策略回测";
       case "iteration": return "迭代";
       case "composite": return "多因子组合";
       case "mcp_backtest": return "MCP 回测";
@@ -456,6 +457,7 @@ function TasksTab() {
           >
             <option value="">全部</option>
             <option value="backtest">单因子</option>
+            <option value="strategy_backtest">策略回测</option>
             <option value="iteration">迭代</option>
             <option value="composite">多因子组合</option>
             <option value="mcp_backtest">MCP 回测</option>
@@ -488,8 +490,8 @@ function TasksTab() {
                   <td className="py-2.5 px-3 font-mono text-xs">{t.id}</td>
                   <td className="py-2.5 px-3 text-xs">{t.user_email}</td>
                   <td className="py-2.5 px-3 text-xs text-gray-600">{typeLabel(t.task_type)}</td>
-                  <td className="py-2.5 px-3 font-mono text-xs max-w-[300px] truncate" title={t.expression || ""}>
-                    {t.expression || (t.error ? <span className="text-red-500">{t.error}</span> : "-")}
+                  <td className="py-2.5 px-3 font-mono text-xs max-w-[300px] truncate" title={t.expression || t.params?.prompt || ""}>
+                    {t.expression || t.params?.prompt || (t.error ? <span className="text-red-500">{t.error}</span> : "-")}
                   </td>
                   <td className="py-2.5 px-3">
                     <StatusBadge status={t.status} />
