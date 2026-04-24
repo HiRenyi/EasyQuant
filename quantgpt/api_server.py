@@ -1028,6 +1028,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "cost_rate": result.get("cost_rate", 0),
                 "total_cost_drag": result.get("total_cost_drag", 0),
             },
+            "wq_brain": result.get("wq_brain", {}),
             "anti_overfit": anti_overfit_result,
             "scoring": scoring,
             "interpretation": interpretation,

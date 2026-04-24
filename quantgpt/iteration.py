@@ -239,6 +239,7 @@ def _evaluate_candidate(
         "top_group_sharpe": result.get("top_group_sharpe", 0),
         "group_returns": result["group_returns"],
         "turnover": result.get("turnover", 0),
+        "wq_fitness": result.get("wq_fitness", 0),
     }
     scoring = compute_factor_score(backtest_summary, report_result["metrics"], ao_val)
 
@@ -249,6 +250,7 @@ def _evaluate_candidate(
         "grade": scoring["grade"],
         "component_scores": scoring["component_scores"],
         "backtest_summary": backtest_summary,
+        "wq_brain": result.get("wq_brain", {}),
         "anti_overfit": anti_overfit_result,
         "report_metrics": report_result["metrics"],
         "report_url": f"/api/v1/reports/{report_filename}",

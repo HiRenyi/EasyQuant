@@ -7,6 +7,7 @@ import ReportViewer from "./ReportViewer";
 import StockFactorPanel from "./StockFactorPanel";
 import FactorInterpretationCard from "./FactorInterpretationCard";
 import ShareCardButton from "./ShareCardButton";
+import WQBrainCard from "./WQBrainCard";
 import { authFetch, parseError } from "../api/client";
 import { createPaperStrategy } from "../api/paper";
 import { useColorMode } from "../contexts/ColorModeContext";
@@ -173,6 +174,10 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
         <MetricCard label="换手率" value={pct(backtest_summary.turnover ?? 0)} />
         <MetricCard label="WQ Fitness" value={num(backtest_summary.wq_fitness ?? 0)} color={(backtest_summary.wq_fitness ?? 0) >= 1.0 ? "green" : "default"} />
       </div>
+
+      {result.wq_brain && Object.keys(result.wq_brain.wq_is_tests ?? {}).length > 0 && (
+        <WQBrainCard wqBrain={result.wq_brain} />
+      )}
 
       {iterationSlot}
 

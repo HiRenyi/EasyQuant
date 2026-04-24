@@ -97,9 +97,28 @@ export interface FactorInterpretation {
   suggestions?: string[];
 }
 
+export interface WQISTest {
+  value: number;
+  threshold?: number;
+  threshold_min?: number;
+  threshold_max?: number;
+  label: string;
+  pass: boolean;
+}
+
+export interface WQBrain {
+  wq_sharpe: number;
+  wq_turnover: number;
+  wq_returns: number;
+  wq_fitness: number;
+  wq_max_weight: number;
+  wq_is_tests: Record<string, WQISTest>;
+}
+
 export interface BacktestResult {
   report_url: string;
   metrics: BacktestMetrics;
+  wq_brain?: WQBrain;
   backtest_summary: {
     long_short_sharpe: number;
     long_short_annual?: number;
