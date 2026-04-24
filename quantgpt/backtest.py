@@ -316,6 +316,12 @@ def run_factor_backtest(
                 "stocks": stocks_list,
             }
 
+    # 12. WorldQuant Fitness = Sharpe * sqrt(|Returns| / max(Turnover, 0.125))
+    wq_fitness = 0.0
+    if ls_sharpe != 0 and turnover > 0:
+        effective_turnover = max(turnover, 0.125)
+        wq_fitness = float(ls_sharpe * np.sqrt(abs(ls_annual) / effective_turnover))
+
     return {
         "strategy_returns": strategy_series,
         "ls_returns": ls_series,  # kept for backward compat
@@ -331,6 +337,7 @@ def run_factor_backtest(
         "ic_ir": ic_ir,
         "ic_win_rate": ic_win_rate,
         "turnover": turnover,
+        "wq_fitness": round(wq_fitness, 4),
         "cost_adjusted": cost_adjusted,
         "cost_rate": cost_rate,
         "total_cost_drag": round(total_cost_drag, 6),

@@ -36,6 +36,11 @@ Supported operations:
 - clip(expr, lo, hi)  : clip values to [lo, hi] range
 - where(cond, t, f)   : conditional selection (t if cond else f)
 - indneutralize(col, industry) : industry neutralization (placeholder)
+- ts_av_diff(col, N)  : deviation from rolling mean (col - ts_mean(col, N))
+- ts_zscore(col, N)   : rolling z-score ((col - ts_mean) / ts_std over N periods)
+- trade_when(cond, alpha, hold_val) : conditional signal — use alpha when cond is true, else hold last value (initial=hold_val)
+- group_rank(col, group) : cross-sectional rank within group (e.g., group_rank(close, industry))
+- group_zscore(col, group) : cross-sectional z-score within group
 Technical indicators:
 - ema(col, N)         : exponential moving average (span=N)
 - sma(col, N)         : simple moving average (alias for ts_mean)
@@ -131,6 +136,15 @@ class ExpressionParser:
         'covariance': 'ts_cov',
         'correlation': 'ts_corr',
         'IndNeutralize': 'indneutralize',  # Alpha101 uses capital I
+        'av_diff': 'ts_av_diff',
+        'stddev': 'ts_std',
+        'ts_decay_linear': 'decay_linear',
+        'ts_product': 'product',
+        'ts_std_dev': 'ts_std',
+        'ts_delay': 'ts_shift',
+        'ts_covariance': 'ts_cov',
+        'ts_arg_max': 'ts_argmax',
+        'ts_arg_min': 'ts_argmin',
     }
 
     # Special variable mappings (computed from DataFrame columns)
@@ -210,6 +224,8 @@ class ExpressionParser:
             raw=True
         ),
         'product': lambda s, w: s.rolling(w, min_periods=1).apply(lambda x: np.prod(x), raw=True),
+        'ts_av_diff': lambda s, w: s - s.rolling(w, min_periods=1).mean(),
+        'ts_zscore': lambda s, w: (s - s.rolling(w, min_periods=1).mean()) / (s.rolling(w, min_periods=1).std() + 1e-10),
         # Technical indicators
         'ema': lambda s, w: s.ewm(span=w, adjust=False).mean(),
         'sma': lambda s, w: s.rolling(w, min_periods=1).mean(),  # same as ts_mean
@@ -410,6 +426,69 @@ class ExpressionParser:
             exp_fn = self._sub_parse(parts[1].strip())
             op = self._BINARY_OPS[func_name]
             return lambda df, _op=op, _base=base_fn, _exp=exp_fn: _op(_base(df), _exp(df))
+
+        if func_name == 'trade_when':
+            parts = self._split_top_level(args_str)
+            if len(parts) != 3:
+                raise ValueError("trade_when requires 3 arguments: (condition, alpha, hold_value)")
+            cond_fn = self._sub_parse(parts[0].strip())
+            alpha_fn = self._sub_parse(parts[1].strip())
+            hold_val = float(parts[2].strip())
+            def _trade_when(df, _cond=cond_fn, _alpha=alpha_fn, _hold=hold_val):
+                cond = _cond(df).astype(bool)
+                alpha = _alpha(df)
+                result = pd.Series(np.nan, index=df.index)
+                if 'stock_code' in df.columns:
+                    for _, grp in df.groupby('stock_code'):
+                        idx = grp.index
+                        c, a = cond.loc[idx], alpha.loc[idx]
+                        vals = pd.Series(np.nan, index=idx)
+                        prev = _hold
+                        for i in idx:
+                            if c.loc[i]:
+                                prev = a.loc[i]
+                            vals.loc[i] = prev
+                        result.loc[idx] = vals
+                else:
+                    prev = _hold
+                    for i in df.index:
+                        if cond.loc[i]:
+                            prev = alpha.loc[i]
+                        result.loc[i] = prev
+                return result
+            return _trade_when
+
+        if func_name in ('group_rank', 'group_zscore'):
+            parts = self._split_top_level(args_str)
+            if len(parts) != 2:
+                raise ValueError(f"{func_name} requires 2 arguments: (expression, group_column)")
+            inner = self._sub_parse(parts[0].strip())
+            group_col = parts[1].strip().strip("'\"")
+            if func_name == 'group_rank':
+                def _group_rank(df, _inner=inner, _gc=group_col):
+                    s = _inner(df)
+                    if _gc not in df.columns:
+                        if 'trade_date' in df.columns:
+                            return s.groupby(df['trade_date']).rank(pct=True)
+                        return s.rank(pct=True)
+                    if 'trade_date' in df.columns:
+                        return s.groupby([df['trade_date'], df[_gc]]).rank(pct=True)
+                    return s.groupby(df[_gc]).rank(pct=True)
+                return _group_rank
+            else:
+                def _group_zscore(df, _inner=inner, _gc=group_col):
+                    s = _inner(df)
+                    if _gc not in df.columns:
+                        if 'trade_date' in df.columns:
+                            g = s.groupby(df['trade_date'])
+                            return (s - g.transform('mean')) / (g.transform('std') + 1e-10)
+                        return (s - s.mean()) / (s.std() + 1e-10)
+                    if 'trade_date' in df.columns:
+                        g = s.groupby([df['trade_date'], df[_gc]])
+                    else:
+                        g = s.groupby(df[_gc])
+                    return (s - g.transform('mean')) / (g.transform('std') + 1e-10)
+                return _group_zscore
 
         if func_name in self._NEUTRALIZE_OPS:
             raise ValueError("indneutralize is not supported (requires industry classification data)")

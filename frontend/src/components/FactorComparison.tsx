@@ -18,6 +18,7 @@ const METRIC_LABELS: { key: string; label: string; format: (v: number) => string
   { key: "ic_ir", label: "IC_IR", format: (v) => v.toFixed(2), higher_better: true },
   { key: "spread", label: "组间价差", format: (v) => (v * 100).toFixed(2) + "%", higher_better: true },
   { key: "turnover", label: "换手率", format: (v) => (v * 100).toFixed(1) + "%", higher_better: false },
+  { key: "wq_fitness", label: "WQ Fitness", format: (v) => v.toFixed(2), higher_better: true },
 ];
 
 interface Props {

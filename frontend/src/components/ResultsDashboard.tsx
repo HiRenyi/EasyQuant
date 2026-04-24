@@ -169,8 +169,9 @@ export default function ResultsDashboard({ result, iterationSlot, onSaveFactor, 
         <MetricCard label="IC 胜率" value={pct(backtest_summary.ic_win_rate ?? 0)} color={(backtest_summary.ic_win_rate ?? 0) >= 0.55 ? "green" : "default"} />
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="换手率" value={pct(backtest_summary.turnover ?? 0)} />
+        <MetricCard label="WQ Fitness" value={num(backtest_summary.wq_fitness ?? 0)} color={(backtest_summary.wq_fitness ?? 0) >= 1.0 ? "green" : "default"} />
       </div>
 
       {iterationSlot}

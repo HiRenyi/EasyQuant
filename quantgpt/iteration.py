@@ -76,6 +76,9 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
             capped = True
             cap_reason = "negative_cagr" if cagr < 0 else "negative_sharpe"
 
+    # WorldQuant Fitness (informational, not part of composite score)
+    wq_fitness = backtest_summary.get("wq_fitness", 0.0)
+
     return {
         "score": score, "grade": grade,
         "component_scores": {
@@ -83,6 +86,7 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
             "stability": round(stability_score, 1), "anti_overfit": round(ao_score, 1),
             "group_backtest": round(group_bt_score, 1),
         },
+        "wq_fitness": round(wq_fitness, 4),
         "capped": capped, "cap_reason": cap_reason,
     }
 

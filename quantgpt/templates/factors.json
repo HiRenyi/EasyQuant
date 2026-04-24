@@ -222,5 +222,117 @@
       "n_groups": 5
     },
     "reference": "O'Shaughnessy (2005)"
+  },
+  {
+    "id": "wq_pv_divergence_5d",
+    "name": "量价背离(5日) — WQ A级",
+    "category": "wq_high_fitness",
+    "description": "5日价量相关性取反，WQ BRAIN Sharpe 1.73, IS 6/7 PASS",
+    "signal_description": "缩量上涨信号——聪明资金在低交易量中推升价格",
+    "expression": "-1 * rank(ts_corr(close, volume, 5))",
+    "tags": ["WQ验证", "量价", "高Fitness"],
+    "difficulty": "beginner",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "WorldQuant BRAIN validated, Sharpe 1.73"
+  },
+  {
+    "id": "wq_decay_vwap_reversion",
+    "name": "VWAP偏离衰减 — 高Fitness模板",
+    "category": "wq_high_fitness",
+    "description": "VWAP偏离的线性衰减，降低换手率直接提升Fitness",
+    "signal_description": "收盘价相对VWAP的偏离经衰减平滑后的排名信号",
+    "expression": "ts_decay_linear(rank((vwap - close) / close), 5)",
+    "tags": ["WQ模板", "VWAP", "低换手"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "WQ Fitness ~2.86 pattern"
+  },
+  {
+    "id": "wq_ts_zscore_valuation",
+    "name": "估值时序Z分数 — 高Fitness模板",
+    "category": "wq_high_fitness",
+    "description": "PE的63日时序标准化，捕捉估值变化而非绝对水平",
+    "signal_description": "估值相对自身历史的偏离程度，PE低于历史均值时看多",
+    "expression": "-rank(ts_zscore(pe, 63))",
+    "tags": ["WQ模板", "估值", "时序标准化"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "WQ Fitness ~1.26-1.70 pattern"
+  },
+  {
+    "id": "wq_double_rank",
+    "name": "双重排名(时序+截面) — 高Fitness模板",
+    "category": "wq_high_fitness",
+    "description": "先时序排名(ts_rank)再截面排名(rank)，双重过滤提高信号稳定性",
+    "signal_description": "近期收益率在历史中的相对位置的截面排名",
+    "expression": "rank(ts_rank(close/ts_shift(close, 5) - 1, 40))",
+    "tags": ["WQ模板", "双排名", "高稳定性"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "WQ Fitness ~1.42-1.58 pattern"
+  },
+  {
+    "id": "wq_corr_filtered_reversal",
+    "name": "相关性过滤反转 — 高Fitness模板",
+    "category": "wq_high_fitness",
+    "description": "仅在量价结构性相关时入场的反转信号，Turnover极低",
+    "signal_description": "价格变动与量价相关性的乘积——当两者同向时信号最强",
+    "expression": "-ts_av_diff(close, 50) * ts_corr(close, volume, 50)",
+    "tags": ["WQ模板", "相关性过滤", "超低换手"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 20,
+      "n_groups": 5
+    },
+    "reference": "WQ Fitness ~1.70 pattern"
+  },
+  {
+    "id": "wq_trade_when_vol_gate",
+    "name": "波动率门控交易 — trade_when模板",
+    "category": "wq_high_fitness",
+    "description": "仅在低波动率时更新信号，高波动时持有上次信号，大幅降低换手率",
+    "signal_description": "波动率低于阈值时才重新排名，避免在剧烈波动中频繁调仓",
+    "expression": "trade_when(ts_std(close/ts_shift(close,1)-1, 20) < ts_mean(ts_std(close/ts_shift(close,1)-1, 20), 60), rank(-1 * ts_corr(close, volume, 10)), 0)",
+    "tags": ["WQ模板", "trade_when", "波动率门控"],
+    "difficulty": "advanced",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 10,
+      "n_groups": 5
+    },
+    "reference": "WQ trade_when pattern — highest fitness impact operator"
+  },
+  {
+    "id": "wq_dual_pv_divergence",
+    "name": "双窗口量价背离 — WQ B+级",
+    "category": "wq_high_fitness",
+    "description": "5日close量价背离 × 10日high量价背离，WQ BRAIN Sharpe 1.20, IS 6/7 PASS",
+    "signal_description": "双窗口乘积信号——短期和中期量价背离同时出现时信号最强",
+    "expression": "rank(-1 * ts_corr(close, volume, 5)) * rank(-1 * ts_corr(high, volume, 10))",
+    "tags": ["WQ验证", "量价", "多窗口"],
+    "difficulty": "intermediate",
+    "suggested_params": {
+      "universe": "hs300",
+      "holding_period": 5,
+      "n_groups": 5
+    },
+    "reference": "WorldQuant BRAIN validated, Sharpe 1.20, Monotonicity 0.70"
   }
 ]

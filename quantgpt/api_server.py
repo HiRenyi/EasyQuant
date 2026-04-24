@@ -481,6 +481,27 @@ _SYSTEM_PROMPT = """你是一个量化因子表达式生成器。用户会用自
 - 纯离散型因子（大量使用 where 生成 -1/0/1 值）
 
 ================================================================================
+📈 WorldQuant Fitness 优化策略
+================================================================================
+Fitness = Sharpe × √(|Returns| / max(Turnover, 0.125))
+三个杠杆：高 Sharpe、高绝对收益、低换手率。
+
+提升 Fitness 的关键技巧（按优先级排列）：
+1. ts_decay_linear() 包裹最终信号：ts_decay_linear(rank(signal), 5~10)，平滑信号降低换手率
+2. rank() 是最关键算子：将原始信号转为百分位，消除量纲偏差，提升单调性
+3. ts_zscore(col, N) 取代原始值：ts_zscore(pe, 63) 捕捉变化而非水平
+4. 双重排名（时序+截面）：rank(ts_rank(col, 40)) 双重过滤提高稳定性
+5. 相关性过滤：-ts_av_diff(x, 50) * ts_corr(x, y, 50) 仅在结构性有效时入场
+6. trade_when 波动率门控：trade_when(vol<threshold, signal, 0) 大幅降低换手率
+
+高 Fitness 模板（可直接使用或改编）：
+- ts_decay_linear(rank((vwap-close)/close), 5)                 — Fitness ~2.86
+- rank(ts_rank(close/ts_shift(close,5)-1, 40))                 — Fitness ~1.42-1.58
+- -ts_av_diff(close, 50) * ts_corr(close, volume, 50)          — Fitness ~1.70
+- -rank(ts_zscore(pe, 63))                                     — Fitness ~1.26-1.70
+- trade_when(ts_std(returns,20)<threshold, rank(signal), 0)    — 最强降换手算子
+
+================================================================================
 🚨 输出格式要求（必须严格遵守）🚨
 ================================================================================
 只返回一个因子表达式，不要任何解释、分析或推理过程。
@@ -958,6 +979,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "rank_ic_mean": result.get("rank_ic_mean", 0),
                 "ic_ir": result.get("ic_ir", 0),
                 "ic_win_rate": result.get("ic_win_rate", 0),
+                "wq_fitness": result.get("wq_fitness", 0),
             },
             report_metrics=report_result["metrics"],
             anti_overfit_score=ao_score_val,
@@ -1001,6 +1023,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "ic_ir": result.get("ic_ir", 0),
                 "ic_win_rate": result.get("ic_win_rate", 0),
                 "turnover": result.get("turnover", 0),
+                "wq_fitness": result.get("wq_fitness", 0),
                 "cost_adjusted": result.get("cost_adjusted", False),
                 "cost_rate": result.get("cost_rate", 0),
                 "total_cost_drag": result.get("total_cost_drag", 0),

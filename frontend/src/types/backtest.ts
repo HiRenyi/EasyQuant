@@ -62,6 +62,7 @@ export interface IterationCandidate {
     ic_ir?: number;
     ic_win_rate?: number;
     turnover?: number;
+    wq_fitness?: number;
   };
   report_metrics: BacktestMetrics;
   report_url: string;
@@ -111,6 +112,7 @@ export interface BacktestResult {
     ic_ir?: number;
     ic_win_rate?: number;
     turnover?: number;
+    wq_fitness?: number;
   };
   params: {
     expression: string;
