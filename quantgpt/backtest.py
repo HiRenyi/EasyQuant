@@ -268,8 +268,8 @@ def run_factor_backtest(
     rank_ic_mean = ic_mean  # same as ic_mean now (both Spearman)
     pearson_ic_mean = float(pearson_ic_series.mean()) if len(pearson_ic_series) > 0 else 0.0
 
-    # 10. Turnover rate
-    turnover = _calc_turnover(work, top_g, rebalance_dates_set)
+    # 10. Turnover rate (daily, WQ BRAIN-aligned)
+    turnover = _calc_turnover(work, top_g, rebalance_dates_set, holding_period)
 
     group_ret_summary = {}
     for g in actual_groups:
@@ -421,11 +421,13 @@ def _calc_ic_series(
 
 
 def _calc_turnover(
-    work: pd.DataFrame, top_group: int, rebalance_dates: list
+    work: pd.DataFrame, top_group: int, rebalance_dates: list,
+    holding_period: int = 1,
 ) -> float:
-    """Calculate average turnover rate for the top group.
+    """Calculate average daily turnover for the top group (WQ BRAIN-aligned).
 
-    Turnover = fraction of holdings that change at each rebalance.
+    Per-rebalance turnover = (entering + exiting) / avg_portfolio_size.
+    Daily turnover = per_rebalance / holding_period.
     """
     if len(rebalance_dates) < 2:
         return 0.0
@@ -440,13 +442,15 @@ def _calc_turnover(
     for i in range(1, len(sorted_dates)):
         prev = top_holdings[sorted_dates[i - 1]]
         curr = top_holdings[sorted_dates[i]]
-        if len(prev) == 0 and len(curr) == 0:
+        avg_size = (len(prev) + len(curr)) / 2
+        if avg_size == 0:
             continue
-        union = prev | curr
-        changed = len(prev.symmetric_difference(curr))
-        turnovers.append(changed / len(union) if len(union) > 0 else 0.0)
+        entering = len(curr - prev)
+        exiting = len(prev - curr)
+        turnovers.append((entering + exiting) / avg_size)
 
-    return float(np.mean(turnovers)) if turnovers else 0.0
+    per_rebal = float(np.mean(turnovers)) if turnovers else 0.0
+    return per_rebal / holding_period
 
 
 def _calc_monotonicity(group_means: List[float]) -> float:

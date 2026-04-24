@@ -106,12 +106,24 @@ export interface WQISTest {
   pass: boolean;
 }
 
+export interface WQSubUniverse {
+  sub_sharpe_a: number;
+  sub_sharpe_b: number;
+  sub_sharpe_min: number;
+  threshold: number;
+  pass: boolean;
+}
+
 export interface WQBrain {
   wq_sharpe: number;
   wq_turnover: number;
   wq_returns: number;
   wq_fitness: number;
   wq_max_weight: number;
+  wq_rating: string;
+  margin_bps: number;
+  submittable: boolean;
+  sub_universe: WQSubUniverse;
   wq_is_tests: Record<string, WQISTest>;
 }
 

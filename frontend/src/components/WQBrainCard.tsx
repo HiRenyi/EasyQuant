@@ -9,17 +9,24 @@ function pct(n: number): string {
   return (n * 100).toFixed(2) + "%";
 }
 
+const RATING_COLORS: Record<string, { light: string; dark: string }> = {
+  Spectacular: { light: "bg-purple-50 text-purple-700", dark: "bg-purple-500/20 text-purple-400" },
+  Excellent: { light: "bg-emerald-50 text-emerald-700", dark: "bg-emerald-500/20 text-emerald-400" },
+  Good: { light: "bg-blue-50 text-blue-700", dark: "bg-blue-500/20 text-blue-400" },
+  Average: { light: "bg-amber-50 text-amber-700", dark: "bg-amber-500/20 text-amber-400" },
+  "Needs Improvement": { light: "bg-red-50 text-red-700", dark: "bg-red-500/20 text-red-400" },
+};
+
 export default function WQBrainCard({ wqBrain }: Props) {
   const { isDark } = useColorMode();
   const tests = wqBrain.wq_is_tests;
   const testEntries = Object.values(tests);
   const passCount = testEntries.filter((t) => t.pass).length;
   const totalCount = testEntries.length;
-  const allPass = passCount === totalCount;
+  const ratingStyle = RATING_COLORS[wqBrain.wq_rating] ?? RATING_COLORS["Needs Improvement"];
 
   const formatValue = (key: string, value: number): string => {
-    if (key === "returns" || key === "turnover_range") return pct(value);
-    if (key === "weight") return pct(value);
+    if (key === "returns" || key === "turnover_range" || key === "weight") return pct(value);
     return value.toFixed(4);
   };
 
@@ -27,8 +34,7 @@ export default function WQBrainCard({ wqBrain }: Props) {
     if ("threshold_min" in test && test.threshold_min != null && "threshold_max" in test && test.threshold_max != null) {
       return `[${pct(test.threshold_min)}, ${pct(test.threshold_max)}]`;
     }
-    if (key === "returns") return pct(test.threshold ?? 0);
-    if (key === "weight") return pct(test.threshold ?? 0);
+    if (key === "returns" || key === "weight") return pct(test.threshold ?? 0);
     return String(test.threshold ?? "");
   };
 
@@ -39,24 +45,30 @@ export default function WQBrainCard({ wqBrain }: Props) {
           <span className="text-sm font-medium" style={{ color: isDark ? "#e5e7eb" : "#374151" }}>
             WorldQuant BRAIN 兼容性评估
           </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            allPass
-              ? isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-50 text-emerald-700"
-              : isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-50 text-amber-700"
-          }`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"}`}>
             D1 模式
           </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? ratingStyle.dark : ratingStyle.light}`}>
+            {wqBrain.wq_rating}
+          </span>
         </div>
-        <span className={`text-xs font-medium ${
-          allPass
-            ? isDark ? "text-emerald-400" : "text-emerald-600"
-            : isDark ? "text-amber-400" : "text-amber-600"
-        }`}>
-          通过 {passCount}/{totalCount} 项 IS 测试
-        </span>
+        <div className="flex items-center gap-3">
+          {wqBrain.submittable && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-50 text-emerald-700"}`}>
+              Submittable
+            </span>
+          )}
+          <span className={`text-xs font-medium ${
+            wqBrain.submittable
+              ? isDark ? "text-emerald-400" : "text-emerald-600"
+              : isDark ? "text-amber-400" : "text-amber-600"
+          }`}>
+            通过 {passCount}/{totalCount} 项 IS 测试
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mb-3">
+      <div className="grid grid-cols-5 gap-3 mb-3">
         <div className={`rounded-lg p-2.5 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
           <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>WQ Sharpe</p>
           <p className={`text-lg font-semibold ${wqBrain.wq_sharpe >= 1.625 ? (isDark ? "text-emerald-400" : "text-emerald-600") : (isDark ? "text-gray-100" : "text-gray-900")}`}>
@@ -79,6 +91,12 @@ export default function WQBrainCard({ wqBrain }: Props) {
           <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>WQ Turnover</p>
           <p className={`text-lg font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>
             {pct(wqBrain.wq_turnover)}
+          </p>
+        </div>
+        <div className={`rounded-lg p-2.5 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
+          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>Margin</p>
+          <p className={`text-lg font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>
+            {wqBrain.margin_bps.toFixed(0)} bps
           </p>
         </div>
       </div>

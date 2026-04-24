@@ -41,6 +41,10 @@ marketing/
 # Claude Code
 .claude/
 
+# Research notes (runtime)
+research_notes/auto_run_log.md
+research_notes/reports/
+
 # IDE
 .vscode/
 .idea/
