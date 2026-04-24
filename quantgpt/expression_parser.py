@@ -117,12 +117,69 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+_WQ_OPERATORS = {
+    'rank', 'zscore', 'scale', 'group_rank', 'group_zscore',
+    'abs', 'sign', 'log', 'sqrt',
+    'power', 'sign_power',
+    'max', 'min',
+    'ts_mean', 'ts_std', 'ts_max', 'ts_min', 'ts_sum',
+    'ts_shift', 'ts_delta', 'ts_rank', 'ts_argmax', 'ts_argmin',
+    'decay_linear', 'product', 'ts_av_diff',
+    'ts_corr', 'ts_cov',
+    'where', 'trade_when',
+}
+
+_LOCAL_ONLY_OPERATORS = {
+    'tanh', 'sigmoid', 'exp', 'ts_zscore', 'clip',
+    'ema', 'sma', 'wma', 'rsi', 'macd', 'obv', 'atr',
+    'boll_upper', 'boll_lower', 'boll_mid', 'indneutralize',
+}
+
+_WQ_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'market_cap'}
+_WQ_SPECIAL_VARS = {'vwap', 'returns', 'cap'}
+
+_LOCAL_ONLY_COLUMNS = {
+    'amount', 'pct_change', 'float_market_cap', 'turnover_rate', 'shares',
+}
+
+_WQ_REPLACEMENTS = {
+    'tanh': 'sign_power(x, 0.5) 或 x / (1 + abs(x))',
+    'sigmoid': 'rank(x) 或 1 / (1 + power(2.718, -x))',
+    'exp': 'power(2.718, x)',
+    'clip': 'max(lo, min(hi, x))',
+    'ema': 'decay_linear(x, N)',
+    'sma': 'ts_mean(x, N)',
+    'wma': 'decay_linear(x, N)',
+    'ts_zscore': '(x - ts_mean(x, N)) / ts_std(x, N)',
+    'amount': 'vwap (= amount/volume)',
+    'pct_change': 'returns',
+    'turnover_rate': 'volume / adv20',
+    'float_market_cap': 'market_cap',
+}
+
+_WQ_UNIT_PATTERNS = [
+    (re.compile(r'(?:close|open|high|low|volume|vwap|market_cap|adv\d+)\s*[+\-]\s*\d+\.?\d*(?!\s*\*)'),
+     "WQ 量纲错误：不得将常数与价格/量做加减。去掉 epsilon（如 +0.0001），WQ 内部处理零值"),
+    (re.compile(r'close\s*/\s*ts_(?:delay|shift)\s*\(\s*close\s*,\s*\d+\s*\)\s*-\s*1'),
+     "WQ 量纲错误：close/ts_delay(close,N)-1 → 改用 ts_delta(close,N)/ts_delay(close,N)"),
+]
+
+
 class ExpressionParser:
-    """Parse factor expressions into callable functions."""
+    """Parse factor expressions into callable functions.
+
+    mode='wq'   — only WQ BRAIN compatible operators and columns (for submission)
+    mode='local' — all operators and columns (default, for local research)
+    """
 
     MAX_WINDOW = 500
     MAX_DEPTH = 100
     MAX_EXPRESSION_LENGTH = 1000
+
+    def __init__(self, mode: str = "local"):
+        if mode not in ("wq", "local"):
+            raise ValueError(f"未知模式：{mode!r}，支持 'wq' 或 'local'")
+        self.mode = mode
 
     # Pattern: func_name(args)
     _FUNC_PATTERN = re.compile(
@@ -287,6 +344,13 @@ class ExpressionParser:
         # Store depth for sub-calls
         self._depth = _depth
 
+        # WQ mode: check unit-incompatible patterns at top level
+        if self.mode == "wq" and _depth == 0:
+            normalized = re.sub(r'\s+', ' ', expression.lower())
+            for pattern, message in _WQ_UNIT_PATTERNS:
+                if pattern.search(normalized):
+                    raise ValueError(message)
+
         # Preprocess: convert C-style ternary operators to Python style
         if _depth == 0:
             expression = self._convert_ternary_operators(expression)
@@ -347,6 +411,11 @@ class ExpressionParser:
 
         # Apply operator aliases (e.g., delta -> ts_delta, delay -> ts_shift)
         func_name = self._OPERATOR_ALIASES.get(func_name, func_name)
+
+        if self.mode == "wq" and func_name not in _WQ_OPERATORS:
+            hint = _WQ_REPLACEMENTS.get(func_name, "")
+            hint_msg = f"，替代方案：{hint}" if hint else ""
+            raise ValueError(f"WQ 模式下不支持算子 '{func_name}'{hint_msg}")
 
         # Cross-sectional ops: rank() and zscore() group by trade_date
         if func_name in self._CROSS_SECTIONAL_OPS:
@@ -643,6 +712,8 @@ class ExpressionParser:
         # Special variables (vwap, returns, cap) — case-insensitive
         expr_lower = expression.lower()
         if expr_lower in self._SPECIAL_VARS:
+            if self.mode == "wq" and expr_lower not in _WQ_SPECIAL_VARS:
+                raise ValueError(f"WQ 模式下不支持变量 '{expr_lower}'")
             var_fn = self._SPECIAL_VARS[expr_lower]
             return lambda df, _fn=var_fn: _fn(df)
 
@@ -656,17 +727,22 @@ class ExpressionParser:
         from .fundamental_data import ALL_FUNDAMENTAL_NAMES
         _PRICE_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_change', 'market_cap', 'shares'}
         _ALLOWED_COLUMNS = _PRICE_COLUMNS | ALL_FUNDAMENTAL_NAMES
-        # Common LLM alias mapping — redirect invalid names to valid ones
         _ALIAS_MAP = {
             'pe_ratio': 'pe', 'pe_ttm': 'pe', 'pb_ratio': 'pb', 'ps_ratio': 'ps',
             'eps': 'eps_ttm', 'roe_avg': 'roe', 'div_yield': 'dividend_yield',
         }
-        # Unsupported variables — give clear error with suggestion
-        _UNSUPPORTED = {
-        }
-        if col_name in _UNSUPPORTED:
-            raise ValueError(_UNSUPPORTED[col_name])
         col_name = _ALIAS_MAP.get(col_name, col_name)
+
+        if self.mode == "wq":
+            if col_name in _LOCAL_ONLY_COLUMNS:
+                hint = _WQ_REPLACEMENTS.get(col_name, "")
+                hint_msg = f"，替代方案：{hint}" if hint else ""
+                raise ValueError(f"WQ 模式下不支持列 '{col_name}'{hint_msg}")
+            if col_name in ALL_FUNDAMENTAL_NAMES:
+                raise ValueError(f"WQ 模式下不支持基本面列 '{col_name}'，BRAIN 仅支持价量数据")
+            if col_name not in _WQ_COLUMNS:
+                raise ValueError(f"WQ 模式下不支持列 '{col_name}'，可用列：{sorted(_WQ_COLUMNS)}")
+
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")
         return lambda df, _c=col_name: df[_c]
@@ -782,14 +858,15 @@ class ExpressionParser:
         return expression
 
 
-def parse_expression(expression: str) -> Callable[[pd.DataFrame], pd.Series]:
+def parse_expression(expression: str, mode: str = "local") -> Callable[[pd.DataFrame], pd.Series]:
     """Convenience function to parse a factor expression.
 
     Args:
         expression: e.g. "rank(close/open)", "ts_mean(volume, 20)"
+        mode: "local" (all operators) or "wq" (WQ BRAIN compatible only)
 
     Returns:
         Callable that takes a DataFrame and returns factor values as a Series.
     """
-    parser = ExpressionParser()
+    parser = ExpressionParser(mode=mode)
     return parser.parse(expression)

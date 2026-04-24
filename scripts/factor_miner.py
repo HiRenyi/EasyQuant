@@ -50,13 +50,13 @@ def check_health(server: str = DEFAULT_SERVER) -> dict:
 
 def submit_task(server: str, expression: str, params: dict) -> Optional[str]:
     payload = {"prompt": expression, **params}
-    for attempt in range(3):
+    for attempt in range(6):
         try:
             r = requests.post(f"{server}/api/v1/auto_backtest", json=payload, timeout=10)
             if r.status_code == 202:
                 return r.json()["task_id"]
             if r.status_code in (429, 503):
-                time.sleep(20 + attempt * 15)
+                time.sleep(12 + attempt * 12)
                 continue
             return None
         except Exception:
@@ -118,3 +118,64 @@ def evaluate(server: str, expression: str, params: dict) -> Optional[dict]:
     if factor:
         return factor.__dict__
     return None
+
+
+def batch_evaluate(
+    server: str,
+    expressions: list[str],
+    params: dict,
+    max_concurrent: int = 10,
+    timeout: int = 600,
+) -> list[dict]:
+    """Submit multiple expressions concurrently, poll all, return sorted by fitness.
+
+    Phase 1: submit all with retry waves (up to 3 waves for failures).
+    Phase 2: poll all concurrently.
+    Returns list of factor dicts sorted by fitness descending.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    task_map: dict[str, str] = {}
+    failed_exprs: list[str] = []
+
+    for wave in range(3):
+        batch = expressions if wave == 0 else failed_exprs
+        if not batch:
+            break
+        failed_exprs = []
+
+        with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+            futures = {pool.submit(submit_task, server, expr, params): expr for expr in batch}
+            for fut in as_completed(futures):
+                expr = futures[fut]
+                try:
+                    tid = fut.result()
+                    if tid:
+                        task_map[expr] = tid
+                    else:
+                        failed_exprs.append(expr)
+                except Exception:
+                    failed_exprs.append(expr)
+
+        if failed_exprs and wave < 2:
+            time.sleep(5 * (wave + 1))
+
+    results: list[dict] = []
+
+    def _poll_and_parse(expr: str, tid: str) -> Optional[dict]:
+        raw = poll_task(server, tid, timeout)
+        f = parse_result(raw, expr, params)
+        return f.__dict__ if f else None
+
+    with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+        futures = {pool.submit(_poll_and_parse, expr, tid): expr for expr, tid in task_map.items()}
+        for fut in as_completed(futures):
+            try:
+                r = fut.result()
+                if r:
+                    results.append(r)
+            except Exception:
+                pass
+
+    results.sort(key=lambda x: x.get("fitness", 0), reverse=True)
+    return results
