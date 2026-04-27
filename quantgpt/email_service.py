@@ -3,7 +3,6 @@
 import logging
 import os
 import secrets
-import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -41,10 +40,6 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
     msg["To"] = to
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    tls_context = ssl.create_default_context()
-    tls_context.check_hostname = False
-    tls_context.verify_mode = ssl.CERT_NONE
-
     await aiosmtplib.send(
         msg,
         hostname=cfg["host"],
@@ -52,7 +47,6 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
         username=cfg["user"],
         password=cfg["password"],
         use_tls=cfg["use_tls"],
-        tls_context=tls_context,
     )
     logger.info(f"Email sent to {to}: {subject}")
 
@@ -75,10 +69,6 @@ async def send_verification_email(email: str, code: str) -> None:
     msg["From"] = cfg["from_addr"]
     msg["To"] = email
 
-    tls_context = ssl.create_default_context()
-    tls_context.check_hostname = False
-    tls_context.verify_mode = ssl.CERT_NONE
-
     await aiosmtplib.send(
         msg,
         hostname=cfg["host"],
@@ -86,7 +76,6 @@ async def send_verification_email(email: str, code: str) -> None:
         username=cfg["user"],
         password=cfg["password"],
         use_tls=cfg["use_tls"],
-        tls_context=tls_context,
     )
     logger.info(f"Verification email sent to {email}")
 

@@ -18,9 +18,8 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   const res = await fetch(url, { ...options, headers });
 
   if (res.status === 401) {
-    const token = getAccessToken();
     // Guest tokens don't need refresh
-    if (token && token.startsWith("guest_")) return res;
+    if (localStorage.getItem("quantgpt_is_guest") === "1") return res;
 
     // Try refresh
     const refreshTokenStr = localStorage.getItem("quantgpt_refresh_token");

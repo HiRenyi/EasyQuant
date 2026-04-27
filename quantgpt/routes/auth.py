@@ -14,6 +14,7 @@ from ..models import User, VerificationCode
 from ..email_service import generate_code, send_verification_email
 from ..auth import (
     create_access_token,
+    create_guest_token,
     create_refresh_token,
     decode_token,
     check_email_rate_limit,
@@ -116,6 +117,12 @@ class ResetPasswordRequest(BaseModel):
 
 
 # ---- Routes ----
+
+@router.post("/guest-token")
+async def guest_token():
+    """Issue a signed JWT for anonymous/guest access."""
+    return {"access_token": create_guest_token(), "token_type": "bearer"}
+
 
 @router.post("/send-code")
 async def send_code(req: SendCodeRequest, db: AsyncSession = Depends(get_db)):

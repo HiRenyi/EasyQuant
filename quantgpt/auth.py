@@ -110,6 +110,17 @@ async def get_current_user(
 GUEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
+def create_guest_token() -> str:
+    """Create a signed JWT for anonymous/guest access (7-day expiry)."""
+    payload = {
+        "sub": GUEST_USER_ID,
+        "type": "guest",
+        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, _get_secret(), algorithm=_JWT_ALGORITHM)
+
+
 async def get_optional_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -119,8 +130,11 @@ async def get_optional_user(
         token = _extract_token(request)
     except HTTPException:
         return None  # No token = guest
-    # Guest token marker
-    if token.startswith("guest_"):
+    try:
+        payload = decode_token(token)
+    except HTTPException:
+        return None
+    if payload.get("type") == "guest":
         return None
     try:
         payload = decode_token(token)

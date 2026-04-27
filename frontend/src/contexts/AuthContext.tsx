@@ -21,7 +21,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = "quantgpt_access_token";
 const REFRESH_KEY = "quantgpt_refresh_token";
-const GUEST_TOKEN = "guest_anonymous";
+const GUEST_FLAG_KEY = "quantgpt_is_guest";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(GUEST_FLAG_KEY);
     setAccessToken(null);
     setUser(null);
     setIsGuest(false);
@@ -42,21 +43,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback((access: string, refresh: string, u: User) => {
     localStorage.setItem(TOKEN_KEY, access);
     localStorage.setItem(REFRESH_KEY, refresh);
+    localStorage.removeItem(GUEST_FLAG_KEY);
     setAccessToken(access);
     setUser(u);
     setIsGuest(false);
-    // If user has no password, prompt to set one
     if (!u.has_password) {
       setShowSetPassword(true);
     }
   }, []);
 
-  const enterGuestMode = useCallback(() => {
-    localStorage.setItem(TOKEN_KEY, GUEST_TOKEN);
-    localStorage.removeItem(REFRESH_KEY);
-    setAccessToken(GUEST_TOKEN);
-    setUser(null);
-    setIsGuest(true);
+  const enterGuestMode = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/auth/guest-token", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to get guest token");
+      const { access_token } = await res.json();
+      localStorage.setItem(TOKEN_KEY, access_token);
+      localStorage.removeItem(REFRESH_KEY);
+      localStorage.setItem(GUEST_FLAG_KEY, "1");
+      setAccessToken(access_token);
+      setUser(null);
+      setIsGuest(true);
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   }, []);
 
   const updateUser = useCallback((partial: Partial<User>) => {
@@ -73,8 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Restore guest mode
-    if (stored === GUEST_TOKEN) {
-      setAccessToken(GUEST_TOKEN);
+    if (localStorage.getItem(GUEST_FLAG_KEY) === "1") {
+      setAccessToken(stored);
       setIsGuest(true);
       setIsLoading(false);
       return;

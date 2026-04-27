@@ -13,7 +13,8 @@
 
 [Live Demo](https://quantgpt.online) ·
 [API Docs](docs/API_DOC.md) ·
-[MCP Guide](docs/MCP_GUIDE.md)
+[MCP Guide](docs/MCP_GUIDE.md) ·
+[Factor Mining](docs/FACTOR_MINING.md)
 
 </div>
 
@@ -173,6 +174,27 @@ Parquet local cache (zero network, CACHE_ONLY mode for offline)
 | `run_rolling_validation` | Walk-forward 验证 |
 
 </details>
+
+### 6. AI Factor Mining Framework
+
+系统化的 AI 因子挖掘方法论，6 阶段研究循环：
+
+```
+Phase 0: Load Context & Knowledge Base
+Phase 1: LLM-Driven Factor Design (hypothesis → expression)
+Phase 2: Batch Backtest (10-20 concurrent, 3-wave retry)
+Phase 3: Four-Step Analysis (Facts → Judgment → Cross-Review → Consensus)
+Phase 4: Update Research Notes & Knowledge Base
+Phase 5: Convergence Check → Continue or Stop
+```
+
+核心特点：
+- **Cross-Review 机制**：每个结论性判断必须经过第二个 LLM 独立评审，防止单模型偏见
+- **知识库沉淀**：规则（Rules）、发现（Findings）、失败路径（Failures）跨会话积累
+- **断点续做**：自动识别已完成/未完成研究方向，从断点继续
+- **研究纪律**：控制变量、禁止重复实验、标注不确定性、失败必记录
+
+工具库 [`scripts/factor_miner.py`](scripts/factor_miner.py) 支持批量并发提交和解析。完整方法论见 [Factor Mining Guide](docs/FACTOR_MINING.md)。
 
 ---
 
