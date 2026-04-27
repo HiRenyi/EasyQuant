@@ -562,6 +562,9 @@ class MarketDataFetcher:
 
         if all_data:
             result = pd.concat(all_data, ignore_index=True)
+            if "amount" in result.columns and "volume" in result.columns:
+                raw_vol = result["volume"].replace(0, np.nan)
+                result["vwap"] = result["amount"] / raw_vol
             logger.info(f"Loaded {len(result):,} records for {result['stock_code'].nunique()} stocks")
             return result
         return None

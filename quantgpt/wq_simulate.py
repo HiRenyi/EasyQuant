@@ -20,7 +20,7 @@ def wq_simulate(
     Args:
         work_df: DataFrame with trade_date, stock_code, factor_value, daily_ret.
         rebalance_dates: Sorted list of rebalance dates.
-        trading_days_per_year: 252 for A-shares, 365 for crypto.
+        trading_days_per_year: 252 for A-shares.
 
     Returns:
         Dict with wq_sharpe, wq_turnover, wq_returns, wq_fitness,

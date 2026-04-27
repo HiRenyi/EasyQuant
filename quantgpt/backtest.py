@@ -96,51 +96,32 @@ def run_factor_backtest(
         subset=["factor_value"]
     ).copy()
 
-    # Determine grouping strategy
+    # Determine grouping strategy: rank-based by default (aligned with WQ BRAIN)
     effective_groups = n_groups
     use_value_grouping = False
-    use_rank_fallback = False
     distinct_counts = work.groupby("trade_date")["factor_value"].nunique()
     median_distinct = int(distinct_counts.median()) if len(distinct_counts) > 0 else 0
 
-    if median_distinct < n_groups:
-        if median_distinct >= 2:
-            effective_groups = median_distinct
-            use_value_grouping = True
-            logger.warning(
-                f"Factor has only ~{median_distinct} distinct values per date, "
-                f"reducing groups from {n_groups} to {effective_groups}, using value-based grouping"
-            )
-        else:
-            use_rank_fallback = True
-            effective_groups = n_groups
-            logger.warning(
-                f"Factor has ~{median_distinct} distinct value(s) per date, "
-                f"falling back to rank-based grouping"
-            )
+    if median_distinct < n_groups and median_distinct >= 2:
+        effective_groups = median_distinct
+        use_value_grouping = True
+        logger.warning(
+            f"Factor has only ~{median_distinct} distinct values per date, "
+            f"reducing groups from {n_groups} to {effective_groups}, using value-based grouping"
+        )
 
     def _assign_group(vals: pd.Series) -> pd.Series:
-        if use_rank_fallback:
-            try:
-                ranks = vals.rank(method="first")
-                return pd.cut(ranks, bins=effective_groups, labels=False)
-            except ValueError:
-                return pd.Series(np.nan, index=vals.index)
         if use_value_grouping:
-            # For few distinct values, group directly by sorted unique values
             sorted_uniques = sorted(vals.dropna().unique())
             if len(sorted_uniques) < 2:
                 return pd.Series(np.nan, index=vals.index)
             mapping = {v: i for i, v in enumerate(sorted_uniques)}
             return vals.map(mapping)
         try:
-            return pd.qcut(vals, q=effective_groups, labels=False, duplicates="drop")
+            ranks = vals.rank(method="first")
+            return pd.cut(ranks, bins=effective_groups, labels=False)
         except ValueError:
-            try:
-                ranks = vals.rank(method="first")
-                return pd.cut(ranks, bins=effective_groups, labels=False)
-            except ValueError:
-                return pd.Series(np.nan, index=vals.index)
+            return pd.Series(np.nan, index=vals.index)
 
     # Assign groups only on rebalance dates, then forward-fill to holding period
     rebal_data = work[work["trade_date"].isin(rebalance_dates)].copy()

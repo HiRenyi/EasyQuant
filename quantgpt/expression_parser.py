@@ -206,7 +206,7 @@ class ExpressionParser:
 
     # Special variable mappings (computed from DataFrame columns)
     _SPECIAL_VARS = {
-        'vwap': lambda df: (df['close'] * df['volume']).rolling(1).sum() / df['volume'].rolling(1).sum(),
+        'vwap': lambda df: df['vwap'] if 'vwap' in df.columns else (df['amount'] / df['volume'].replace(0, np.nan) if 'amount' in df.columns else df['close']),
         'returns': lambda df: df['close'].pct_change(),
         'cap': lambda df: df.get('market_cap', df['close'] * df.get('shares', 1)),  # fallback if no market_cap
         'day': lambda df: pd.Series(df['trade_date'].dt.day, index=df.index, dtype=float),

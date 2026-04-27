@@ -963,7 +963,7 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
 
     Args:
         db: async DB session.
-        market: "a_share" or "crypto".
+        market: "a_share".
         date: target date "YYYY-MM-DD". Defaults to today.
 
     Returns the summary dict or None if already exists for that date.
