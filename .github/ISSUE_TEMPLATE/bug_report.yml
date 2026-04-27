@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug in QuantGPT
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Start the server with `make run`
+        2. Enter expression `...`
+        3. Click "开始回测"
+        4. See error...
+    validations:
+      required: true
+  - type: input
+    id: expression
+    attributes:
+      label: Factor Expression (if applicable)
+      placeholder: "rank(close / ts_mean(close, 20))"
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local (SQLite)
+        - Local (PostgreSQL)
+        - Production server
+        - Docker
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: "3.12"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Paste relevant error output here
+      render: shell

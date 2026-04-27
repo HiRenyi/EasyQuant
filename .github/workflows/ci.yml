@@ -28,6 +28,9 @@ jobs:
         run: pyright quantgpt/ --level basic
 
       - name: Test
+        env:
+          JWT_SECRET_KEY: test-secret-for-ci-only
+          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
         run: pytest tests/ -x -q
 
   frontend:

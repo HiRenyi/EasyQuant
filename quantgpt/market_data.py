@@ -1,4 +1,4 @@
-"""Market data fetcher with rqdatac (primary) + baostock (fallback) + Parquet caching."""
+"""Market data fetcher with baostock + akshare (free) + Parquet caching. rqdatac optional."""
 
 import os
 import time
@@ -483,12 +483,14 @@ class MarketDataFetcher:
                 _baostock_logout()
 
     def _fetch_remote(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
-        """Fetch single stock: rqdatac → baostock."""
-        if not already_logged_in:
-            result = self._fetch_remote_rq([stock_code], start_date, end_date)
-            if result:
-                return result.get(self._normalize_stock_code(stock_code))
-        return self._fetch_remote_bs(stock_code, start_date, end_date, already_logged_in)
+        """Fetch single stock: baostock (free) → rqdatac (optional)."""
+        result = self._fetch_remote_bs(stock_code, start_date, end_date, already_logged_in)
+        if result is not None:
+            return result
+        rq_result = self._fetch_remote_rq([stock_code], start_date, end_date)
+        if rq_result:
+            return rq_result.get(self._normalize_stock_code(stock_code))
+        return None
 
     # --- PLACEHOLDER_FETCH_STOCKS ---
 
@@ -522,12 +524,32 @@ class MarketDataFetcher:
             if CACHE_ONLY:
                 logger.warning(f"Cache-only mode: {len(to_fetch)} stocks not cached, skipping fetch")
             else:
-                # Try rqdatac batch fetch first
-                rq_fetched = set()
-                if _rqdatac_init():
-                    # Batch in chunks of 200 to avoid API limits
-                    for i in range(0, len(to_fetch), 200):
-                        chunk = to_fetch[i:i+200]
+                # Primary: baostock batch (free, no account needed)
+                bs_fetched = set()
+                if HAS_BAOSTOCK:
+                    logger.info(f"[baostock] Fetching {len(to_fetch)} stocks...")
+                    with _bs_lock:
+                        _baostock_login()
+                        try:
+                            for code in to_fetch:
+                                df = self._fetch_remote_bs(code, start_date, end_date, already_logged_in=True)
+                                if df is not None and len(df) > 0:
+                                    existing = self._load_cache(code)
+                                    if existing is not None:
+                                        df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
+                                    self._save_cache(code, df)
+                                    filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
+                                    if len(filtered) > 0:
+                                        all_data.append(filtered)
+                                    bs_fetched.add(self._normalize_stock_code(code))
+                        finally:
+                            _baostock_logout()
+
+                # Fallback: rqdatac for remaining stocks (optional, paid)
+                rq_remaining = [c for c in to_fetch if self._normalize_stock_code(c) not in bs_fetched]
+                if rq_remaining and _rqdatac_init():
+                    for i in range(0, len(rq_remaining), 200):
+                        chunk = rq_remaining[i:i+200]
                         rq_results = self._fetch_remote_rq(chunk, start_date, end_date)
                         for bs_code, df in rq_results.items():
                             if df is not None and len(df) > 0:
@@ -538,27 +560,6 @@ class MarketDataFetcher:
                                 filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
                                 if len(filtered) > 0:
                                     all_data.append(filtered)
-                                rq_fetched.add(bs_code)
-
-                # Fallback: fetch remaining stocks from baostock
-                bs_remaining = [c for c in to_fetch if self._normalize_stock_code(c) not in rq_fetched]
-                if bs_remaining:
-                    logger.info(f"[baostock] Fetching {len(bs_remaining)} remaining stocks...")
-                    with _bs_lock:
-                        _baostock_login()
-                        try:
-                            for code in bs_remaining:
-                                df = self._fetch_remote_bs(code, start_date, end_date, already_logged_in=True)
-                                if df is not None and len(df) > 0:
-                                    existing = self._load_cache(code)
-                                    if existing is not None:
-                                        df = pd.concat([existing, df]).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
-                                    self._save_cache(code, df)
-                                    filtered = df[(df["trade_date"] >= req_start) & (df["trade_date"] <= req_end)]
-                                    if len(filtered) > 0:
-                                        all_data.append(filtered)
-                        finally:
-                            _baostock_logout()
 
         if all_data:
             result = pd.concat(all_data, ignore_index=True)

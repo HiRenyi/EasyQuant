@@ -6,15 +6,17 @@
 
 用一句中文描述因子逻辑 → 自动生成表达式 → 执行分组回测 → 输出可直接提交 WorldQuant BRAIN 的 alpha 因子
 
+[![CI](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml/badge.svg)](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React_18-TypeScript-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Live Demo](https://quantgpt.online) ·
+[Quick Start](docs/QUICKSTART.md) ·
+[Architecture](docs/ARCHITECTURE.md) ·
 [API Docs](docs/API_DOC.md) ·
 [MCP Guide](docs/MCP_GUIDE.md) ·
-[Factor Mining](docs/FACTOR_MINING.md)
+[Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -200,8 +202,8 @@ results = batch_evaluate(
 │          │          Core Engine         │                       │
 │  Client  │  ┌──────────────────────┐   │   Data Layer          │
 │  Layer   │  │  Expression Parser   │   │  ┌─────────────────┐  │
-│          │  │  50+ operators       │   │  │ rqdatac (primary)│  │
-│ Web SPA  │  │  WQ BRAIN compatible │   │  │ baostock (free)  │  │
+│          │  │  50+ operators       │   │  │ baostock (free)  │  │
+│ Web SPA  │  │  WQ BRAIN compatible │   │  │ akshare (free)   │  │
 │ REST API │  └──────────┬───────────┘   │  │ Parquet cache    │  │
 │ MCP      │  ┌──────────▼───────────┐   │  └─────────────────┘  │
 │          │  │  Backtest Engine     │   │                       │
@@ -215,8 +217,8 @@ results = batch_evaluate(
 │          │  │  WQ BRAIN simulation │   │                       │
 │          │  └──────────────────────┘   │   Storage             │
 │          │                             │  ┌─────────────────┐  │
-│          │  Factor Iteration Engine    │  │ PostgreSQL      │  │
-│          │  Trajectory → Meta-Evo →    │  │ Alembic (11 ver)│  │
+│          │  Factor Iteration Engine    │  │ SQLite (default)│  │
+│          │  Trajectory → Meta-Evo →    │  │ PostgreSQL (opt)│  │
 │          │  Mutation / Crossover       │  └─────────────────┘  │
 ├──────────┴──────────────────────────────┴───────────────────────┤
 │  Deploy: Alibaba Cloud ECS · Nginx · Cloudflare · systemd      │
@@ -228,9 +230,9 @@ results = batch_evaluate(
 | Layer | Technology |
 |:------|:-----------|
 | Backend | Python 3.10+, FastAPI, uvicorn, SQLAlchemy 2.0 async |
-| Database | PostgreSQL + asyncpg + Alembic migrations |
-| AI/LLM | DeepSeek (OpenAI-compatible API, swappable) |
-| Market Data | rqdatac (primary) → baostock (free fallback) → Parquet cache |
+| Database | SQLite (default, zero-config) / PostgreSQL (optional) |
+| AI/LLM | DeepSeek (optional — expression-only mode works without LLM) |
+| Market Data | baostock + akshare (free) → Parquet cache → rqdatac (optional) |
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS 4 |
 | Auth | JWT (access + refresh) + email verification + bcrypt |
 | MCP | FastMCP (stdio / SSE / streamable-http) |
@@ -270,14 +272,16 @@ TrajectoryAnalyzer → MetaEvolutionSelector → Strategy Execution
 
 8 种定向突变：时间窗口变异、算子替换、复杂度调整、截面变换叠加等。5 维评分驱动迭代方向。
 
-### 4. Triple Data Source with Graceful Degradation
+### 4. Free Data Sources with Graceful Degradation
 
 ```
-rqdatac (professional, batch API)
-    ↓ unavailable?
-baostock (free, single-stock, thread-safe with global lock)
-    ↓ already cached?
 Parquet local cache (zero network, CACHE_ONLY mode for offline)
+    ↓ cache miss?
+baostock (free, no account needed, T+1 data)
+    ↓ need same-day data?
+akshare (free, same-day data from 东方财富)
+    ↓ need batch API?
+rqdatac (optional, paid, professional batch API)
 ```
 
 ### 5. Three Access Modes
@@ -361,25 +365,43 @@ Parquet local cache (zero network, CACHE_ONLY mode for offline)
 ## Quick Start
 
 ```bash
-# Clone & install
+# Clone & one-click setup (no Docker, no API keys needed)
 git clone https://github.com/Miasyster/QuantGPT.git && cd QuantGPT
-pip install -e .
-
-# Configure (minimum 3 env vars)
-cp .env.example .env
-# Edit: DEEPSEEK_API_KEY, DATABASE_URL, JWT_SECRET_KEY
-
-# Database
-docker run -d --name quantgpt-pg \
-  -e POSTGRES_USER=quantgpt -e POSTGRES_PASSWORD=password -e POSTGRES_DB=quantgpt \
-  -p 5432:5432 postgres:16-alpine
-alembic upgrade head
-
-# Build & run
-cd frontend && npm install && npm run build && cd ..
-python -m quantgpt --transport http --port 8002
-# → http://localhost:8002
+make setup   # creates venv, installs deps, generates .env
+make run     # starts server at http://localhost:8002
 ```
+
+Open `http://localhost:8002` and enter a factor expression:
+
+```
+rank(close / ts_mean(close, 20))
+```
+
+**Zero config by default**: SQLite database, baostock + akshare free data, no LLM required for expression mode. See [full Quick Start guide](docs/QUICKSTART.md) for details.
+
+<details>
+<summary><b>Optional: Enable natural language mode</b></summary>
+
+```bash
+# Edit .env, add your DeepSeek API key (~$0.001 per query)
+DEEPSEEK_API_KEY=sk-your-key-here
+```
+
+Then you can type: *"找一个基于价量背离的短期反转因子"*
+
+</details>
+
+<details>
+<summary><b>Optional: PostgreSQL (for production)</b></summary>
+
+```bash
+pip install "quantgpt[postgresql]"
+# Edit .env:
+DATABASE_URL=postgresql+asyncpg://quantgpt:password@localhost:5432/quantgpt
+alembic upgrade head
+```
+
+</details>
 
 <details>
 <summary><b>MCP Configuration (Claude Code / Claude Desktop)</b></summary>

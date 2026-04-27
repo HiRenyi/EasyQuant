@@ -830,6 +830,14 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 pass  # Not a valid expression, fall through to LLM
 
         if expression is None:
+            if not os.environ.get("DEEPSEEK_API_KEY"):
+                task["status"] = "failed"
+                task["error"] = (
+                    "未配置 LLM API Key，无法解析自然语言。"
+                    "请直接输入因子表达式（如 rank(close/ts_mean(close,20))），"
+                    "或设置 DEEPSEEK_API_KEY 环境变量启用自然语言输入。"
+                )
+                return
             expression = _call_deepseek(req.prompt)
         task["expression"] = expression
         logger.info(f"[{task_id}] expression: {expression}")
@@ -849,27 +857,36 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         # 2a. Parentheses pre-check
         paren_err = _validate_parentheses(expression)
         if paren_err:
-            logger.warning(f"[{task_id}] parentheses error, attempting fix: {paren_err}")
-            expression = _call_fix_expression(expression, paren_err, req.prompt)
-            task["expression"] = expression
+            if os.environ.get("DEEPSEEK_API_KEY"):
+                logger.warning(f"[{task_id}] parentheses error, attempting fix: {paren_err}")
+                expression = _call_fix_expression(expression, paren_err, req.prompt)
+                task["expression"] = expression
+            else:
+                task["status"] = "failed"
+                task["error"] = f"表达式语法错误: {paren_err}"
+                return
 
         # 2b. Parse & smoke-test
         try:
             func = parse_expression(expression)
             func(dummy)
         except Exception as e:
-            # Attempt LLM fix (once)
-            logger.warning(f"[{task_id}] validation failed, attempting fix: {e}")
-            try:
-                fixed = _call_fix_expression(expression, str(e), req.prompt)
-                func = parse_expression(fixed)
-                func(dummy)
-                expression = fixed
-                task["expression"] = expression
-                logger.info(f"[{task_id}] expression fixed: {expression}")
-            except Exception as e2:
+            if os.environ.get("DEEPSEEK_API_KEY"):
+                logger.warning(f"[{task_id}] validation failed, attempting fix: {e}")
+                try:
+                    fixed = _call_fix_expression(expression, str(e), req.prompt)
+                    func = parse_expression(fixed)
+                    func(dummy)
+                    expression = fixed
+                    task["expression"] = expression
+                    logger.info(f"[{task_id}] expression fixed: {expression}")
+                except Exception as e2:
+                    task["status"] = "failed"
+                    task["error"] = f"因子表达式无效: {e2}"
+                    return
+            else:
                 task["status"] = "failed"
-                task["error"] = f"因子表达式无效: {e2}"
+                task["error"] = f"因子表达式无效: {e}"
                 return
 
         # 3. Fetch data

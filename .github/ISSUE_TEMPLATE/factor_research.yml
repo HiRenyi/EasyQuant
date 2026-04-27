@@ -1,0 +1,46 @@
+name: Factor Research
+description: Share factor research findings or propose new factor hypotheses
+title: "[Research] "
+labels: ["research"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Factor Hypothesis
+      description: What market phenomenon does this factor capture?
+    validations:
+      required: true
+  - type: input
+    id: expression
+    attributes:
+      label: Expression
+      placeholder: "rank(ts_corr(close, volume, 10)) * rank(ts_delta(close, 5) / close)"
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Backtest Results
+      description: Key metrics (Sharpe, IC, monotonicity, anti-overfit score)
+      placeholder: |
+        - Universe: hs300
+        - Period: 2023-01-01 to 2025-12-31
+        - Sharpe: X.XX
+        - IC Mean: X.XXXX
+        - Rank IC: X.XXXX
+        - Monotonicity: X.XX
+        - Anti-overfit Score: XX/100
+  - type: textarea
+    id: analysis
+    attributes:
+      label: Analysis
+      description: Why does this factor work? Any risks or limitations?
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: Validation Checklist
+      options:
+        - label: Tested on hs300 universe
+        - label: Anti-overfit score > 60
+        - label: Walk-forward validation performed
+        - label: Tested on WQ BRAIN (if applicable)
