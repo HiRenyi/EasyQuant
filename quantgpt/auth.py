@@ -27,7 +27,7 @@ _DEV_USER_ID = _uuid_mod.UUID("00000000-0000-0000-0000-000000000099")
 
 
 def is_auth_disabled() -> bool:
-    return os.environ.get("AUTH_DISABLED", "").lower() in ("1", "true", "yes")
+    return os.environ.get("AUTH_DISABLED", "true").lower() in ("1", "true", "yes")
 
 
 def _get_dev_user() -> "User":

@@ -37,7 +37,7 @@ const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: stri
 export default function App() {
   const { isGuest } = useAuth();
   const { isDark } = useColorMode();
-  const [activeTab, setActiveTab] = useState<MainTab>("backtest");
+  const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);

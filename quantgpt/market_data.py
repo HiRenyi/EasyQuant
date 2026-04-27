@@ -31,7 +31,7 @@ except ImportError:
 # rqdatac lazy initialization
 _rq_lock = threading.Lock()
 _rq_initialized = False
-_rq_disabled = True  # rqdatac 默认禁用，仅手动触发时临时开启（避免占用账号登录设备数）
+_rq_disabled = True
 
 # Project root for default paths
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -85,7 +85,11 @@ def _from_rq_code(rq_code: str) -> str:
 # ─── rqdatac initialization ────────────────────────────────────────
 
 def _rqdatac_init() -> bool:
-    """Lazy-init rqdatac session. Returns True if ready to use."""
+    """Lazy-init rqdatac session. Returns True if ready to use.
+
+    Blocked by _rq_disabled (True by default). Only unblocked inside
+    the ``enable_rqdatac()`` context manager (manual admin triggers).
+    """
     global _rq_initialized
     if _rq_disabled:
         return False
@@ -110,6 +114,19 @@ def _rqdatac_init() -> bool:
         except Exception as e:
             logger.warning(f"rqdatac init failed: {e}")
             return False
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def enable_rqdatac():
+    """Temporarily allow rqdatac calls. For manual admin triggers only."""
+    global _rq_disabled
+    _rq_disabled = False
+    try:
+        yield
+    finally:
+        _rq_disabled = True
 
 
 # ─── baostock helpers (unchanged) ──────────────────────────────────

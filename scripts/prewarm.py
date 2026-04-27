@@ -188,7 +188,9 @@ def main():
         logger.info("--- Step 7: rqdatac daily factors ---")
         try:
             from quantgpt.fundamental_data import prewarm_factors_rq
-            prewarm_factors_rq(stock_codes, START_DATE, END_DATE)
+            from quantgpt.market_data import enable_rqdatac
+            with enable_rqdatac():
+                prewarm_factors_rq(stock_codes, START_DATE, END_DATE)
         except Exception as e:
             logger.error(f"Factor prewarm failed: {e}")
 

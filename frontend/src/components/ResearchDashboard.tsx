@@ -46,6 +46,13 @@ export default function ResearchDashboard() {
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadTasks(); }, [loadTasks]);
 
+  const hasActiveTasks = tasks.some((t) => t.status !== "completed" && t.status !== "failed");
+  useEffect(() => {
+    if (!hasActiveTasks) return;
+    const id = setInterval(() => { loadStats(); loadTasks(); }, 5000);
+    return () => clearInterval(id);
+  }, [hasActiveTasks, loadStats, loadTasks]);
+
   const handleFilterChange = (f: StatusFilter) => {
     setStatusFilter(f);
     setPage(1);
