@@ -12,8 +12,8 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [Live Demo](https://quantgpt.online) ·
-[API Docs](API_DOC.md) ·
-[MCP Guide](MCP_GUIDE.md)
+[API Docs](docs/API_DOC.md) ·
+[MCP Guide](docs/MCP_GUIDE.md)
 
 </div>
 

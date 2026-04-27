@@ -42,8 +42,8 @@ marketing/
 .claude/
 
 # Research notes (runtime)
-research_notes/auto_run_log.md
-research_notes/reports/
+docs/research_notes/auto_run_log.md
+docs/research_notes/reports/
 
 # IDE
 .vscode/
