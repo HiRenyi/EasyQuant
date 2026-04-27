@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Index, Float,
+    JSON, Uuid,
 )
-from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 
@@ -21,7 +21,7 @@ def _utcnow() -> datetime:
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)  # bcrypt, NULL=未设置密码
     nickname = Column(String(100), nullable=True)
@@ -38,7 +38,7 @@ class User(Base):
 class VerificationCode(Base):
     __tablename__ = "verification_codes"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), nullable=False, index=True)
     code = Column(String(6), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
@@ -54,8 +54,8 @@ class VerificationCode(Base):
 class Session(Base):
     __tablename__ = "sessions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(200), nullable=True)
     market = Column(String(20), default="a_share", nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -69,8 +69,8 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(String(12), primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    session_id = Column(UUID(as_uuid=True), ForeignKey("sessions.id"), nullable=True, index=True)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    session_id = Column(Uuid, ForeignKey("sessions.id"), nullable=True, index=True)
     status = Column(String(30), nullable=False, default="pending")
     task_type = Column(String(20), nullable=True, default="backtest")
     parent_task_id = Column(String(12), ForeignKey("tasks.id"), nullable=True)
@@ -89,8 +89,8 @@ class Task(Base):
 class Report(Base):
     __tablename__ = "reports"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     task_id = Column(String(12), ForeignKey("tasks.id"), nullable=False)
     filename = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
@@ -102,8 +102,8 @@ class Report(Base):
 class SavedFactor(Base):
     __tablename__ = "saved_factors"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     task_id = Column(String(12), ForeignKey("tasks.id"), nullable=True)
     expression = Column(Text, nullable=False)
     name = Column(String(200), nullable=True)       # 用户自定义名称
@@ -123,8 +123,8 @@ class SavedFactor(Base):
 class FeaturedFactor(Base):
     __tablename__ = "featured_factors"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=True)
     expression = Column(Text, nullable=False)
     title = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
@@ -145,8 +145,8 @@ class FeaturedFactor(Base):
 class Feedback(Base):
     __tablename__ = "feedbacks"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     description = Column(Text, nullable=False)
     screenshot_path = Column(String(500), nullable=True)
     task_id = Column(String(12), nullable=True)
@@ -163,8 +163,8 @@ class Feedback(Base):
 class PaperStrategy(Base):
     __tablename__ = "paper_strategies"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(200), nullable=False)
     expression = Column(Text, nullable=False)
     universe = Column(String(20), nullable=False, default="hs300")
@@ -191,8 +191,8 @@ class PaperStrategy(Base):
 class PaperSnapshot(Base):
     __tablename__ = "paper_snapshots"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    strategy_id = Column(UUID(as_uuid=True), ForeignKey("paper_strategies.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    strategy_id = Column(Uuid, ForeignKey("paper_strategies.id"), nullable=False, index=True)
     date = Column(String(10), nullable=False)
     portfolio_value = Column(Float, nullable=False)
     cash = Column(Float, nullable=True, default=0.0)
@@ -210,8 +210,8 @@ class PaperSnapshot(Base):
 class PaperOrder(Base):
     __tablename__ = "paper_orders"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    strategy_id = Column(UUID(as_uuid=True), ForeignKey("paper_strategies.id"), nullable=False, index=True)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    strategy_id = Column(Uuid, ForeignKey("paper_strategies.id"), nullable=False, index=True)
     date = Column(String(10), nullable=False)
     stock_code = Column(String(20), nullable=False)
     direction = Column(String(4), nullable=False)  # buy | sell
@@ -227,7 +227,7 @@ class PaperOrder(Base):
 class DailySummary(Base):
     __tablename__ = "daily_summaries"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     date = Column(String(10), nullable=False)          # "2026-03-24"
     market = Column(String(20), default="a_share", nullable=False)
     title = Column(String(200), nullable=True)

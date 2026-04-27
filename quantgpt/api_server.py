@@ -1785,16 +1785,30 @@ def _send_webhook(webhook_url: str, feedback_data: dict) -> bool:
         return False
 
 
+_MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024  # 5MB decoded
+
+
 def _save_screenshot_to_disk(feedback_id: str, screenshot_b64: str) -> str | None:
     """Decode base64 screenshot and save to feedback/ directory. Returns relative path."""
     try:
-        # Strip data URI prefix if present
         if "," in screenshot_b64:
             screenshot_b64 = screenshot_b64.split(",", 1)[1]
         img_bytes = base64.b64decode(screenshot_b64)
 
+        if len(img_bytes) > _MAX_SCREENSHOT_BYTES:
+            logger.warning(f"Screenshot too large: {len(img_bytes)} bytes")
+            return None
+
+        if img_bytes[:4] == b'\x89PNG':
+            ext = ".png"
+        elif img_bytes[:3] == b'\xff\xd8\xff':
+            ext = ".jpg"
+        else:
+            logger.warning("Screenshot is not a valid PNG or JPEG")
+            return None
+
         _FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"{feedback_id}.png"
+        filename = f"{feedback_id}{ext}"
         filepath = _FEEDBACK_DIR / filename
         filepath.write_bytes(img_bytes)
         return str(filepath.relative_to(Path(__file__).resolve().parent.parent))

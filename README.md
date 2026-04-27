@@ -62,6 +62,135 @@
 
 ---
 
+## AI Factor Mining — Autonomous Research Loop
+
+> **This is what makes QuantGPT fundamentally different from every other quant tool.**
+>
+> 传统工具给你一个回测引擎，然后说"去写因子吧"。QuantGPT 给你一个**自主研究员**——它读文献、设计假设、批量实验、分析结果、积累知识、自我迭代，而且每个结论都经过双模型交叉验证。
+
+### How It Works
+
+```
+                    ┌─────────────────────────────┐
+                    │  Research Notes & Knowledge  │
+                    │  (Rules / Findings / Fails)  │
+                    └──────────┬──────────────────┘
+                               │ read
+                               ▼
+┌──────────┐    ┌──────────────────────────┐    ┌──────────────────┐
+│  Phase 0 │───▶│  Phase 1: Factor Design  │───▶│  Phase 2: Batch  │
+│  Context │    │  Hypothesis → Expression │    │  Backtest (10-20 │
+│  Loading │    │  1-3 candidates per idea │    │  concurrent)     │
+└──────────┘    └──────────────────────────┘    └────────┬─────────┘
+                                                         │
+                               ┌─────────────────────────┘
+                               ▼
+                ┌──────────────────────────────────────────┐
+                │  Phase 3: Four-Step Analysis             │
+                │                                          │
+                │  ① Fact Collection (metrics vs baseline) │
+                │  ② Independent Judgment (Agent)          │
+                │  ③ Cross-Review (DeepSeek Reasoner)      │
+                │  ④ Consensus or Divergence Resolution    │
+                └──────────────────┬───────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    ▼                             ▼
+          ┌─────────────────┐          ┌──────────────────┐
+          │  Phase 4: Update │          │  Phase 5: Stop?  │
+          │  Notes + Knowledge│         │  Converged /     │
+          │  Base             │◀────────│  Time / Rounds   │
+          └─────────────────┘          └──────────────────┘
+                    │                         │ no
+                    │                         └──▶ back to Phase 1
+                    ▼
+          ┌──────────────────┐
+          │  Phase 6: Report │
+          │  A/B factors +   │
+          │  new knowledge   │
+          └──────────────────┘
+```
+
+### Why This Matters — Competitive Comparison
+
+| Capability | Manual Research | ChatGPT + Backtest | **QuantGPT Factor Mining** |
+|:-----------|:--------------:|:------------------:|:--------------------------:|
+| Factor design | Human | Single LLM, one-shot | **LLM + knowledge base + hypothesis-driven** |
+| Experiment scale | 1-3 per hour | 1-3 per session | **10-20 concurrent per batch** |
+| Anti-bias | Researcher's judgment | None | **Dual-LLM cross-review (mandatory)** |
+| Knowledge accumulation | Personal notes | Lost between sessions | **Structured KB: rules / findings / failures** |
+| Checkpoint & resume | Manual | Start over | **Auto-detect unfinished directions** |
+| Research discipline | Varies by person | None enforced | **Control variables, no repeats, record failures** |
+| Convergence detection | Intuition | None | **Auto-stop after N rounds without improvement** |
+
+### Key Mechanisms
+
+<table>
+<tr>
+<td width="50%">
+
+**Dual-LLM Cross-Review**
+
+每个结论性判断（采用/不采用/关闭方向）必须经过第二个 LLM 独立评审。不是简单的"再问一遍"——是把事实数据和第一个模型的推理链一起发给 DeepSeek Reasoner，要求它独立评估推理是否合理、是否有遗漏角度。
+
+共识 → 直接输出。分歧 → 呈现双方证据，采用更保守结论。
+
+这解决了单模型因子研究的核心问题：**confirmation bias**。
+
+</td>
+<td width="50%">
+
+**Persistent Knowledge Base**
+
+```
+research_notes/knowledge/
+├── rules/       ← 已验证的稳定规则（必须遵守）
+├── findings/    ← 经验发现（参考）
+└── failures/    ← 已证伪路径（禁止重复）
+```
+
+知识库跨会话积累。第 10 次研究会话可以直接利用前 9 次的所有发现，避免重复实验，遵守已验证规则，绕开已证伪路径。
+
+这不是 chat history——是**结构化的研究资产**。
+
+</td>
+</tr>
+<tr>
+<td>
+
+**Batch Concurrent Evaluation**
+
+单次提交 10-20 个因子表达式，并发回测 + 三波重试。结果按 fitness 降序排列。hs300 fitness < 0.1 时自动跳过 csi500 验证，节省算力。
+
+```python
+from scripts.factor_miner import batch_evaluate
+results = batch_evaluate(
+    server, expressions, params,
+    max_concurrent=10
+)
+```
+
+</td>
+<td>
+
+**Research Discipline (Enforced)**
+
+不是建议，是硬性规则：
+- 每次实验只改一个变量
+- 提交前检查是否已做过（笔记 + 知识库）
+- 分析结论标注"仅为假设"
+- 失败实验同样记录原因
+- 表达式 > 4 层嵌套需额外论证
+- 简单清晰 > 复杂精巧
+
+</td>
+</tr>
+</table>
+
+> **上面 Validated Results 中的因子就是这个流程的产出。** 3 轮迭代、24 个候选、最终 3 个因子通过 WQ BRAIN 独立验证。完整方法论见 [Factor Mining Guide](docs/FACTOR_MINING.md)。
+
+---
+
 ## Architecture
 
 ```
@@ -174,27 +303,6 @@ Parquet local cache (zero network, CACHE_ONLY mode for offline)
 | `run_rolling_validation` | Walk-forward 验证 |
 
 </details>
-
-### 6. AI Factor Mining Framework
-
-系统化的 AI 因子挖掘方法论，6 阶段研究循环：
-
-```
-Phase 0: Load Context & Knowledge Base
-Phase 1: LLM-Driven Factor Design (hypothesis → expression)
-Phase 2: Batch Backtest (10-20 concurrent, 3-wave retry)
-Phase 3: Four-Step Analysis (Facts → Judgment → Cross-Review → Consensus)
-Phase 4: Update Research Notes & Knowledge Base
-Phase 5: Convergence Check → Continue or Stop
-```
-
-核心特点：
-- **Cross-Review 机制**：每个结论性判断必须经过第二个 LLM 独立评审，防止单模型偏见
-- **知识库沉淀**：规则（Rules）、发现（Findings）、失败路径（Failures）跨会话积累
-- **断点续做**：自动识别已完成/未完成研究方向，从断点继续
-- **研究纪律**：控制变量、禁止重复实验、标注不确定性、失败必记录
-
-工具库 [`scripts/factor_miner.py`](scripts/factor_miner.py) 支持批量并发提交和解析。完整方法论见 [Factor Mining Guide](docs/FACTOR_MINING.md)。
 
 ---
 
@@ -366,6 +474,9 @@ quantgpt/
 | Input method | Write Python | Write Python | Write Python | **Natural language** |
 | Factor backtesting | Manual | Manual | N/A | **One-click** |
 | AI factor generation | -- | -- | -- | **LLM-driven** |
+| Autonomous factor mining | -- | -- | -- | **6-phase research loop** |
+| Dual-LLM cross-review | -- | -- | -- | **Mandatory** |
+| Knowledge accumulation | -- | -- | -- | **Structured KB** |
 | Anti-overfit detection | -- | -- | -- | **4 statistical tests** |
 | WQ BRAIN compatible | -- | -- | -- | **Operator-aligned** |
 | MCP / AI Agent | -- | -- | -- | **8 tools** |

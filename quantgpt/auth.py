@@ -3,6 +3,7 @@
 import os
 import time
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -21,6 +22,7 @@ _JWT_ALGORITHM = "HS256"
 
 # Email send rate limit (in-memory): email -> timestamp
 _email_rate: dict[str, float] = {}
+_email_rate_lock = threading.Lock()
 EMAIL_RATE_LIMIT_SECONDS = 60
 
 
@@ -67,11 +69,15 @@ def decode_token(token: str) -> dict:
 def check_email_rate_limit(email: str) -> None:
     """Raise HTTPException if email was sent too recently."""
     now = time.monotonic()
-    last_sent = _email_rate.get(email)
-    if last_sent and now - last_sent < EMAIL_RATE_LIMIT_SECONDS:
-        remaining = int(EMAIL_RATE_LIMIT_SECONDS - (now - last_sent))
-        raise HTTPException(status_code=429, detail=f"发送过于频繁，请 {remaining} 秒后重试")
-    _email_rate[email] = now
+    with _email_rate_lock:
+        expired = [k for k, v in _email_rate.items() if now - v > 300]
+        for k in expired:
+            del _email_rate[k]
+        last_sent = _email_rate.get(email)
+        if last_sent and now - last_sent < EMAIL_RATE_LIMIT_SECONDS:
+            remaining = int(EMAIL_RATE_LIMIT_SECONDS - (now - last_sent))
+            raise HTTPException(status_code=429, detail=f"发送过于频繁，请 {remaining} 秒后重试")
+        _email_rate[email] = now
 
 
 def _extract_token(request: Request) -> str:
@@ -136,10 +142,6 @@ async def get_optional_user(
         return None
     if payload.get("type") == "guest":
         return None
-    try:
-        payload = decode_token(token)
-    except HTTPException:
-        return None
     if payload.get("type") != "access":
         return None
     user_id = payload.get("sub")
@@ -155,6 +157,7 @@ async def get_optional_user(
 def create_admin_token() -> str:
     """Create JWT for admin with type='admin', 24h expiry."""
     payload = {
+        "sub": "admin",
         "type": "admin",
         "exp": datetime.now(timezone.utc) + timedelta(hours=24),
         "iat": datetime.now(timezone.utc),

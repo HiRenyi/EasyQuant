@@ -16,10 +16,12 @@ _session_factory = None
 def _get_engine():
     global _engine
     if _engine is None:
-        url = os.environ.get("DATABASE_URL", "")
-        if not url:
-            raise RuntimeError("DATABASE_URL environment variable is not set")
-        _engine = create_async_engine(url, echo=False, pool_size=5, max_overflow=10)
+        url = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./quantgpt.db")
+        kwargs: dict = {"echo": False}
+        if "postgresql" in url:
+            kwargs["pool_size"] = 5
+            kwargs["max_overflow"] = 10
+        _engine = create_async_engine(url, **kwargs)
     return _engine
 
 
