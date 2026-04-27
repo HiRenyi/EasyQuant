@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import type { ReactNode } from "react";
 import type { User } from "../types/auth";
 import { getMe, refreshToken } from "../api/auth";
+import { setAuthDisabled } from "../api/client";
 
 interface AuthContextType {
   user: User | null;
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const [showSetPassword, setShowSetPassword] = useState(false);
+  const [authDisabledFlag, setAuthDisabledFlag] = useState(false);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
@@ -72,8 +74,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((prev) => (prev ? { ...prev, ...partial } : prev));
   }, []);
 
-  // On mount: check stored token
+  // On mount: check if backend has auth disabled
   useEffect(() => {
+    fetch("/api/v1/health")
+      .then(res => res.json())
+      .then(data => {
+        if (data.auth_disabled) {
+          setAuthDisabled(true);
+          setAuthDisabledFlag(true);
+          setUser({ id: "dev", email: "dev@localhost", nickname: "Dev User", has_password: false, created_at: new Date().toISOString() });
+          setIsLoading(false);
+        }
+      })
+      .catch(() => { /* backend unreachable, proceed with normal auth */ });
+  }, []);
+
+  // On mount: check stored token (skip if auth disabled)
+  useEffect(() => {
+    if (authDisabledFlag) return;
+
     const stored = localStorage.getItem(TOKEN_KEY);
     const storedRefresh = localStorage.getItem(REFRESH_KEY);
     if (!stored) {
@@ -111,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setIsLoading(false));
-  }, [logout]);
+  }, [logout, authDisabledFlag]);
 
   return (
     <AuthContext.Provider

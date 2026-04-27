@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import threading
+import uuid as _uuid_mod
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -19,6 +20,19 @@ from .models import User
 logger = logging.getLogger(__name__)
 
 _JWT_ALGORITHM = "HS256"
+
+# ---- Dev mode (auth bypass) ----
+
+_DEV_USER_ID = _uuid_mod.UUID("00000000-0000-0000-0000-000000000099")
+
+
+def is_auth_disabled() -> bool:
+    return os.environ.get("AUTH_DISABLED", "").lower() in ("1", "true", "yes")
+
+
+def _get_dev_user() -> "User":
+    """Return a synthetic User for dev mode (not attached to any DB session)."""
+    return User(id=_DEV_USER_ID, email="dev@localhost", nickname="Dev User")
 
 # Email send rate limit (in-memory): email -> timestamp
 _email_rate: dict[str, float] = {}
@@ -97,6 +111,8 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """FastAPI dependency: extract JWT → load user from DB."""
+    if is_auth_disabled():
+        return _get_dev_user()
     token = _extract_token(request)
     payload = decode_token(token)
     if payload.get("type") != "access":
@@ -132,6 +148,8 @@ async def get_optional_user(
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Like get_current_user but returns None for guest/anonymous requests."""
+    if is_auth_disabled():
+        return _get_dev_user()
     try:
         token = _extract_token(request)
     except HTTPException:
@@ -167,6 +185,8 @@ def create_admin_token() -> str:
 
 async def require_admin(request: Request) -> bool:
     """FastAPI dependency: verify admin JWT token."""
+    if is_auth_disabled():
+        return True
     token = _extract_token(request)
     payload = decode_token(token)
     if payload.get("type") != "admin":

@@ -94,6 +94,17 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Seed dev user when auth is disabled (FK constraints need a real row)
+    from .auth import is_auth_disabled, _DEV_USER_ID
+    if is_auth_disabled():
+        from .db import _get_session_factory
+        async with _get_session_factory()() as session:
+            result = await session.execute(select(User).where(User.id == _DEV_USER_ID))
+            if not result.scalar_one_or_none():
+                session.add(User(id=_DEV_USER_ID, email="dev@localhost", nickname="Dev User"))
+                await session.commit()
+        logger.info("Auth disabled — running in local development mode")
+
     # Start paper trading scheduler
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
@@ -1090,10 +1101,12 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 @app.get("/api/v1/health")
 def health():
     """健康检查。"""
+    from .auth import is_auth_disabled
     return {
         "status": "ok",
         "active_tasks": _active_task_count(),
         "total_tasks": len(_tasks),
+        "auth_disabled": is_auth_disabled(),
     }
 
 
@@ -1273,26 +1286,27 @@ async def get_task(
 @app.get("/api/v1/tasks/{task_id}/stream")
 async def stream_task(task_id: str, request: Request):
     """SSE 实时推送任务状态变化，直到 completed/failed 后关闭连接。"""
-    # Authenticate via query param (EventSource can't set headers)
-    token = request.query_params.get("token")
-    is_guest = False
-    user_id: str | None = None
-
-    if not token or token.startswith("guest_"):
-        # Guest access — only allow access to guest tasks
-        is_guest = True
-        user_id = GUEST_USER_ID
-    else:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="无效的 Token")
-        user_id = payload.get("sub")
+    from .auth import is_auth_disabled
 
     task = _tasks.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+
+    if not is_auth_disabled():
+        # Authenticate via query param (EventSource can't set headers)
+        token = request.query_params.get("token")
+        user_id: str | None = None
+
+        if not token or token.startswith("guest_"):
+            user_id = GUEST_USER_ID
+        else:
+            payload = decode_token(token)
+            if payload.get("type") != "access":
+                raise HTTPException(status_code=401, detail="无效的 Token")
+            user_id = payload.get("sub")
+
+        if task.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Task not found")
 
     global _active_sse_count
     with _sse_lock:

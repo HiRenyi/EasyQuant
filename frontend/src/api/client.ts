@@ -2,11 +2,16 @@ import type { BacktestRequest, Task, Session } from "../types/backtest";
 
 export const BASE = "";
 
+let _authDisabled = false;
+export function setAuthDisabled(v: boolean) { _authDisabled = v; }
+export function getAuthDisabled() { return _authDisabled; }
+
 function getAccessToken(): string | null {
   return localStorage.getItem("quantgpt_access_token");
 }
 
 function authHeaders(): Record<string, string> {
+  if (_authDisabled) return { "Content-Type": "application/json" };
   const token = getAccessToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -17,7 +22,7 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   const headers = { ...authHeaders(), ...options.headers };
   const res = await fetch(url, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !_authDisabled) {
     // Guest tokens don't need refresh
     if (localStorage.getItem("quantgpt_is_guest") === "1") return res;
 
@@ -92,7 +97,7 @@ export function streamTask(
   onDone: () => void,
   _onError?: (err: Event) => void,
 ): () => void {
-  const token = getAccessToken();
+  const token = _authDisabled ? null : getAccessToken();
   const url = `${BASE}/api/v1/tasks/${taskId}/stream${token ? `?token=${token}` : ""}`;
   let closed = false;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
