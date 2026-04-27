@@ -12,29 +12,23 @@ import ProgressTracker from "./components/ProgressTracker";
 import ResultsDashboard from "./components/ResultsDashboard";
 import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
-import FeedbackButton from "./components/FeedbackButton";
-import SatisfactionRating from "./components/SatisfactionRating";
 import FactorLibrary from "./components/FactorLibrary";
-import FactorWall from "./components/FactorWall";
 import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
 import PaperTrading from "./components/PaperTrading";
-import DailySummary from "./components/DailySummary";
 import StrategyBacktest from "./components/StrategyBacktest";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, Trophy, LineChart, Newspaper, Code } from "lucide-react";
+import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, LineChart, Code } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "strategy" | "daily" | "templates" | "leaderboard" | "composite" | "comparison" | "paper";
+type MainTab = "backtest" | "strategy" | "templates" | "composite" | "comparison" | "paper";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
   { id: "strategy", label: "策略回测", icon: Code, color: "orange" },
-  { id: "daily", label: "盘后日报", icon: Newspaper, color: "rose" },
   { id: "templates", label: "因子模板库", icon: BookOpen, color: "indigo" },
-  { id: "leaderboard", label: "因子榜", icon: Trophy, color: "amber" },
   { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
   { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
   { id: "paper", label: "模拟盘", icon: LineChart, color: "teal" },
@@ -275,23 +269,10 @@ export default function App() {
                   {activeTask.expression && (
                     <p className="mt-2 text-xs text-red-500 font-mono">表达式: {activeTask.expression}</p>
                   )}
-                  <button
-                    onClick={() => window.dispatchEvent(new CustomEvent("open-feedback", {
-                      detail: {
-                        task_id: activeTask.task_id,
-                        prefill: `回测失败: ${typeof activeTask.error === "string" ? activeTask.error : JSON.stringify(activeTask.error) || "未知错误"}${activeTask.expression ? `\n表达式: ${activeTask.expression}` : ""}`,
-                      },
-                    }))}
-                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
-                  >
-                    一键反馈此问题
-                  </button>
                 </div>
               )}
 
               {showResults && activeTask.result && (
-                <>
-                <SatisfactionRating taskId={activeTask.task_id} expression={activeTask.result.params.expression} />
                 <ResultsDashboard
                   result={activeTask.result}
                   onSaveFactor={isGuest ? undefined : handleSaveFactor}
@@ -309,7 +290,6 @@ export default function App() {
                     />
                   }
                 />
-                </>
               )}
             </>
           )}
@@ -323,16 +303,8 @@ export default function App() {
             />
           )}
 
-          {activeTab === "daily" && (
-            <DailySummary />
-          )}
-
           {activeTab === "templates" && (
             <TemplateGallery onUseTemplate={handleUseTemplate} />
-          )}
-
-          {activeTab === "leaderboard" && (
-            <FactorWall onTryFactor={(expr) => { setActiveTab("backtest"); handleSubmit({ prompt: expr }); }} />
           )}
 
           {activeTab === "composite" && (
@@ -419,7 +391,6 @@ export default function App() {
           </aside>
         )}
       </div>
-      <FeedbackButton />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Send, Loader2, Check, Circle, ChevronDown, ChevronUp, TrendingUp, Activity, AlertTriangle, Wallet, RefreshCw, FileText, MessageSquarePlus } from "lucide-react";
+import { Send, Loader2, Check, Circle, ChevronDown, ChevronUp, TrendingUp, Activity, AlertTriangle, Wallet, RefreshCw, FileText } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useStrategyBacktest } from "../hooks/useStrategyBacktest";
 import { useColorMode } from "../contexts/ColorModeContext";
@@ -200,18 +200,9 @@ export default function StrategyBacktest({
       {/* Error */}
       {displayTask?.status === "failed" && (
         <div className={`rounded-xl border ${isDark ? "border-red-800 bg-red-900/20" : "border-red-200 bg-red-50"} p-4`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className={`h-4 w-4 ${isDark ? "text-red-400" : "text-red-600"}`} />
-              <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>回测失败</span>
-            </div>
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("open-feedback", { detail: { prefill: `[策略回测失败] ${displayTask.error || "未知错误"}\n\n策略描述: ${prompt || displayTask.params?.prompt || ""}`, task_id: displayTask.task_id } }))}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${isDark ? "bg-red-800/50 text-red-300 hover:bg-red-800" : "bg-red-100 text-red-700 hover:bg-red-200"}`}
-            >
-              <MessageSquarePlus className="h-3 w-3" />
-              反馈问题
-            </button>
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className={`h-4 w-4 ${isDark ? "text-red-400" : "text-red-600"}`} />
+            <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>回测失败</span>
           </div>
           <p className={`text-sm ${isDark ? "text-red-300" : "text-red-700"}`}>{displayTask.error || "未知错误"}</p>
         </div>
