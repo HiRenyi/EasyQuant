@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from quantgpt.auth import create_access_token
-from quantgpt.models import User, Session, Task, SavedFactor, FeaturedFactor
+from quantgpt.models import User, Session, Task, SavedFactor
 
 
 pytestmark = pytest.mark.asyncio
@@ -128,43 +128,3 @@ class TestFactorLibrary:
 
         resp = await client.delete(f"/api/v1/factor-library/{fid}", headers=other_headers)
         assert resp.status_code == 404
-
-
-class TestFactorWall:
-    async def test_wall_returns_only_approved(self, client, db_session):
-        f1 = FeaturedFactor(
-            id=uuid.uuid4(), expression="rank(close)", title="Good",
-            status="approved", source="official",
-            created_at=datetime.now(timezone.utc),
-        )
-        f2 = FeaturedFactor(
-            id=uuid.uuid4(), expression="rank(open)", title="Pending",
-            status="pending", source="submission",
-            created_at=datetime.now(timezone.utc),
-        )
-        db_session.add_all([f1, f2])
-        await db_session.commit()
-
-        resp = await client.get("/api/v1/factor-library/wall")
-        assert resp.status_code == 200
-        factors = resp.json()["factors"]
-        expressions = [f["expression"] for f in factors]
-        assert "rank(close)" in expressions
-        assert "rank(open)" not in expressions
-
-    async def test_submit_to_wall(self, client, test_user, auth_headers):
-        resp = await client.post("/api/v1/factor-library/wall/submit", json={
-            "expression": "ts_corr(close, volume, 10)",
-            "title": "Volume-Price Correlation",
-        }, headers=auth_headers)
-        assert resp.status_code == 201
-        assert resp.json()["status"] == "pending"
-
-    async def test_duplicate_submission_rejected(self, client, test_user, auth_headers):
-        await client.post("/api/v1/factor-library/wall/submit", json={
-            "expression": "rank(high)",
-        }, headers=auth_headers)
-        resp = await client.post("/api/v1/factor-library/wall/submit", json={
-            "expression": "rank(high)",
-        }, headers=auth_headers)
-        assert resp.status_code == 409

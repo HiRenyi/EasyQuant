@@ -13,22 +13,22 @@ import ResultsDashboard from "./components/ResultsDashboard";
 import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
 import FactorLibrary from "./components/FactorLibrary";
-import TemplateGallery from "./components/TemplateGallery";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
 import PaperTrading from "./components/PaperTrading";
 import StrategyBacktest from "./components/StrategyBacktest";
-import { Star, MessageSquare, FlaskConical, BookOpen, Layers, BarChart3, LineChart, Code } from "lucide-react";
+import ResearchDashboard from "./components/ResearchDashboard";
+import { Star, MessageSquare, FlaskConical, Layers, BarChart3, LineChart, Code, LayoutDashboard } from "lucide-react";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "strategy" | "templates" | "composite" | "comparison" | "paper";
+type MainTab = "backtest" | "strategy" | "composite" | "comparison" | "paper" | "dashboard";
 
 const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
+  { id: "dashboard", label: "研究总览", icon: LayoutDashboard, color: "amber" },
   { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
   { id: "strategy", label: "策略回测", icon: Code, color: "orange" },
-  { id: "templates", label: "因子模板库", icon: BookOpen, color: "indigo" },
   { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
   { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
   { id: "paper", label: "模拟盘", icon: LineChart, color: "teal" },
@@ -114,21 +114,6 @@ export default function App() {
     await createSession();
     setActiveTask(null);
   }, [createSession, setActiveTask]);
-
-  const handleUseTemplate = useCallback(
-    (expression: string, params?: { universe: string; holding_period: number; n_groups: number }) => {
-      setActiveTab("backtest");
-      submit({
-        prompt: expression,
-        ...(params ? {
-          universe: params.universe,
-          holding_period: params.holding_period,
-          n_groups: params.n_groups,
-        } : {}),
-      });
-    },
-    [submit]
-  );
 
   const handleCompositeSubmit = useCallback(
     async (payload: CompositeBacktestPayload) => {
@@ -254,6 +239,10 @@ export default function App() {
       <div className="mx-auto max-w-7xl px-6 py-6 flex gap-6">
         {/* Main content area — changes per tab */}
         <main className={`min-w-0 space-y-4 ${(activeTab === "backtest" || activeTab === "strategy") ? "flex-1" : "w-full"}`}>
+          {activeTab === "dashboard" && (
+            <ResearchDashboard />
+          )}
+
           {activeTab === "backtest" && (
             <>
               <BacktestForm onSubmit={handleSubmit} isLoading={isLoading} />
@@ -278,7 +267,6 @@ export default function App() {
                   onSaveFactor={isGuest ? undefined : handleSaveFactor}
                   isSaving={saving}
                   isSaved={savedExpressions.has(activeTask.result.params.expression)}
-                  showSubmitToWall={!isGuest}
                   onGoToPaper={isGuest ? undefined : () => setActiveTab("paper")}
                   iterationSlot={isGuest ? undefined :
                     <IterationPanel
@@ -301,10 +289,6 @@ export default function App() {
               restoredTask={restoredStrategyTask}
               onClearRestored={() => setRestoredStrategyTask(null)}
             />
-          )}
-
-          {activeTab === "templates" && (
-            <TemplateGallery onUseTemplate={handleUseTemplate} />
           )}
 
           {activeTab === "composite" && (

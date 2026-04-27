@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..auth import get_current_user, get_optional_user
-from ..models import User, SavedFactor, FeaturedFactor
+from ..models import User, SavedFactor
 
 router = APIRouter(prefix="/api/v1/factor-library", tags=["factor-library"])
 
@@ -148,93 +148,3 @@ async def delete_factor(
         raise HTTPException(status_code=404, detail="Factor not found")
     await db.delete(factor)
     await db.commit()
-
-
-# ---- Factor Wall (public) ----
-
-@router.get("/wall")
-async def factor_wall(
-    limit: int = Query(12, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
-):
-    """Public endpoint: approved featured factors for the factor wall."""
-    result = await db.execute(
-        select(FeaturedFactor)
-        .where(FeaturedFactor.status == "approved")
-        .order_by(desc(FeaturedFactor.sort_order), desc(FeaturedFactor.created_at))
-        .limit(limit)
-    )
-    factors = result.scalars().all()
-
-    return {
-        "factors": [
-            {
-                "id": str(f.id),
-                "expression": f.expression,
-                "title": f.title,
-                "description": f.description,
-                "metrics": {
-                    "sharpe": (f.metrics or {}).get("sharpe"),
-                    "cagr": (f.metrics or {}).get("cagr"),
-                    "max_drawdown": (f.metrics or {}).get("max_drawdown"),
-                    "ic_mean": (f.metrics or {}).get("ic_mean"),
-                    "score": (f.metrics or {}).get("score"),
-                    "grade": (f.metrics or {}).get("grade"),
-                },
-                "params": {
-                    "universe": (f.params or {}).get("universe"),
-                    "holding_period": (f.params or {}).get("holding_period"),
-                },
-                "source": f.source,
-            }
-            for f in factors
-        ],
-        "total": len(factors),
-    }
-
-
-class SubmitFactorRequest(BaseModel):
-    expression: str
-    title: str | None = None
-    description: str | None = None
-    metrics: dict | None = None
-    backtest_summary: dict | None = None
-    params: dict | None = None
-    report_url: str | None = None
-
-
-@router.post("/wall/submit", status_code=201)
-async def submit_to_wall(
-    req: SubmitFactorRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Submit a factor to the factor wall (pending approval)."""
-    # Check for duplicate submission by same user
-    existing = await db.execute(
-        select(FeaturedFactor).where(
-            FeaturedFactor.user_id == user.id,
-            FeaturedFactor.expression == req.expression,
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="该因子已投稿")
-
-    factor = FeaturedFactor(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        expression=req.expression,
-        title=req.title or req.expression[:60],
-        description=req.description,
-        metrics=req.metrics,
-        backtest_summary=req.backtest_summary,
-        params=req.params,
-        report_url=req.report_url,
-        source="submission",
-        status="pending",
-        market="a_share",
-        created_at=datetime.now(timezone.utc),
-    )
-    db.add(factor)
-    await db.commit()
-    return {"id": str(factor.id), "status": "pending"}

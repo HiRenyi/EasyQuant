@@ -11,7 +11,7 @@ from sqlalchemy import select, func, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..models import User, Task, Feedback, SavedFactor, FeaturedFactor
+from ..models import User, Task, Feedback, SavedFactor
 from ..auth import create_admin_token, require_admin
 
 logger = logging.getLogger(__name__)
@@ -312,138 +312,6 @@ async def resolve_feedback(
             asyncio.create_task(_safe_send())
 
     return {"id": str(fb.id), "resolved": True, "resolved_at": fb.resolved_at.isoformat()}
-
-
-# ---- Factor Wall Management ----
-
-@router.get("/factor-wall", dependencies=[Depends(require_admin)])
-async def admin_factor_wall(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    status: str | None = Query(None, description="pending|approved|rejected"),
-    db: AsyncSession = Depends(get_db),
-):
-    """List all featured factors for admin review."""
-    offset = (page - 1) * page_size
-
-    count_q = select(func.count(FeaturedFactor.id))
-    if status:
-        count_q = count_q.where(FeaturedFactor.status == status)
-    total_q = await db.execute(count_q)
-    total = total_q.scalar() or 0
-
-    query = (
-        select(FeaturedFactor, User.email)
-        .outerjoin(User, FeaturedFactor.user_id == User.id)
-    )
-    if status:
-        query = query.where(FeaturedFactor.status == status)
-    query = query.order_by(desc(FeaturedFactor.created_at)).offset(offset).limit(page_size)
-
-    result = await db.execute(query)
-    rows = result.all()
-
-    factors = []
-    for f, email in rows:
-        factors.append({
-            "id": str(f.id),
-            "expression": f.expression,
-            "title": f.title,
-            "description": f.description,
-            "metrics": f.metrics,
-            "params": f.params,
-            "source": f.source,
-            "status": f.status,
-            "sort_order": f.sort_order,
-            "user_email": email,
-            "created_at": f.created_at.isoformat() if f.created_at else None,
-            "reviewed_at": f.reviewed_at.isoformat() if f.reviewed_at else None,
-        })
-
-    return {"factors": factors, "total": total, "page": page, "page_size": page_size}
-
-
-class CreateFeaturedFactorRequest(BaseModel):
-    expression: str
-    title: str | None = None
-    description: str | None = None
-    metrics: dict | None = None
-    backtest_summary: dict | None = None
-    params: dict | None = None
-    source: str = "official"
-    sort_order: int = 0
-
-
-@router.post("/factor-wall", dependencies=[Depends(require_admin)], status_code=201)
-async def admin_create_featured_factor(
-    req: CreateFeaturedFactorRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin: create an official featured factor (auto-approved)."""
-    factor = FeaturedFactor(
-        id=uuid_mod.uuid4(),
-        expression=req.expression,
-        title=req.title or req.expression[:60],
-        description=req.description,
-        metrics=req.metrics,
-        backtest_summary=req.backtest_summary,
-        params=req.params,
-        source=req.source,
-        status="approved",
-        sort_order=req.sort_order,
-        created_at=datetime.now(timezone.utc),
-        reviewed_at=datetime.now(timezone.utc),
-    )
-    db.add(factor)
-    await db.commit()
-    return {"id": str(factor.id), "status": "approved"}
-
-
-class ReviewFactorRequest(BaseModel):
-    status: str  # 'approved' | 'rejected'
-    sort_order: int | None = None
-
-
-@router.patch("/factor-wall/{factor_id}", dependencies=[Depends(require_admin)])
-async def admin_review_factor(
-    factor_id: str,
-    req: ReviewFactorRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin: approve/reject a factor wall submission."""
-    result = await db.execute(
-        select(FeaturedFactor).where(FeaturedFactor.id == uuid_mod.UUID(factor_id))
-    )
-    factor = result.scalar_one_or_none()
-    if not factor:
-        raise HTTPException(status_code=404, detail="因子不存在")
-
-    if req.status not in ("approved", "rejected"):
-        raise HTTPException(status_code=400, detail="状态只能是 approved 或 rejected")
-
-    factor.status = req.status
-    factor.reviewed_at = datetime.now(timezone.utc)
-    if req.sort_order is not None:
-        factor.sort_order = req.sort_order
-
-    await db.commit()
-    return {"id": str(factor.id), "status": factor.status}
-
-
-@router.delete("/factor-wall/{factor_id}", dependencies=[Depends(require_admin)], status_code=204)
-async def admin_delete_featured_factor(
-    factor_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin: delete a featured factor."""
-    result = await db.execute(
-        select(FeaturedFactor).where(FeaturedFactor.id == uuid_mod.UUID(factor_id))
-    )
-    factor = result.scalar_one_or_none()
-    if not factor:
-        raise HTTPException(status_code=404, detail="因子不存在")
-    await db.delete(factor)
-    await db.commit()
 
 
 # ---- Factor Deep Research Report ----

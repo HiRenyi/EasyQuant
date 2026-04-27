@@ -57,7 +57,6 @@ from .routes.auth import router as auth_router
 from .routes.sessions import router as sessions_router
 from .routes.admin import router as admin_router
 from .routes.factor_library import router as factor_library_router
-from .routes.templates import router as templates_router
 from .routes.composite import router as composite_router
 from .routes.comparison import router as comparison_router
 from .routes.paper import router as paper_router
@@ -249,7 +248,6 @@ app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(admin_router)
 app.include_router(factor_library_router)
-app.include_router(templates_router)
 app.include_router(composite_router)
 app.include_router(comparison_router)
 app.include_router(paper_router)
@@ -1185,12 +1183,46 @@ async def auto_backtest(
     return {"task_id": task_id, "status": "pending"}
 
 
+@app.get("/api/v1/tasks/stats")
+async def task_stats(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """研究总览统计。"""
+    from sqlalchemy import func
+    user_id = user.id
+
+    total = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id))).scalar() or 0
+    completed = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id, TaskModel.status == "completed"))).scalar() or 0
+    failed = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id, TaskModel.status == "failed"))).scalar() or 0
+
+    # Rating distribution from completed tasks
+    rating_dist: dict[str, int] = {}
+    rows = (await db.execute(
+        select(TaskModel.result).where(TaskModel.user_id == user_id, TaskModel.status == "completed")
+    )).scalars().all()
+    for r in rows:
+        if isinstance(r, dict):
+            rating = r.get("interpretation", {}).get("rating") or r.get("backtest_summary", {}).get("wq_rating", "")
+            if rating:
+                rating_dist[rating] = rating_dist.get(rating, 0) + 1
+
+    return {
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "success_rate": round(completed / total * 100, 1) if total else 0,
+        "rating_distribution": rating_dist,
+    }
+
+
 @app.get("/api/v1/tasks")
 async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session_id: str | None = Query(None, description="按会话 ID 过滤"),
     task_type: str | None = Query(None, description="按任务类型过滤: backtest / strategy_backtest / iteration"),
+    status: str | None = Query(None, description="按状态过滤: completed / failed / pending"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1207,6 +1239,8 @@ async def list_tasks(
                     continue
                 if task_type is not None and t.get("task_type") != task_type:
                     continue
+                if status is not None and t.get("status") != status:
+                    continue
                 safe = {k: v for k, v in t.items() if k not in ("created_at", "user_id")}
                 memory_tasks.append(safe)
 
@@ -1216,6 +1250,8 @@ async def list_tasks(
         query = query.where(TaskModel.session_id == session_id)
     if task_type is not None:
         query = query.where(TaskModel.task_type == task_type)
+    if status is not None:
+        query = query.where(TaskModel.status == status)
     query = query.order_by(desc(TaskModel.created_at)).offset(offset).limit(page_size)
     result = await db.execute(query)
     db_tasks = result.scalars().all()

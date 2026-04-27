@@ -120,28 +120,6 @@ class SavedFactor(Base):
     user = relationship("User")
 
 
-class FeaturedFactor(Base):
-    __tablename__ = "featured_factors"
-
-    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid, ForeignKey("users.id"), nullable=True)
-    expression = Column(Text, nullable=False)
-    title = Column(String(200), nullable=True)
-    description = Column(Text, nullable=True)
-    metrics = Column(JSON, nullable=True)
-    backtest_summary = Column(JSON, nullable=True)
-    params = Column(JSON, nullable=True)
-    report_url = Column(String(500), nullable=True)
-    source = Column(String(20), nullable=False, default="submission")  # 'official' | 'submission'
-    status = Column(String(20), nullable=False, default="pending")     # 'pending' | 'approved' | 'rejected'
-    sort_order = Column(Integer, default=0, nullable=False)
-    market = Column(String(20), default="a_share", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-
-    user = relationship("User")
-
-
 class Feedback(Base):
     __tablename__ = "feedbacks"
 

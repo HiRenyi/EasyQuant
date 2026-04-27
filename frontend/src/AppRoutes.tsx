@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminPage from "./pages/AdminPage";
-import FactorWallPage from "./pages/FactorWallPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import App from "./App";
 import { isAdminLoggedIn } from "./api/admin";
@@ -18,7 +17,6 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/wall" element={<FactorWallPage />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route
         path="/admin"
