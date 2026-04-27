@@ -118,8 +118,12 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="无效的 Token 类型")
 
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
+        raise HTTPException(status_code=401, detail="无效的 Token")
+    try:
+        user_id = UUID(user_id_str)
+    except (ValueError, AttributeError):
         raise HTTPException(status_code=401, detail="无效的 Token")
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -162,8 +166,12 @@ async def get_optional_user(
         return None
     if payload.get("type") != "access":
         return None
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
+        return None
+    try:
+        user_id = UUID(user_id_str)
+    except (ValueError, AttributeError):
         return None
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

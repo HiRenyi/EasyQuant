@@ -3,6 +3,7 @@
 import re
 import logging
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
@@ -320,7 +321,10 @@ async def refresh(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
     if payload.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="无效的 refresh token")
 
-    user_id = payload.get("sub")
+    try:
+        user_id = UUID(payload["sub"])
+    except (KeyError, ValueError, AttributeError):
+        raise HTTPException(status_code=401, detail="无效的 refresh token")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:

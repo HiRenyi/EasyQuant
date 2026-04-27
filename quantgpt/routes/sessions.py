@@ -85,7 +85,7 @@ async def rename_session(
 ):
     """重命名会话。"""
     result = await db.execute(
-        select(Session).where(Session.id == session_id, Session.user_id == user.id)
+        select(Session).where(Session.id == uuid.UUID(session_id), Session.user_id == user.id)
     )
     session = result.scalar_one_or_none()
     if not session:
@@ -108,7 +108,7 @@ async def delete_session(
 ):
     """删除会话（级联删除关联任务）。"""
     result = await db.execute(
-        select(Session).where(Session.id == session_id, Session.user_id == user.id)
+        select(Session).where(Session.id == uuid.UUID(session_id), Session.user_id == user.id)
     )
     session = result.scalar_one_or_none()
     if not session:

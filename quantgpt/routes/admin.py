@@ -2,6 +2,7 @@
 
 import os
 import logging
+import uuid as uuid_mod
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -286,7 +287,7 @@ async def resolve_feedback(
     db: AsyncSession = Depends(get_db),
 ):
     """Mark feedback as resolved."""
-    result = await db.execute(select(Feedback).where(Feedback.id == feedback_id))
+    result = await db.execute(select(Feedback).where(Feedback.id == uuid_mod.UUID(feedback_id)))
     fb = result.scalar_one_or_none()
     if not fb:
         raise HTTPException(status_code=404, detail="反馈不存在")
@@ -379,9 +380,8 @@ async def admin_create_featured_factor(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: create an official featured factor (auto-approved)."""
-    import uuid
     factor = FeaturedFactor(
-        id=uuid.uuid4(),
+        id=uuid_mod.uuid4(),
         expression=req.expression,
         title=req.title or req.expression[:60],
         description=req.description,
@@ -411,7 +411,6 @@ async def admin_review_factor(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: approve/reject a factor wall submission."""
-    import uuid as uuid_mod
     result = await db.execute(
         select(FeaturedFactor).where(FeaturedFactor.id == uuid_mod.UUID(factor_id))
     )
@@ -437,7 +436,6 @@ async def admin_delete_featured_factor(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: delete a featured factor."""
-    import uuid as uuid_mod
     result = await db.execute(
         select(FeaturedFactor).where(FeaturedFactor.id == uuid_mod.UUID(factor_id))
     )
