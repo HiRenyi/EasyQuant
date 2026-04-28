@@ -82,6 +82,7 @@ class AutoBacktestRequest(BaseModel):
     neutralize_industry: bool = Field(True, description="行业中性化")
     neutralize_cap: bool = Field(True, description="市值中性化")
     universe_date: str | None = Field(None, description="股票池基准日期，用于子区间验证时固定股票池。为空时使用 start_date")
+    rebalance_anchor: str | None = Field(None, description="换仓网格锚定日期，用于跨期比较时对齐换仓时间。为空时从数据起始日开始")
 
     @field_validator("prompt")
     @classmethod
@@ -95,7 +96,7 @@ class AutoBacktestRequest(BaseModel):
 
     _validate_universe = field_validator("universe")(_validate_univ_fn)
     _validate_benchmark = field_validator("benchmark")(_validate_bench_fn)
-    _validate_dates = field_validator("start_date", "end_date", "universe_date")(_validate_date_fn)
+    _validate_dates = field_validator("start_date", "end_date", "universe_date", "rebalance_anchor")(_validate_date_fn)
 
 
 def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
@@ -221,6 +222,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             neutralize_industry=req.neutralize_industry,
             neutralize_cap=req.neutralize_cap,
             trading_days_per_year=252,
+            rebalance_anchor=req.rebalance_anchor,
         )
         while True:
             try:
@@ -342,6 +344,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                 "expression": expression,
                 "universe": req.universe,
                 "universe_date": universe_resolve_date,
+                "rebalance_anchor": req.rebalance_anchor,
                 "start_date": req.start_date,
                 "end_date": req.end_date,
                 "n_groups": req.n_groups,

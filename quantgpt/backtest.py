@@ -58,6 +58,7 @@ def run_factor_backtest(
     neutralize_cap: bool = True,
     precomputed_factor: pd.Series | None = None,
     trading_days_per_year: int = 252,
+    rebalance_anchor: str | None = None,
 ) -> dict:
     """Run quantile group backtest on a factor expression (long-only).
 
@@ -122,7 +123,17 @@ def run_factor_backtest(
 
     # 4. Identify rebalance dates
     all_dates = sorted(market_df["trade_date"].unique())
-    rebalance_dates = all_dates[::holding_period]
+    if rebalance_anchor and holding_period > 1:
+        anchor_ts = pd.Timestamp(rebalance_anchor)
+        first_date = all_dates[0]
+        if anchor_ts <= first_date:
+            bdays_gap = len(pd.bdate_range(anchor_ts, first_date, inclusive="left"))
+            offset = bdays_gap % holding_period
+        else:
+            offset = 0
+        rebalance_dates = all_dates[offset::holding_period]
+    else:
+        rebalance_dates = all_dates[::holding_period]
 
     # 5. On each rebalance date, assign groups based on factor value
     #    Build a mapping: (trade_date, stock_code) -> group
