@@ -4,14 +4,12 @@ rqdatac path: uses get_factor() for daily-frequency financial indicators (no ali
 baostock path: fetches quarterly data from 6 APIs, aligns to daily via pubDate merge_asof.
 """
 
-import re
 import logging
-import threading
-from typing import Dict, List, Optional, Set, Tuple
+import re
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Variable registry: user-facing name -> (api_name, baostock_field)
 # ---------------------------------------------------------------------------
 
-FUNDAMENTAL_VARIABLES: Dict[str, Tuple[str, str]] = {
+FUNDAMENTAL_VARIABLES: dict[str, tuple[str, str]] = {
     # profit API
     "roe":              ("profit", "roeAvg"),
     "np_margin":        ("profit", "npMargin"),
@@ -51,7 +49,7 @@ FUNDAMENTAL_VARIABLES: Dict[str, Tuple[str, str]] = {
 }
 
 # Derived variables computed from close + fundamental columns
-DERIVED_VARIABLES: Dict[str, List[str]] = {
+DERIVED_VARIABLES: dict[str, list[str]] = {
     "pe": ["net_profit", "total_share"],         # close * total_share / net_profit
     "pb": ["net_profit", "total_share", "roe"],   # close * total_share / (net_profit / roe)
     "ps": ["revenue", "total_share"],             # close * total_share / revenue
@@ -63,7 +61,7 @@ DERIVED_VARIABLES: Dict[str, List[str]] = {
 ALL_FUNDAMENTAL_NAMES: frozenset = frozenset(FUNDAMENTAL_VARIABLES.keys()) | frozenset(DERIVED_VARIABLES.keys()) | frozenset(["dividend_yield"])
 
 # Reverse map: baostock field -> user-facing name
-_BS_TO_USER: Dict[str, str] = {v[1]: k for k, v in FUNDAMENTAL_VARIABLES.items()}
+_BS_TO_USER: dict[str, str] = {v[1]: k for k, v in FUNDAMENTAL_VARIABLES.items()}
 
 # API name -> baostock function name
 _API_FUNC_MAP = {
@@ -76,7 +74,7 @@ _API_FUNC_MAP = {
 }
 
 # Fields to request per API (only the ones we need + pub/stat dates)
-_API_FIELDS: Dict[str, List[str]] = {
+_API_FIELDS: dict[str, list[str]] = {
     "profit":    ["code", "pubDate", "statDate", "roeAvg", "npMargin", "gpMargin",
                   "netProfit", "epsTTM", "MBRevenue", "totalShare", "liqaShare"],
     "growth":    ["code", "pubDate", "statDate", "YOYNI", "YOYEquity", "YOYAsset", "YOYPNI"],
@@ -87,13 +85,13 @@ _API_FIELDS: Dict[str, List[str]] = {
 }
 
 
-def detect_fundamental_vars(expression: str) -> Set[str]:
+def detect_fundamental_vars(expression: str) -> set[str]:
     """Scan expression for fundamental variable names. Returns set of matched names."""
     tokens = set(re.findall(r'\b[a-z_]+\b', expression.lower()))
     return tokens & ALL_FUNDAMENTAL_NAMES
 
 
-def get_needed_apis(var_names: Set[str]) -> Set[str]:
+def get_needed_apis(var_names: set[str]) -> set[str]:
     """Given variable names, return the set of baostock API names to call."""
     # Expand derived variables to their dependencies
     expanded = set()
@@ -110,7 +108,7 @@ def get_needed_apis(var_names: Set[str]) -> Set[str]:
     return apis
 
 
-def _quarter_range(start_date: str, end_date: str) -> List[Tuple[int, int]]:
+def _quarter_range(start_date: str, end_date: str) -> list[tuple[int, int]]:
     """Generate (year, quarter) pairs covering the date range.
 
     Starts 1 year before start_date to ensure pubDate coverage
@@ -140,7 +138,7 @@ class FundamentalDataFetcher:
         normalized = stock_code.replace(".", "_")
         return self.cache_dir / f"{normalized}.parquet"
 
-    def _load_cache(self, stock_code: str) -> Optional[pd.DataFrame]:
+    def _load_cache(self, stock_code: str) -> pd.DataFrame | None:
         path = self._cache_path(stock_code)
         if not path.exists():
             return None
@@ -163,7 +161,7 @@ class FundamentalDataFetcher:
         except Exception as e:
             logger.warning(f"Failed to save fundamental cache for {stock_code}: {e}")
 
-    def _fetch_single_api(self, code: str, year: int, quarter: int, api_name: str) -> Optional[pd.DataFrame]:
+    def _fetch_single_api(self, code: str, year: int, quarter: int, api_name: str) -> pd.DataFrame | None:
         """Fetch one baostock financial API for one stock-quarter."""
         try:
             import baostock as bs
@@ -189,13 +187,13 @@ class FundamentalDataFetcher:
         stock_code: str,
         start_date: str,
         end_date: str,
-        needed_apis: Set[str],
-    ) -> Optional[pd.DataFrame]:
+        needed_apis: set[str],
+    ) -> pd.DataFrame | None:
         """Fetch all quarterly data for one stock, merge across APIs by statDate."""
         quarters = _quarter_range(start_date, end_date)
 
         # Fetch each API
-        api_dfs: Dict[str, List[pd.DataFrame]] = {api: [] for api in needed_apis}
+        api_dfs: dict[str, list[pd.DataFrame]] = {api: [] for api in needed_apis}
         for year, quarter in quarters:
             for api_name in needed_apis:
                 result = self._fetch_single_api(stock_code, year, quarter, api_name)
@@ -254,17 +252,17 @@ class FundamentalDataFetcher:
 
     def fetch_fundamentals(
         self,
-        stock_codes: List[str],
+        stock_codes: list[str],
         start_date: str,
         end_date: str,
-        needed_vars: Set[str],
-    ) -> Optional[pd.DataFrame]:
+        needed_vars: set[str],
+    ) -> pd.DataFrame | None:
         """Fetch fundamental data for multiple stocks with caching."""
         needed_apis = get_needed_apis(needed_vars)
         if not needed_apis:
             return None
 
-        from .market_data import _bs_lock, _baostock_login, _baostock_logout, CACHE_ONLY
+        from .market_data import CACHE_ONLY, _baostock_login, _baostock_logout, _bs_lock
 
         all_dfs = []
 
@@ -328,7 +326,7 @@ class FundamentalDataFetcher:
         self,
         quarterly_df: pd.DataFrame,
         market_df: pd.DataFrame,
-        needed_vars: Set[str],
+        needed_vars: set[str],
     ) -> pd.DataFrame:
         """Align quarterly data to daily using pubDate (point-in-time, no look-ahead).
 
@@ -455,7 +453,7 @@ class FundamentalDataFetcher:
         normalized = stock_code.replace(".", "_")
         return self._dividend_cache_dir() / f"{normalized}.parquet"
 
-    def _load_dividend_cache(self, stock_code: str) -> Optional[pd.DataFrame]:
+    def _load_dividend_cache(self, stock_code: str) -> pd.DataFrame | None:
         path = self._dividend_cache_path(stock_code)
         if not path.exists():
             return None
@@ -475,7 +473,7 @@ class FundamentalDataFetcher:
         except Exception as e:
             logger.warning(f"Failed to save dividend cache for {stock_code}: {e}")
 
-    def _fetch_stock_dividends(self, code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+    def _fetch_stock_dividends(self, code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
         """Fetch dividend events for one stock across years."""
         try:
             import baostock as bs
@@ -520,12 +518,12 @@ class FundamentalDataFetcher:
 
     def fetch_dividend_data(
         self,
-        stock_codes: List[str],
+        stock_codes: list[str],
         start_date: str,
         end_date: str,
-    ) -> Optional[pd.DataFrame]:
+    ) -> pd.DataFrame | None:
         """Fetch dividend data for multiple stocks with caching."""
-        from .market_data import _bs_lock, _baostock_login, _baostock_logout, CACHE_ONLY
+        from .market_data import CACHE_ONLY, _baostock_login, _baostock_logout, _bs_lock
 
         all_dfs = []
         to_fetch_codes = []
@@ -612,7 +610,7 @@ class FundamentalDataFetcher:
 # ─── rqdatac daily factor enrichment + Parquet caching ─────────────
 
 # Map project variable names → rqdatac factor names
-_RQ_FACTOR_MAP: Dict[str, str] = {
+_RQ_FACTOR_MAP: dict[str, str] = {
     # Profitability
     "roe":              "return_on_equity",
     "np_margin":        "net_profit_margin",
@@ -649,15 +647,15 @@ _RQ_FACTOR_MAP: Dict[str, str] = {
 }
 
 # All unique rqdatac factor names (for prewarming)
-ALL_RQ_FACTORS: List[str] = sorted(set(_RQ_FACTOR_MAP.values()))
+ALL_RQ_FACTORS: list[str] = sorted(set(_RQ_FACTOR_MAP.values()))
 
 # Reverse map: rqdatac name → project name(s). One rqdatac factor can map to multiple project vars.
-_RQ_TO_VARS: Dict[str, List[str]] = {}
+_RQ_TO_VARS: dict[str, list[str]] = {}
 for _var, _rq in _RQ_FACTOR_MAP.items():
     _RQ_TO_VARS.setdefault(_rq, []).append(_var)
 
 # Single reverse map (first only) for backward compat
-_RQ_TO_VAR: Dict[str, str] = {rq: vars[0] for rq, vars in _RQ_TO_VARS.items()}
+_RQ_TO_VAR: dict[str, str] = {rq: vars[0] for rq, vars in _RQ_TO_VARS.items()}
 
 # Factor cache directory
 _FACTOR_CACHE_DIR = _PROJECT_ROOT / "data" / "factors"
@@ -669,7 +667,7 @@ def _factor_cache_path(stock_code: str) -> Path:
     return _FACTOR_CACHE_DIR / f"{normalized}.parquet"
 
 
-def _load_factor_cache(stock_code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+def _load_factor_cache(stock_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
     """Load cached factor data for a stock if it covers the requested range."""
     path = _factor_cache_path(stock_code)
     if not path.exists():
@@ -708,13 +706,13 @@ def _save_factor_cache(stock_code: str, df: pd.DataFrame):
 
 
 def _fetch_factors_rq(
-    stock_codes: List[str],
+    stock_codes: list[str],
     start_date: str,
     end_date: str,
-    rq_factors: Optional[List[str]] = None,
-) -> Optional[pd.DataFrame]:
+    rq_factors: list[str] | None = None,
+) -> pd.DataFrame | None:
     """Fetch daily factor data from rqdatac for multiple stocks. Returns DataFrame with stock_code, trade_date, + factor columns."""
-    from .market_data import _rqdatac_init, _to_rq_code, _from_rq_code
+    from .market_data import _from_rq_code, _rqdatac_init, _to_rq_code
 
     if not _rqdatac_init():
         return None
@@ -755,7 +753,7 @@ def _fetch_factors_rq(
 
 
 def prewarm_factors_rq(
-    stock_codes: List[str],
+    stock_codes: list[str],
     start_date: str = "2015-01-01",
     end_date: str = "2025-12-31",
     batch_size: int = 200,
@@ -799,16 +797,16 @@ def prewarm_factors_rq(
 
 def enrich_with_fundamentals_rq(
     market_df: pd.DataFrame,
-    needed_vars: Set[str],
-    stock_codes: List[str],
+    needed_vars: set[str],
+    stock_codes: list[str],
     start_date: str,
     end_date: str,
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame | None:
     """Enrich market_df with fundamental data: local cache → rqdatac → None.
 
     Returns enriched market_df with fundamental columns added, or None if unavailable.
     """
-    from .market_data import _rqdatac_init, _to_rq_code, _from_rq_code
+    from .market_data import _rqdatac_init
 
     # Determine which rqdatac factors we need
     rq_factors = []
@@ -871,7 +869,7 @@ def enrich_with_fundamentals_rq(
                         break
 
     # Select only the columns we need
-    keep_cols = ["stock_code", "trade_date"] + [v for v in var_to_rq.keys() if v in factor_df.columns]
+    keep_cols = ["stock_code", "trade_date"] + [v for v in var_to_rq if v in factor_df.columns]
     factor_df = factor_df[keep_cols]
 
     # Compute derived variables
@@ -908,3 +906,34 @@ def enrich_with_fundamentals_rq(
 
     logger.info(f"[rqdatac] Enriched market_df with {len(merge_cols)} fundamental factors ({len(cached_parts)} sources)")
     return merged
+
+
+def enrich_market_data(
+    market_df: pd.DataFrame,
+    fund_vars: set[str],
+    stock_codes: list,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
+    """Enrich market_df with fundamental data if fund_vars is non-empty.
+
+    Uses rqdatac (daily frequency) as primary source, baostock quarterly as fallback.
+    """
+    if not fund_vars:
+        return market_df
+
+    rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, start_date, end_date)
+    if rq_result is not None:
+        return rq_result
+
+    fetcher = FundamentalDataFetcher()
+    non_div_vars = fund_vars - {"dividend_yield"}
+    if non_div_vars:
+        qdf = fetcher.fetch_fundamentals(stock_codes, start_date, end_date, non_div_vars)
+        if qdf is not None and len(qdf) > 0:
+            market_df = fetcher.align_to_daily(qdf, market_df, non_div_vars)
+    if "dividend_yield" in fund_vars:
+        div_df = fetcher.fetch_dividend_data(stock_codes, start_date, end_date)
+        if div_df is not None and len(div_df) > 0:
+            market_df = fetcher.align_dividends_to_daily(div_df, market_df)
+    return market_df

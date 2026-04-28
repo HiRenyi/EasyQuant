@@ -3,12 +3,11 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..auth import get_optional_user
-from ..models import DailySummary, User
+from ..models import DailySummary
 
 logger = logging.getLogger(__name__)
 

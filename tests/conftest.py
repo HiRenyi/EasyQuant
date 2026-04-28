@@ -14,10 +14,9 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci-only-do-not-use-
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("QUANTGPT_ADMIN_PASSWORD", "test-admin-pw")
 
-from quantgpt.models import Base, User
-from quantgpt.auth import hash_password, create_access_token
+from quantgpt.auth import create_access_token, hash_password
 from quantgpt.backtest import api_context
-from quantgpt import db as db_module
+from quantgpt.models import Base, User
 
 
 @pytest.fixture(autouse=True)

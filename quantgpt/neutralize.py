@@ -5,11 +5,9 @@ so that the factor captures alpha rather than beta/style tilts.
 """
 
 import logging
-import os
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -130,7 +128,7 @@ def neutralize_factor(
     return pd.Series(work["factor_value"].values, index=factor_values.index)
 
 
-def get_industry_data(stock_codes: list) -> Optional[pd.DataFrame]:
+def get_industry_data(stock_codes: list) -> pd.DataFrame | None:
     """Get industry classification for stocks from baostock.
 
     Uses Shenwan Level-1 industry classification. Caches per month.

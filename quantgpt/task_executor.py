@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Picklable wrapper — must be top-level for ProcessPoolExecutor
+# Top-level wrappers — must be picklable for ProcessPoolExecutor
 # ---------------------------------------------------------------------------
 
 def _run_backtest_in_process(market_df, expression, n_groups, holding_period, **kwargs):
-    from quantgpt.backtest import run_factor_backtest, enable_api_context, disable_api_context
+    from quantgpt.backtest import disable_api_context, enable_api_context, run_factor_backtest
     enable_api_context()
     try:
         return run_factor_backtest(market_df, expression, n_groups, holding_period, **kwargs)
@@ -35,7 +35,7 @@ def _run_backtest_in_process(market_df, expression, n_groups, holding_period, **
 
 
 def _run_backtest_precomputed_in_process(market_df, n_groups, holding_period, cost_rate, precomputed_factor):
-    from quantgpt.backtest import run_factor_backtest, enable_api_context, disable_api_context
+    from quantgpt.backtest import disable_api_context, enable_api_context, run_factor_backtest
     enable_api_context()
     try:
         return run_factor_backtest(
@@ -123,8 +123,10 @@ class CeleryTaskExecutor(TaskExecutor):
         fn_path = self._FN_PATHS.get(fn)
         if fn_path is None:
             raise ValueError(f"Function not registered for Celery dispatch: {fn.__name__}")
-        from .celery_app import run_cpu_work
-        async_result = run_cpu_work.apply_async(args=(fn_path, args, kwargs))
+        from .celery_app import run_cpu_work, to_json_transport
+        ser_args = to_json_transport(list(args))
+        ser_kwargs = to_json_transport(kwargs)
+        async_result = run_cpu_work.apply_async(args=(fn_path, ser_args, ser_kwargs))
         return _CeleryFutureAdapter(async_result)
 
     def shutdown(self) -> None:
@@ -138,7 +140,9 @@ class _CeleryFutureAdapter:
         self._ar = async_result
 
     def result(self, timeout=None):
-        return self._ar.get(timeout=timeout)
+        from .celery_app import from_json_transport
+        raw = self._ar.get(timeout=timeout)
+        return from_json_transport(raw)
 
     def cancel(self):
         self._ar.revoke(terminate=True)

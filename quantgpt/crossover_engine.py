@@ -76,7 +76,6 @@ def build_crossover_prompt(
     for i, seg in enumerate(segments, 1):
         expr = seg.get("expression", "")
         score = seg.get("score", 0)
-        ic = seg.get("metrics", {}).get("ic_mean", "N/A") if isinstance(seg.get("metrics"), dict) else "N/A"
         user_parts.append(f"  {i}. [{score}分] {expr}")
 
     user_parts.extend([

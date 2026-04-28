@@ -59,7 +59,16 @@ def eval_factor_expression(df: pd.DataFrame, expression: str) -> pd.Series:
         ret[1:] = (close[1:] - close[:-1]) / close[:-1]
         columns["returns"] = ret
 
-    # Build stock group offsets (data must be sorted by stock_code, trade_date)
+    # Pass trade_date as numeric column so Rust can build proper
+    # cross-sectional groups (data is sorted by stock_code, not trade_date).
+    if "trade_date" in df.columns:
+        td = df["trade_date"]
+        if hasattr(td.dtype, "name") and "datetime" in td.dtype.name:
+            columns["__date__"] = td.values.astype("int64").astype(np.float64)
+        else:
+            columns["__date__"] = pd.to_datetime(td).values.astype("int64").astype(np.float64)
+
+    # Build stock group offsets (data is sorted by stock_code, trade_date)
     stock_offsets = []
     date_offsets = []
 
@@ -71,15 +80,6 @@ def eval_factor_expression(df: pd.DataFrame, expression: str) -> pd.Series:
                 stock_offsets.append((start, i))
                 start = i
         stock_offsets.append((start, len(sc)))
-
-    if "trade_date" in df.columns:
-        td = df["trade_date"].values
-        start = 0
-        for i in range(1, len(td)):
-            if td[i] != td[start]:
-                date_offsets.append((start, i))
-                start = i
-        date_offsets.append((start, len(td)))
 
     try:
         result = _engine.eval_expression(expression, columns, stock_offsets, date_offsets)

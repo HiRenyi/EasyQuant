@@ -85,6 +85,22 @@ export default function ResearchDashboard() {
       return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     } catch { return "—"; }
   };
+  const formatDuration = (task: Task) => {
+    const r = task as unknown as Record<string, unknown>;
+    const dur = r.duration_seconds as number | undefined;
+    if (dur != null && dur >= 0) {
+      if (dur < 60) return `${dur.toFixed(1)}s`;
+      return `${Math.floor(dur / 60)}m${Math.round(dur % 60)}s`;
+    }
+    if (task.status !== "completed" && task.status !== "failed") {
+      const ca = r.created_at as string | undefined;
+      if (ca) {
+        const elapsed = (Date.now() - new Date(ca).getTime()) / 1000;
+        if (elapsed > 0 && elapsed < 3600) return `${elapsed.toFixed(0)}s…`;
+      }
+    }
+    return "—";
+  };
   const getExpression = (task: Task) => task.expression || task.result?.params?.expression || (task.params as unknown as Record<string, unknown>)?.expression as string || "—";
   const getPrompt = (task: Task) => (task.params as unknown as Record<string, unknown>)?.prompt as string || task.result?.llm?.prompt || "—";
   const getRating = (task: Task) => task.result?.interpretation?.rating || (task.result?.backtest_summary as unknown as Record<string, unknown>)?.wq_rating as string || "";
@@ -168,13 +184,14 @@ export default function ResearchDashboard() {
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>IC</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>Turnover</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>状态</th>
+                <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>耗时</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>时间</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>报告</th>
               </tr>
             </thead>
             <tbody>
               {tasks.length === 0 && (
-                <tr><td colSpan={10} className={`text-center py-12 ${textSecondary}`}>暂无任务</td></tr>
+                <tr><td colSpan={11} className={`text-center py-12 ${textSecondary}`}>暂无任务</td></tr>
               )}
               {tasks.map((task) => {
                 const rating = getRating(task);
@@ -200,6 +217,7 @@ export default function ResearchDashboard() {
                     <td className={`px-4 py-3 text-center font-mono text-xs ${textPrimary}`}>{ic != null ? (ic as number).toFixed(4) : "—"}</td>
                     <td className={`px-4 py-3 text-center font-mono text-xs ${textPrimary}`}>{turnover != null ? (turnover as number).toFixed(3) : "—"}</td>
                     <td className="px-4 py-3 text-center">{statusBadge(task.status)}</td>
+                    <td className={`px-4 py-3 text-center font-mono text-xs ${textSecondary}`}>{formatDuration(task)}</td>
                     <td className={`px-4 py-3 text-center text-xs ${textSecondary}`}>{formatTime(task)}</td>
                     <td className="px-4 py-3 text-center">
                       {task.result?.report_url && (

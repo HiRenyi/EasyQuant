@@ -1,13 +1,11 @@
 """Integration tests for session and factor-library routes."""
 
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 
 from quantgpt.auth import create_access_token
-from quantgpt.models import User, Session, Task, SavedFactor
-
+from quantgpt.models import User
 
 pytestmark = pytest.mark.asyncio
 

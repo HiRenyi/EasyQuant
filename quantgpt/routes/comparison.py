@@ -3,12 +3,12 @@
 import logging
 import math
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from ..auth import get_current_user
 from ..models import User
-from ..schemas import validate_date_format, validate_universe_value, fetch_market_data
+from ..schemas import fetch_market_data, validate_date_format, validate_universe_value
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,8 @@ async def compare_factors(
 
     返回各因子的核心指标 + 相关性矩阵 + Top组逐日累计收益序列。
     """
-    from ..backtest import run_factor_backtest, api_context
-    from ..task_executor import get_executor, _run_backtest_in_process
     from ..composite import compute_factor_correlation
+    from ..task_executor import _run_backtest_in_process, get_executor
 
     # 1. Fetch data once
     try:
@@ -63,21 +62,12 @@ async def compare_factors(
         raise HTTPException(status_code=400, detail=str(e))
 
     # Enrich with fundamentals if any factor uses fundamental vars
-    from ..fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+    from ..fundamental_data import detect_fundamental_vars, enrich_market_data
     all_fund_vars: set[str] = set()
     for f in req.factors:
         all_fund_vars |= detect_fundamental_vars(f.expression)
     if all_fund_vars:
-        rq_result = enrich_with_fundamentals_rq(market_df, all_fund_vars, stock_codes, req.start_date, req.end_date)
-        if rq_result is not None:
-            market_df = rq_result
-        else:
-            fetcher = FundamentalDataFetcher()
-            non_div = all_fund_vars - {"dividend_yield"}
-            if non_div:
-                qdf = fetcher.fetch_fundamentals(stock_codes, req.start_date, req.end_date, non_div)
-                if qdf is not None and len(qdf) > 0:
-                    market_df = fetcher.align_to_daily(qdf, market_df, non_div)
+        market_df = enrich_market_data(market_df, all_fund_vars, stock_codes, req.start_date, req.end_date)
 
     # 2. Run backtest for each factor
     results = []

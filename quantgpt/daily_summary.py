@@ -12,10 +12,9 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone, timedelta
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -86,7 +85,7 @@ class FactorSignal:
 
 def _load_factor_templates() -> list:
     """Load factor templates from JSON."""
-    with open(_TEMPLATES_PATH, "r", encoding="utf-8") as f:
+    with open(_TEMPLATES_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -132,7 +131,7 @@ def _strip_outer_rank(expression: str) -> str:
 def _compute_factor_signals(
     market_df: pd.DataFrame,
     templates: list,
-) -> List[FactorSignal]:
+) -> list[FactorSignal]:
     """Compute factor signals for each template on today's market data.
 
     Requires market_df to have at least 70 days of history for time-series
@@ -548,7 +547,7 @@ def _get_today_index_changes(date: str | None = None) -> dict:
 
 
 def _derive_market_regime(
-    factor_signals: List[FactorSignal],
+    factor_signals: list[FactorSignal],
     index_changes: dict,
 ) -> dict:
     """Derive market regime from factor signals (not from price action).
@@ -697,7 +696,7 @@ _SYSTEM_PROMPT = """你是一位资深量化策略师，擅长用因子模型刻
 def _build_llm_prompt(
     date: str,
     index_changes: dict,
-    factor_signals: List[FactorSignal],
+    factor_signals: list[FactorSignal],
     regime_data: dict | None = None,
     industry_signals: list[dict] | None = None,
     history_summaries: list[dict] | None = None,
@@ -777,7 +776,7 @@ def _build_llm_prompt(
     up_count = sum(1 for s in factor_signals if s.direction == "转强")
     down_count = sum(1 for s in factor_signals if s.direction == "转弱")
     flat_count = sum(1 for s in factor_signals if s.direction == "持平")
-    lines.append(f"## 因子信号总览（基于沪深300成分股）\n")
+    lines.append("## 因子信号总览（基于沪深300成分股）\n")
     lines.append(f"**{up_count}** 个因子转强，**{down_count}** 个转弱，**{flat_count}** 个持平\n")
 
     # Factor signals grouped by category — NO individual stock codes
@@ -968,9 +967,11 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
 
     Returns the summary dict or None if already exists for that date.
     """
-    from .models import DailySummary
-    from sqlalchemy import select, desc
     import uuid
+
+    from sqlalchemy import desc, select
+
+    from .models import DailySummary
 
     today = date or datetime.now().strftime("%Y-%m-%d")
 
@@ -1010,7 +1011,7 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
         valuation_templates = [t for t in templates if t["category"] == "valuation"]
         if valuation_templates:
             try:
-                from .fundamental_data import enrich_with_fundamentals_rq, detect_fundamental_vars
+                from .fundamental_data import detect_fundamental_vars, enrich_with_fundamentals_rq
                 all_fund_vars = set()
                 for t in valuation_templates:
                     all_fund_vars |= detect_fundamental_vars(t["expression"])

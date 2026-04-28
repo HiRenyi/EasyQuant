@@ -1,12 +1,10 @@
 """MCP call tracking: fire-and-forget persistence of MCP tool calls to the Task table."""
 
+import asyncio
 import json
 import logging
-import time
-import uuid
-import asyncio
 import threading
-from datetime import datetime, timezone
+import uuid
 
 logger = logging.getLogger(__name__)
 

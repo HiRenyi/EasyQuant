@@ -5,13 +5,13 @@ then delegates to the standard run_factor_backtest for group backtest.
 """
 
 import logging
-from typing import Dict, List, Literal
+from typing import Literal
 
 import pandas as pd
 
+from .backtest import _safe_apply_factor
 from .expression_parser import parse_expression
-from .backtest import run_factor_backtest, _safe_apply_factor, api_context
-from .task_executor import get_executor, _run_backtest_precomputed_in_process
+from .task_executor import _run_backtest_precomputed_in_process, get_executor
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ CombineMethod = Literal["weighted_rank", "weighted_zscore", "equal_weight"]
 
 def combine_factors(
     market_df: pd.DataFrame,
-    factors: List[Dict],
+    factors: list[dict],
     method: CombineMethod = "weighted_rank",
 ) -> pd.Series:
     """Compute composite factor values from multiple expressions.
@@ -86,8 +86,8 @@ def combine_factors(
 
 def compute_factor_correlation(
     market_df: pd.DataFrame,
-    factors: List[Dict],
-) -> Dict:
+    factors: list[dict],
+) -> dict:
     """Compute pairwise IC correlation matrix between factors.
 
     Returns:
@@ -125,12 +125,12 @@ def compute_factor_correlation(
 
 def run_composite_backtest(
     market_df: pd.DataFrame,
-    factors: List[Dict],
+    factors: list[dict],
     method: CombineMethod = "weighted_rank",
     n_groups: int = 5,
     holding_period: int = 5,
     cost_rate: float = 0.003,
-) -> Dict:
+) -> dict:
     """Run group backtest on a composite (multi-factor) signal.
 
     This computes the composite factor, injects it as a virtual expression,

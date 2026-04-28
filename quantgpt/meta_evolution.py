@@ -76,5 +76,5 @@ def select_strategy(
         return EvolutionStrategy.RECOMBINE
 
     # Default
-    logger.info(f"[meta_evolution] strategy=EXPLOIT (default)")
+    logger.info("[meta_evolution] strategy=EXPLOIT (default)")
     return EvolutionStrategy.EXPLOIT

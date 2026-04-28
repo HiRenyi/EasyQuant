@@ -5,9 +5,8 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .backtest import run_factor_backtest, api_context
-from .task_executor import get_executor, _run_backtest_in_process
 from .expression_parser import parse_expression
+from .task_executor import _run_backtest_in_process, get_executor
 
 logger = logging.getLogger(__name__)
 

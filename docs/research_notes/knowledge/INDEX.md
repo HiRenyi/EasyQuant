@@ -4,7 +4,8 @@
 | 文件 | 标签 | 摘要 |
 |------|------|------|
 | [ratio_signals_dominate](rules/ratio_signals_dominate.md) | ratio, structure | 比值信号 rank(A/B) 持续优于乘法 rank(A)*rank(B) 和加法 rank(A)+rank(B) |
-| [hs300_first](rules/hs300_first.md) | universe | hs300 表现持续强于 csi500，优先在 hs300 验证 |
+| [hs300_first](rules/hs300_first.md) | universe | hs300 表现持续强�� csi500，优先在 hs300 验证 |
+| [robustness_validation_required](rules/robustness_validation_required.md) | validation, robustness | 因子采用前必须通过子区间/跨市场/样本外三重验证 [Agent+DS 共识] |
 
 ## Findings
 | 文件 | 标签 | 摘要 |
@@ -19,4 +20,4 @@
 |------|------|------|
 | [multiplicative_weak](failures/multiplicative_weak.md) | multiplicative | rank(A)*rank(B) 乘法组合 Sharpe 一般 <0.8，不如比值 |
 | [pure_volume_weak](failures/pure_volume_weak.md) | volume | 纯量信号（无价格成分）IC 接近零 |
-| [temporal_instability_lowvol_volume](failures/temporal_instability_lowvol_volume.md) | overfitting, temporal | 低波+缩量组合 近期A级但历史C级，时间稳定性差 |
+| [temporal_instability_lowvol_volume](failures/temporal_instability_lowvol_volume.md) | overfitting, low-vol, dead-end | 低波因子族整体证伪：子区间/跨市场/样本外全线失效 [Agent+DS 共识] |

@@ -7,8 +7,6 @@ can import instead of re-defining.
 import re
 from datetime import datetime
 
-from pydantic import field_validator
-
 # ---- Constants ----
 
 VALID_UNIVERSES = {"small_scale", "hs300", "csi500", "csi1000", "csi2000"}

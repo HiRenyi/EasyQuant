@@ -12,19 +12,17 @@ import os
 import re
 import traceback
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
-import numpy as np
 import pandas as pd
 
-from .backtest import run_factor_backtest, api_context
-from .task_executor import get_executor, _run_backtest_in_process
+from .crossover_engine import build_crossover_prompt, extract_top_segments
 from .expression_parser import parse_expression
-from .mutation_engine import MutationEngine
 from .meta_evolution import EvolutionStrategy, select_strategy
-from .trajectory_analyzer import analyze_trajectory
-from .crossover_engine import extract_top_segments, build_crossover_prompt
+from .mutation_engine import MutationEngine
 from .report import generate_report
+from .task_executor import _run_backtest_in_process, get_executor
+from .trajectory_analyzer import analyze_trajectory
 
 logger = logging.getLogger(__name__)
 
@@ -269,8 +267,10 @@ def _evaluate_candidate(
 def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.9) -> str:
     """Call LLM and return cleaned expression string."""
     import time as _time
+
     from openai import OpenAI
-    from .api_server import _clean_expression
+
+    from .llm_service import clean_expression as _clean_expression
 
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
@@ -300,7 +300,7 @@ def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.9) ->
 
 def _validate_expression(expr: str) -> str | None:
     """Validate expression syntax. Returns error string or None if valid."""
-    from .api_server import _validate_parentheses
+    from .llm_service import validate_parentheses as _validate_parentheses
     paren_err = _validate_parentheses(expr)
     if paren_err:
         return f"括号错误: {paren_err}"
@@ -331,7 +331,7 @@ def generate_iteration_candidates(
     user_id: str,
     n_candidates: int = 5,
     max_concurrent: int = 50,
-    on_progress: Optional[Callable[[int, dict], None]] = None,
+    on_progress: Callable[[int, dict], None] | None = None,
     task_id: str = "",
     direction: str | None = None,
 ) -> list[dict]:
@@ -340,7 +340,7 @@ def generate_iteration_candidates(
     Serial-adaptive loop: generate → evaluate → analyze trajectory → select strategy → repeat.
     Each candidate builds on the trajectory of all previous candidates.
     """
-    from .api_server import _FACTOR_OPERATORS
+    from .llm_service import OPERATORS_DOC as _FACTOR_OPERATORS
 
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(operators_doc=_FACTOR_OPERATORS)
     all_expressions = [parent_expression]

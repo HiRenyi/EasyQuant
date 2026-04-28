@@ -1,18 +1,18 @@
 """Factor deep research report: Markdown → HTML email rendering + chart generation + sending."""
 
-import base64
 import io
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 import matplotlib
+
 matplotlib.use("Agg")
+import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import matplotlib.font_manager as fm
 import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # Configure Chinese font for matplotlib
@@ -44,7 +44,7 @@ if _CJK_FONT:
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .email_service import _send_email, _BRAND_COLOR
+from .email_service import _BRAND_COLOR, _send_email
 from .models import User
 
 logger = logging.getLogger(__name__)
@@ -477,7 +477,7 @@ def _md_to_email_html(md: str) -> str:
             cells = [c.strip() for c in row.strip("|").split("|")]
             tag = "th" if i == 0 else "td"
             style_cell = (
-                f"padding:8px 10px;border:1px solid #e2e8f0;text-align:left;"
+                "padding:8px 10px;border:1px solid #e2e8f0;text-align:left;"
                 + ("background:#f1f5f9;font-weight:600;" if i == 0 else "")
             )
             tbl += "<tr>" + "".join(
@@ -700,7 +700,7 @@ def render_weekly_report_email(md_content: str, unsubscribe_url: str = "") -> st
 # Send functions
 # ---------------------------------------------------------------------------
 
-def get_latest_report_path() -> Optional[Path]:
+def get_latest_report_path() -> Path | None:
     """Find the latest .md report in marketing/weekly_report/."""
     if not _REPORT_DIR.exists():
         return None
@@ -708,7 +708,7 @@ def get_latest_report_path() -> Optional[Path]:
     return files[0] if files else None
 
 
-def get_latest_report_content() -> Optional[str]:
+def get_latest_report_content() -> str | None:
     """Read the latest weekly report Markdown content."""
     path = get_latest_report_path()
     if path is None:

@@ -1,10 +1,11 @@
 """QuantStats HTML report generation + metrics extraction."""
 
 import logging
+
 import matplotlib
+
 matplotlib.use("Agg")  # non-interactive backend, must be before any pyplot import
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 
@@ -15,9 +16,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def generate_report(
     ls_returns: pd.Series,
-    benchmark_returns: Optional[pd.Series] = None,
+    benchmark_returns: pd.Series | None = None,
     title: str = "Factor Long-Short Backtest",
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     periods_per_year: int = 252,
 ) -> dict:
     """Generate QuantStats HTML report and extract key metrics.

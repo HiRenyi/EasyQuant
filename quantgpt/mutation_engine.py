@@ -11,7 +11,6 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ class MutationEngine:
     """Diagnose factor failure modes and build targeted mutation prompts."""
 
     def __init__(self, expression: str, metrics: dict, score: float,
-                 anti_overfit: Optional[dict] = None):
+                 anti_overfit: dict | None = None):
         self.expression = expression
         self.metrics = metrics
         self.score = score
@@ -111,7 +110,7 @@ class MutationEngine:
 
         # 8. Default: adjust window parameters
         return Diagnosis(MutationStrategy.MUTATE_WINDOW,
-            f"默认策略: 调整时序窗口参数以优化IC/IR",
+            "默认策略: 调整时序窗口参数以优化IC/IR",
             {"ic_mean": ic_mean, "ic_ir": ic_ir, "current_windows": self._extract_windows()})
 
     def build_mutation_prompt(self, operators_doc: str = "") -> tuple[str, str]:
@@ -152,7 +151,7 @@ class MutationEngine:
             f"单调性: {self.backtest.get('monotonicity_score', 'N/A')}",
             f"换手率: {self.backtest.get('turnover', 'N/A')}",
             "",
-            f"## 诊断结果",
+            "## 诊断结果",
             f"策略: {strategy.value}",
             f"原因: {diagnosis.reason}",
             "",

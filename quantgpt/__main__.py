@@ -4,8 +4,8 @@
 """
 
 import argparse
-import os
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def prefetch(universes: list[str]):
     """Pre-download market data for given universes."""
-    from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns
+    from .market_data import MarketDataFetcher, fetch_benchmark_returns, get_universe
 
     fetcher = MarketDataFetcher()
     for name in universes:
@@ -58,6 +58,7 @@ def main():
 
     if args.transport == "http":
         import uvicorn
+
         from .api_server import app
         uvicorn.run(app, host=args.host, port=args.port)
     else:

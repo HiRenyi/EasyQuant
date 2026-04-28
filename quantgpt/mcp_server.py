@@ -13,6 +13,7 @@ Provides tools for Agent-driven backtest workflow:
 
 import json
 import logging
+import sys
 import time
 import traceback
 
@@ -20,16 +21,14 @@ import pandas as pd
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from .expression_parser import ExpressionParser, parse_expression
 from .expression_parser import __doc__ as _expr_module_doc
-from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns, UNIVERSES, BENCHMARK_CODES
-from .backtest import run_factor_backtest, api_context
-from .task_executor import get_executor, _run_backtest_in_process
-from .report import generate_report
+from .expression_parser import parse_expression
 from .fundamental_data import ALL_FUNDAMENTAL_NAMES
+from .market_data import BENCHMARK_CODES, UNIVERSES, MarketDataFetcher, fetch_benchmark_returns, get_universe
 from .mcp_tracking import track_mcp_result
+from .report import generate_report
+from .task_executor import _run_backtest_in_process, get_executor
 
-import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s", stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
@@ -45,42 +44,10 @@ mcp = FastMCP(
 
 
 def _enrich_with_fundamentals(expression: str, market_df, stock_codes: list, start_date: str, end_date: str):
-    """Conditionally fetch and merge fundamental data if the expression uses fundamental vars.
-
-    Uses rqdatac get_factor (daily frequency) as primary source, baostock quarterly as fallback.
-    """
-    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+    """Conditionally fetch and merge fundamental data if the expression uses fundamental vars."""
+    from .fundamental_data import detect_fundamental_vars, enrich_market_data
     fund_vars = detect_fundamental_vars(expression)
-    if not fund_vars:
-        return market_df
-    logger.info(f"Detected fundamental vars: {fund_vars}, fetching financial data...")
-
-    # Try rqdatac first (returns daily-frequency data, no alignment needed)
-    rq_result = enrich_with_fundamentals_rq(market_df, fund_vars, stock_codes, start_date, end_date)
-    if rq_result is not None:
-        return rq_result
-
-    # Fallback: baostock quarterly + align_to_daily
-    logger.info("rqdatac unavailable, falling back to baostock for fundamentals...")
-    fetcher = FundamentalDataFetcher()
-    # Quarterly financial data (non-dividend vars)
-    non_div_vars = fund_vars - {"dividend_yield"}
-    if non_div_vars:
-        qdf = fetcher.fetch_fundamentals(stock_codes, start_date, end_date, non_div_vars)
-        if qdf is not None and len(qdf) > 0:
-            market_df = fetcher.align_to_daily(qdf, market_df, non_div_vars)
-            logger.info(f"Fundamental data merged, columns: {list(market_df.columns)}")
-        else:
-            logger.warning("No fundamental data fetched, fundamental vars will be NaN")
-    # Dividend data
-    if "dividend_yield" in fund_vars:
-        div_df = fetcher.fetch_dividend_data(stock_codes, start_date, end_date)
-        if div_df is not None and len(div_df) > 0:
-            market_df = fetcher.align_dividends_to_daily(div_df, market_df)
-            logger.info("Dividend data merged")
-        else:
-            logger.warning("No dividend data fetched, dividend_yield will be NaN")
-    return market_df
+    return enrich_market_data(market_df, fund_vars, stock_codes, start_date, end_date)
 
 
 def _fetch_data_for_market(universe: str, start_date: str, end_date: str):
@@ -133,7 +100,6 @@ def list_universes() -> str:
 @mcp.tool()
 def validate_expression(expression: str) -> str:
     """验证因子表达式语法是否正确。返回 OK 或错误信息。"""
-    import pandas as pd
 
     depth = 0
     for i, ch in enumerate(expression):

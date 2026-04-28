@@ -1,16 +1,18 @@
 """Session CRUD routes."""
 
-import uuid
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc, update
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
-from ..models import User, Session, Task as TaskModel, Report as ReportModel, SavedFactor
 from ..auth import get_current_user
+from ..db import get_db
+from ..models import Report as ReportModel
+from ..models import SavedFactor, Session, User
+from ..models import Task as TaskModel
 
 logger = logging.getLogger(__name__)
 

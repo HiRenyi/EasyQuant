@@ -11,18 +11,17 @@ from fastapi import HTTPException
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-ci-only-do-not-use-in-production")
 
 from quantgpt.auth import (
+    _email_rate,
+    _extract_token,
+    check_email_rate_limit,
     create_access_token,
     create_admin_token,
     create_guest_token,
     create_refresh_token,
-    check_email_rate_limit,
     decode_token,
     hash_password,
     is_auth_disabled,
     verify_password,
-    _email_rate,
-    _extract_token,
-    EMAIL_RATE_LIMIT_SECONDS,
 )
 
 

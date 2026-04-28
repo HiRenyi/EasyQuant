@@ -1,19 +1,19 @@
 """Admin panel routes: login, overview, users, tasks, feedbacks."""
 
 import hmac
-import os
 import logging
+import os
 import uuid as uuid_mod
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, desc, case
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
-from ..models import User, Task, Feedback, SavedFactor
 from ..auth import create_admin_token, require_admin
+from ..db import get_db
+from ..models import Feedback, Task, User
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +302,7 @@ async def resolve_feedback(
         user = await db.get(User, fb.user_id)
         if user and user.email:
             import asyncio
+
             from ..email_service import send_feedback_resolved_email
 
             async def _safe_send():
@@ -384,7 +385,8 @@ async def admin_trigger_job(job_id: str):
 async def admin_full_refresh():
     """Manually trigger rqdatac full refresh for all cached stocks."""
     import asyncio
-    from ..market_data import refresh_all_stocks_full, enable_rqdatac
+
+    from ..market_data import enable_rqdatac, refresh_all_stocks_full
 
     def _run():
         with enable_rqdatac():
@@ -401,7 +403,8 @@ async def admin_full_refresh():
 async def admin_rqdatac_incremental():
     """Manually trigger rqdatac incremental refresh."""
     import asyncio
-    from ..market_data import refresh_all_stocks_rqdatac_incremental, enable_rqdatac
+
+    from ..market_data import enable_rqdatac, refresh_all_stocks_rqdatac_incremental
 
     def _run():
         with enable_rqdatac():

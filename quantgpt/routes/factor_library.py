@@ -3,14 +3,14 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc, func, cast, Float, text
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_user
 from ..db import get_db
-from ..auth import get_current_user, get_optional_user
-from ..models import User, SavedFactor
+from ..models import SavedFactor, User
 
 router = APIRouter(prefix="/api/v1/factor-library", tags=["factor-library"])
 

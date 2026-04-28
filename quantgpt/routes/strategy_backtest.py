@@ -12,12 +12,12 @@ The task goes through these phases:
 import asyncio
 import logging
 import os
-import time
 import threading
+import time
 import traceback
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from ..auth import get_current_user
@@ -51,9 +51,10 @@ async def strategy_backtest(
     user: User = Depends(get_current_user),
 ):
     """提交策略回测任务（异步，立即返回 task_id）。"""
-    from ..api_server import (
-        _check_rate_limit, _active_task_count, _cleanup_tasks,
-        _tasks, _tasks_lock, MAX_ACTIVE_TASKS,
+    from ..task_store import (  # noqa: I001
+        MAX_ACTIVE_TASKS, active_task_count as _active_task_count,
+        check_rate_limit as _check_rate_limit, cleanup_tasks as _cleanup_tasks,
+        tasks as _tasks, tasks_lock as _tasks_lock,
     )
 
     client_ip = request.client.host if request.client else "unknown"
@@ -108,7 +109,8 @@ def _run_strategy_backtest_task(
     user_id: str,
 ):
     """Background thread: LLM code gen → validate → Playwright automation → scrape results."""
-    from ..api_server import _tasks, _persist_task_to_db
+    from ..task_store import persist_task_to_db as _persist_task_to_db
+    from ..task_store import tasks as _tasks
 
     task = _tasks.get(task_id)
     if not task:
@@ -154,7 +156,7 @@ def _run_strategy_backtest_task(
                 return
 
         # ---- Phase 3: Run on JoinQuant via Playwright ----
-        from ..jq_automation import get_jq_service, JQBacktestConfig, JQ_BACKTEST_TIMEOUT
+        from ..jq_automation import JQ_BACKTEST_TIMEOUT, JQBacktestConfig, get_jq_service
 
         jq_config = JQBacktestConfig(
             start_date=req.start_date,
@@ -171,7 +173,7 @@ def _run_strategy_backtest_task(
         logger.info(f"[{task_id}] Scheduling Playwright backtest on main loop...")
 
         # Schedule async Playwright on the main event loop (where the browser lives)
-        from ..api_server import _main_loop
+        from ..task_store import main_loop as _main_loop
         if _main_loop and _main_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(
                 jq_service.run_backtest(code, jq_config, on_status=status_callback),
@@ -248,8 +250,8 @@ def _get_strategy_llm_config() -> dict:
 
 def _call_deepseek_strategy(prompt: str, max_retries: int = 2) -> str:
     """Call LLM to generate strategy code from natural language."""
-    from ..strategy_prompt import STRATEGY_SYSTEM_PROMPT
     from ..strategy_code_utils import extract_python_code
+    from ..strategy_prompt import STRATEGY_SYSTEM_PROMPT
 
     cfg = _get_strategy_llm_config()
     logger.info(f"Strategy LLM: provider={cfg['provider']}, model={cfg['model']}, base_url={cfg['base_url'][:40]}")
@@ -309,8 +311,8 @@ def _call_anthropic(cfg: dict, system_prompt: str, user_prompt: str) -> str:
 
 def _call_fix_strategy(code: str, errors: list[str], original_prompt: str) -> str | None:
     """Ask LLM to fix validation errors in the generated code. Returns fixed code or None."""
-    from ..strategy_prompt import STRATEGY_SYSTEM_PROMPT, STRATEGY_FIX_PROMPT
     from ..strategy_code_utils import extract_python_code
+    from ..strategy_prompt import STRATEGY_FIX_PROMPT, STRATEGY_SYSTEM_PROMPT
 
     cfg = _get_strategy_llm_config()
     fix_prompt = STRATEGY_FIX_PROMPT.format(errors="\n".join(f"- {e}" for e in errors))

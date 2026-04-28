@@ -1,7 +1,7 @@
 """Authentication routes: send-code, verify-code, login, set-password, reset-password, refresh, me."""
 
-import re
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -10,19 +10,19 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
-from ..models import User, VerificationCode
-from ..email_service import generate_code, send_verification_email
 from ..auth import (
+    check_email_rate_limit,
     create_access_token,
     create_guest_token,
     create_refresh_token,
     decode_token,
-    check_email_rate_limit,
     get_current_user,
     hash_password,
     verify_password,
 )
+from ..db import get_db
+from ..email_service import generate_code, send_verification_email
+from ..models import User, VerificationCode
 
 logger = logging.getLogger(__name__)
 

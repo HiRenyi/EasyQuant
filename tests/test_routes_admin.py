@@ -1,14 +1,11 @@
 """Integration tests for admin routes."""
 
 import os
-import uuid
 from unittest.mock import patch
 
 import pytest
 
-from quantgpt.auth import create_admin_token, create_access_token
-from quantgpt.models import User
-
+from quantgpt.auth import create_admin_token
 
 pytestmark = pytest.mark.asyncio
 

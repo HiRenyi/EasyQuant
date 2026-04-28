@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
-from ..models import PaperStrategy, PaperSnapshot, PaperOrder, User
 from ..auth import get_current_user
+from ..db import get_db
+from ..models import PaperOrder, PaperSnapshot, PaperStrategy, User
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,6 @@ async def get_positions(
             shares = int(val)
             entry_price = 0
             entry_date = ""
-        market_value = snap.market_value or 0 if snap else 0
         enriched.append({
             "stock_code": code,
             "shares": shares,

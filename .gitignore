@@ -53,3 +53,7 @@ docs/research_notes/reports/
 .DS_Store
 engine/target/
 engine/Cargo.lock
+
+# Coverage
+.coverage
+htmlcov/

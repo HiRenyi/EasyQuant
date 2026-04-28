@@ -2,16 +2,13 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from quantgpt.auth import create_access_token, create_refresh_token
 from quantgpt.models import User, VerificationCode
-from quantgpt.auth import hash_password, create_access_token, create_refresh_token
-
 
 pytestmark = pytest.mark.asyncio
 

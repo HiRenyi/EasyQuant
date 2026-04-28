@@ -17,9 +17,9 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import PaperStrategy, PaperSnapshot, PaperOrder
-from .market_data import MarketDataFetcher, get_universe
 from .expression_parser import parse_expression
+from .market_data import MarketDataFetcher, get_universe
+from .models import PaperOrder, PaperSnapshot, PaperStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -83,9 +83,7 @@ async def _settle_strategy(db: AsyncSession, strategy: PaperStrategy):
 
     # Determine rebalance or hold
     should_rebalance = False
-    if strategy.next_rebalance_date and today >= strategy.next_rebalance_date:
-        should_rebalance = True
-    elif not strategy.last_rebalance_date:
+    if strategy.next_rebalance_date and today >= strategy.next_rebalance_date or not strategy.last_rebalance_date:
         should_rebalance = True
 
     if should_rebalance:
@@ -139,7 +137,7 @@ async def _settle_rebalance_day(
         return
 
     # Enrich with fundamentals if needed
-    from .fundamental_data import detect_fundamental_vars, FundamentalDataFetcher, enrich_with_fundamentals_rq
+    from .fundamental_data import FundamentalDataFetcher, detect_fundamental_vars, enrich_with_fundamentals_rq
     fund_vars = detect_fundamental_vars(strategy.expression)
     if fund_vars:
         sd, ed = lookback_start.strftime("%Y-%m-%d"), today

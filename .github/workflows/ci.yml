@@ -18,8 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .
-          pip install ruff pyright pytest
+          pip install -e ".[dev]"
 
       - name: Lint
         run: ruff check quantgpt/ tests/
@@ -27,11 +26,30 @@ jobs:
       - name: Type check
         run: pyright quantgpt/ --level basic
 
-      - name: Test
+      - name: Test with coverage
         env:
           JWT_SECRET_KEY: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///./test.db"
-        run: pytest tests/ -x -q
+        run: pytest tests/ -x -q --cov=quantgpt --cov-report=term-missing --cov-fail-under=25
+
+      - name: Dependency audit
+        run: pip-audit --strict --desc -f json 2>/dev/null | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          vulns = data.get('dependencies', [])
+          own_pkgs = {'quantgpt','pandas','numpy','scipy','baostock','quantstats',
+                      'mcp','uvicorn','fastapi','openai','sqlalchemy','aiosqlite',
+                      'alembic','pyjwt','bcrypt','aiosmtplib','httpx','akshare',
+                      'apscheduler','starlette','python-multipart'}
+          critical = [v for v in vulns if v.get('name','').lower() in own_pkgs and v.get('vulns')]
+          if critical:
+              for c in critical:
+                  for vuln in c['vulns']:
+                      print(f\"::warning ::{c['name']} {c['version']}: {vuln['id']} (fix: {vuln.get('fix_versions',['?'])})\")
+              print(f'{len(critical)} direct-dependency vulnerabilities found')
+          else:
+              print('No direct-dependency vulnerabilities')
+          " || true
 
   frontend:
     runs-on: ubuntu-latest

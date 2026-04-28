@@ -5,11 +5,9 @@ import pandas as pd
 import pytest
 
 from quantgpt.backtest import (
-    run_factor_backtest,
-    api_context,
     _calc_max_drawdown,
     _calc_monotonicity,
-    _calc_turnover,
+    run_factor_backtest,
 )
 
 

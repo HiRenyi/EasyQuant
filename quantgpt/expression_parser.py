@@ -108,11 +108,12 @@ Syntax extensions:
 - Power operator: base ^ exponent (equivalent to power(base, exponent))
 """
 
+import logging
 import re
+from typing import Callable
+
 import numpy as np
 import pandas as pd
-from typing import Callable, Optional
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -368,7 +369,7 @@ class ExpressionParser:
         return self._build_arithmetic(expression)
 
     @staticmethod
-    def _match_function_call(expression: str) -> Optional[tuple]:
+    def _match_function_call(expression: str) -> tuple | None:
         """Match a function call at the start of expression.
 
         Returns (func_name, args_str, remainder) or None.
@@ -748,7 +749,7 @@ class ExpressionParser:
         return lambda df, _c=col_name: df[_c]
 
     @staticmethod
-    def _find_keyword(expr: str, keyword: str) -> Optional[int]:
+    def _find_keyword(expr: str, keyword: str) -> int | None:
         """Find the rightmost top-level occurrence of a keyword (e.g., ' if ', ' else ')."""
         depth = 0
         result = None
@@ -766,7 +767,7 @@ class ExpressionParser:
         return result
 
     @staticmethod
-    def _find_operator(expr: str, op: str) -> Optional[int]:
+    def _find_operator(expr: str, op: str) -> int | None:
         """Find the rightmost top-level occurrence of an operator."""
         depth = 0
         result = None

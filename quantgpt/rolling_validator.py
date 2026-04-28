@@ -7,7 +7,6 @@ robustness score (0-100).
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -33,14 +32,14 @@ class WindowResult:
     valid_ir: float
     test_ic: float
     test_ir: float
-    anti_overfit_score: Optional[float] = None
-    sharpe: Optional[float] = None
+    anti_overfit_score: float | None = None
+    sharpe: float | None = None
 
 
 @dataclass
 class RollingResult:
     score: float  # 0-100
-    windows: List[WindowResult] = field(default_factory=list)
+    windows: list[WindowResult] = field(default_factory=list)
     decay_analysis: dict = field(default_factory=dict)
     summary: dict = field(default_factory=dict)
 
@@ -113,7 +112,6 @@ class RollingValidator:
 
         min_date = pd.Timestamp(dates[0])
         max_date = pd.Timestamp(dates[-1])
-        total_window_years = self.train_years + self.valid_years + self.test_years
 
         windows = []
         current_start = min_date
@@ -219,7 +217,7 @@ class RollingValidator:
         ic_ir = float(ic_mean / ic_std) if ic_std > 0 else 0.0
         return ic_mean, ic_ir
 
-    def _compute_composite_score(self, windows: List[WindowResult]) -> float:
+    def _compute_composite_score(self, windows: list[WindowResult]) -> float:
         """Compute composite score (0-100) from window results.
 
         Weights: Test IC 30%, Test IR 25%, IC stability 20%,
@@ -271,7 +269,7 @@ class RollingValidator:
         )
         return round(_clamp(composite, 0, 100), 1)
 
-    def _analyze_decay(self, windows: List[WindowResult]) -> dict:
+    def _analyze_decay(self, windows: list[WindowResult]) -> dict:
         """Analyze IC decay from train to test across windows."""
         decays = []
         for w in windows:

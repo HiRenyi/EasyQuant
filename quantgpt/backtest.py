@@ -7,14 +7,12 @@ returns per group. The strategy return is the top group's daily return.
 
 import logging
 import threading
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 from scipy import stats as sp_stats
 
 from .expression_parser import parse_expression
-from .market_data import MarketDataFetcher
 from .wq_simulate import wq_simulate
 
 logger = logging.getLogger(__name__)
@@ -40,6 +38,7 @@ def disable_api_context():
 
 from contextlib import contextmanager
 
+
 @contextmanager
 def api_context():
     enable_api_context()
@@ -59,7 +58,7 @@ def run_factor_backtest(
     neutralize_cap: bool = True,
     precomputed_factor: pd.Series | None = None,
     trading_days_per_year: int = 252,
-) -> Dict:
+) -> dict:
     """Run quantile group backtest on a factor expression (long-only).
 
     IMPORTANT: Must be called through API task system. Direct calls raise RuntimeError.
@@ -282,7 +281,6 @@ def run_factor_backtest(
     ic_ir = float(ic_mean / ic_std) if ic_std > 0 else 0.0
     ic_win_rate = float((rank_ic_series > 0).sum() / len(rank_ic_series)) if len(rank_ic_series) > 0 else 0.0
     rank_ic_mean = ic_mean  # same as ic_mean now (both Spearman)
-    pearson_ic_mean = float(pearson_ic_series.mean()) if len(pearson_ic_series) > 0 else 0.0
 
     # 10. Turnover rate (daily, WQ BRAIN-aligned)
     turnover = _calc_turnover(work, top_g, rebalance_dates_set, holding_period)
@@ -472,7 +470,7 @@ def _calc_turnover(
     return per_rebal / holding_period
 
 
-def _calc_monotonicity(group_means: List[float]) -> float:
+def _calc_monotonicity(group_means: list[float]) -> float:
     """Spearman rank correlation between group index and mean return."""
     if len(group_means) < 3:
         return 0.0
@@ -485,20 +483,20 @@ def _calc_per_group_turnover(
     work: pd.DataFrame,
     rebalance_dates: list,
     n_groups: int,
-) -> Dict[int, pd.Series]:
+) -> dict[int, pd.Series]:
     """Calculate turnover per group on each rebalance date.
 
     Returns:
         Dict mapping group_id -> Series indexed by rebalance_date with turnover values.
     """
     # Build holdings per (rebal_date, group)
-    holdings: Dict[tuple, set] = {}
+    holdings: dict[tuple, set] = {}
     for d in rebalance_dates:
         for g in range(n_groups):
             day_data = work[(work["_rebal_date"] == d) & (work["_group"] == g)]
             holdings[(d, g)] = set(day_data["stock_code"].unique())
 
-    sorted_dates = sorted(set(d for d, _ in holdings.keys()))
+    sorted_dates = sorted(set(d for d, _ in holdings))
     result = {}
     for g in range(n_groups):
         turnovers = {}

@@ -10,7 +10,6 @@ is robust or likely overfitted:
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -24,14 +23,14 @@ logger = logging.getLogger(__name__)
 class TestResult:
     name: str
     passed: bool
-    details: Dict
+    details: dict
 
 
 @dataclass
 class AntiOverfitResult:
     score: float  # 0-100
     recommendation: str  # "推荐" / "谨慎" / "需改进" / "不推荐"
-    tests: List[TestResult] = field(default_factory=list)
+    tests: list[TestResult] = field(default_factory=list)
     passed_count: int = 0
     total_count: int = 4
 
@@ -63,7 +62,7 @@ class AntiOverfitDetector:
             )
         )
 
-    def _calc_daily_ic(self, df: Optional[pd.DataFrame] = None) -> pd.Series:
+    def _calc_daily_ic(self, df: pd.DataFrame | None = None) -> pd.Series:
         """Calculate daily Spearman IC between factor_value and fwd_ret."""
         data = df if df is not None else self.df
         valid = data.dropna(subset=["factor_value", "fwd_ret"])

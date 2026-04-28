@@ -59,11 +59,11 @@ pub fn evaluate(expr: &Expr, ctx: &EvalContext) -> Result<Vec<f64>, String> {
         // Cross-sectional
         Expr::Rank(a) => {
             let v = evaluate(a, ctx)?;
-            cross_sectional_rank(&v, &ctx.date_groups)
+            cross_sectional_rank(&v, ctx)
         }
         Expr::Zscore(a) => {
             let v = evaluate(a, ctx)?;
-            cross_sectional_zscore(&v, &ctx.date_groups)
+            cross_sectional_zscore(&v, ctx)
         }
 
         // Time-series
@@ -124,33 +124,49 @@ fn bin_op(a: &Expr, b: &Expr, ctx: &EvalContext, op: fn(f64, f64) -> f64) -> Res
 
 // ── Cross-sectional ─────────────────────────────────────────────────
 
-fn cross_sectional_rank(data: &[f64], date_groups: &[(usize, usize)]) -> Result<Vec<f64>, String> {
+fn build_date_groups(ctx: &EvalContext) -> Vec<Vec<usize>> {
+    if let Some(dates) = ctx.columns.get("__date__") {
+        let mut map: HashMap<u64, Vec<usize>> = HashMap::new();
+        for (i, &d) in dates.iter().enumerate() {
+            if d.is_finite() {
+                map.entry(d.to_bits()).or_default().push(i);
+            }
+        }
+        map.into_values().collect()
+    } else {
+        ctx.date_groups.iter().map(|&(s, e)| (s..e).collect()).collect()
+    }
+}
+
+fn cross_sectional_rank(data: &[f64], ctx: &EvalContext) -> Result<Vec<f64>, String> {
     let mut out = vec![f64::NAN; data.len()];
-    for &(start, end) in date_groups {
-        let n = end - start;
-        if n == 0 { continue; }
-        let mut indices: Vec<usize> = (0..n).filter(|&i| data[start + i].is_finite()).collect();
-        indices.sort_by(|&a, &b| data[start + a].partial_cmp(&data[start + b]).unwrap_or(std::cmp::Ordering::Equal));
-        let count = indices.len() as f64;
+    let groups = build_date_groups(ctx);
+    for rows in &groups {
+        let mut valid: Vec<usize> = rows.iter().copied()
+            .filter(|&i| data[i].is_finite())
+            .collect();
+        let count = valid.len() as f64;
         if count < 1.0 { continue; }
-        for (rank, &idx) in indices.iter().enumerate() {
-            out[start + idx] = rank as f64 / (count - 1.0).max(1.0);
+        valid.sort_by(|&a, &b| data[a].partial_cmp(&data[b]).unwrap_or(std::cmp::Ordering::Equal));
+        for (rank, &idx) in valid.iter().enumerate() {
+            out[idx] = rank as f64 / (count - 1.0).max(1.0);
         }
     }
     Ok(out)
 }
 
-fn cross_sectional_zscore(data: &[f64], date_groups: &[(usize, usize)]) -> Result<Vec<f64>, String> {
+fn cross_sectional_zscore(data: &[f64], ctx: &EvalContext) -> Result<Vec<f64>, String> {
     let mut out = vec![f64::NAN; data.len()];
-    for &(start, end) in date_groups {
-        let vals: Vec<f64> = (start..end).filter_map(|i| {
+    let groups = build_date_groups(ctx);
+    for rows in &groups {
+        let vals: Vec<f64> = rows.iter().filter_map(|&i| {
             if data[i].is_finite() { Some(data[i]) } else { None }
         }).collect();
         let n = vals.len() as f64;
         if n < 2.0 { continue; }
         let mean = vals.iter().sum::<f64>() / n;
         let std = (vals.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt() + 1e-10;
-        for i in start..end {
+        for &i in rows {
             if data[i].is_finite() {
                 out[i] = (data[i] - mean) / std;
             }

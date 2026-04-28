@@ -1,15 +1,14 @@
 """Market data fetcher with baostock + akshare (free) + Parquet caching. rqdatac optional."""
 
-import os
-import time
 import logging
+import os
 import threading
+import time
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +117,7 @@ def _rqdatac_init() -> bool:
 
 from contextlib import contextmanager
 
+
 @contextmanager
 def enable_rqdatac():
     """Temporarily allow rqdatac calls. For manual admin triggers only."""
@@ -165,7 +165,7 @@ def _baostock_logout():
 
 # ─── Universe functions ────────────────────────────────────────────
 
-def get_universe(name: str, date: Optional[str] = None) -> List[str]:
+def get_universe(name: str, date: str | None = None) -> list[str]:
     """Return stock code list for a named universe.
 
     Supports: small_scale (static), hs300, csi500/zz500, csi1000, csi2000.
@@ -180,7 +180,7 @@ def get_universe(name: str, date: Optional[str] = None) -> List[str]:
     raise ValueError(f"Unknown universe: {name}. Available: {list(UNIVERSES.keys()) + ['hs300', 'csi500', 'zz500', 'csi1000', 'csi2000']}")
 
 
-def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str]:
+def _fetch_index_constituents(name: str, date: str | None = None) -> list[str]:
     """Fetch index constituents: cache → rqdatac → baostock."""
     date = date or datetime.now().strftime("%Y-%m-%d")
 
@@ -225,7 +225,7 @@ def _fetch_index_constituents(name: str, date: Optional[str] = None) -> List[str
     return []
 
 
-def _fetch_index_constituents_bs(name: str, date: str, cache_path: Path) -> List[str]:
+def _fetch_index_constituents_bs(name: str, date: str, cache_path: Path) -> list[str]:
     """Fetch index constituents from baostock."""
     with _bs_lock:
         _baostock_login()
@@ -247,7 +247,7 @@ def _fetch_index_constituents_bs(name: str, date: str, cache_path: Path) -> List
             _baostock_logout()
 
 
-def _derive_csi1000(date: str, cache_path: Path) -> List[str]:
+def _derive_csi1000(date: str, cache_path: Path) -> list[str]:
     """Derive CSI 1000 = all A - HS300 - CSI500 (baostock fallback)."""
     hs300 = set(_fetch_index_constituents("hs300", date))
     csi500 = set(_fetch_index_constituents("csi500", date))
@@ -263,7 +263,7 @@ def _derive_csi1000(date: str, cache_path: Path) -> List[str]:
     return result
 
 
-def _derive_csi2000(date: str, cache_path: Path) -> List[str]:
+def _derive_csi2000(date: str, cache_path: Path) -> list[str]:
     """Derive CSI 2000 = all A - HS300 - CSI500 - CSI1000 (baostock fallback)."""
     csi1000 = set(_fetch_index_constituents("csi1000", date))
     hs300 = set(_fetch_index_constituents("hs300", date))
@@ -280,7 +280,7 @@ def _derive_csi2000(date: str, cache_path: Path) -> List[str]:
     return result
 
 
-def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
+def _fetch_all_stock_codes(date: str | None = None) -> list[str]:
     """Fetch all A-share stock codes: rqdatac → baostock."""
     date = date or datetime.now().strftime("%Y-%m-%d")
 
@@ -295,7 +295,7 @@ def _fetch_all_stock_codes(date: Optional[str] = None) -> List[str]:
             return codes
 
     if CACHE_ONLY:
-        logger.warning(f"Cache-only mode: all_a stocks not cached, returning empty")
+        logger.warning("Cache-only mode: all_a stocks not cached, returning empty")
         return []
 
     # Try rqdatac
@@ -391,7 +391,7 @@ def _transform_rq_to_schema(rq_df: pd.DataFrame, bs_code: str) -> pd.DataFrame:
 class MarketDataFetcher:
     """A-share market data fetcher with per-stock Parquet caching."""
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, cache_dir: str | None = None):
         self.cache_dir = cache_dir or str(_PROJECT_ROOT / "data")
         self.stock_cache_dir = os.path.join(self.cache_dir, "stocks")
         os.makedirs(self.stock_cache_dir, exist_ok=True)
@@ -415,7 +415,7 @@ class MarketDataFetcher:
         safe = self._normalize_stock_code(stock_code).replace(".", "_")
         return os.path.join(self.stock_cache_dir, f"{safe}.parquet")
 
-    def _load_cache(self, stock_code: str) -> Optional[pd.DataFrame]:
+    def _load_cache(self, stock_code: str) -> pd.DataFrame | None:
         path = self._cache_path(stock_code)
         if os.path.exists(path):
             try:
@@ -433,7 +433,7 @@ class MarketDataFetcher:
 
     # --- PLACEHOLDER_FETCH_REMOTE ---
 
-    def _fetch_remote_rq(self, stock_codes: List[str], start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
+    def _fetch_remote_rq(self, stock_codes: list[str], start_date: str, end_date: str) -> dict[str, pd.DataFrame]:
         """Batch fetch stocks from rqdatac. Returns {bs_code: DataFrame} dict."""
         if not _rqdatac_init():
             return {}
@@ -461,7 +461,7 @@ class MarketDataFetcher:
             logger.warning(f"rqdatac batch fetch failed: {e}")
             return {}
 
-    def _fetch_remote_bs(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
+    def _fetch_remote_bs(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> pd.DataFrame | None:
         """Fetch single stock daily data from baostock."""
         code = self._normalize_stock_code(stock_code)
         logged_in = False
@@ -499,7 +499,7 @@ class MarketDataFetcher:
             if logged_in:
                 _baostock_logout()
 
-    def _fetch_remote(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> Optional[pd.DataFrame]:
+    def _fetch_remote(self, stock_code: str, start_date: str, end_date: str, already_logged_in: bool = False) -> pd.DataFrame | None:
         """Fetch single stock: baostock (free) → rqdatac (optional)."""
         result = self._fetch_remote_bs(stock_code, start_date, end_date, already_logged_in)
         if result is not None:
@@ -513,13 +513,13 @@ class MarketDataFetcher:
 
     def fetch_stocks(
         self,
-        stock_codes: List[str],
+        stock_codes: list[str],
         start_date: str,
         end_date: str,
-    ) -> Optional[pd.DataFrame]:
+    ) -> pd.DataFrame | None:
         """Fetch multiple stocks with caching. rqdatac batch → baostock fallback."""
-        all_data: List[pd.DataFrame] = []
-        to_fetch: List[str] = []
+        all_data: list[pd.DataFrame] = []
+        to_fetch: list[str] = []
 
         req_start, req_end = pd.Timestamp(start_date), pd.Timestamp(end_date)
 
@@ -587,7 +587,7 @@ class MarketDataFetcher:
             return result
         return None
 
-    def calculate_forward_returns(self, df: pd.DataFrame, periods: List[int] = None) -> pd.DataFrame:
+    def calculate_forward_returns(self, df: pd.DataFrame, periods: list[int] = None) -> pd.DataFrame:
         """Add fwd_ret_{N}d columns."""
         periods = periods or [5]
         df = df.sort_values(["stock_code", "trade_date"])
@@ -603,10 +603,10 @@ class MarketDataFetcher:
 
 def fetch_benchmark_returns(
     benchmark: str = "hs300",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    cache_dir: Optional[str] = None,
-) -> Optional[pd.Series]:
+    start_date: str | None = None,
+    end_date: str | None = None,
+    cache_dir: str | None = None,
+) -> pd.Series | None:
     """Fetch benchmark index daily returns: cache → rqdatac → baostock."""
     info = BENCHMARK_CODES.get(benchmark, BENCHMARK_CODES["hs300"])
     cache_dir = cache_dir or str(_PROJECT_ROOT / "data" / "benchmark")
@@ -704,7 +704,7 @@ def fetch_benchmark_returns(
             _baostock_logout()
 
 
-def _fetch_akshare(bs_code: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+def _fetch_akshare(bs_code: str, start_date: str, end_date: str) -> pd.DataFrame | None:
     """Fetch single stock daily data from akshare (东方财富).
 
     Args:
@@ -776,7 +776,7 @@ def _refresh_all_cached_stocks_impl():
         logger.info("[refresh] No cached stocks found, skipping")
         return
 
-    stocks_to_update: List[tuple] = []  # (bs_code, start_date)
+    stocks_to_update: list[tuple] = []  # (bs_code, start_date)
     for fname in parquet_files:
         bs_code = fname.replace(".parquet", "").replace("_", ".", 1)  # sh_600519 → sh.600519
         try:
@@ -802,7 +802,7 @@ def _refresh_all_cached_stocks_impl():
     bs_fallback = 0
 
     # Phase 1: Try akshare (supports same-day data)
-    bs_remaining: List[tuple] = []
+    bs_remaining: list[tuple] = []
     for bs_code, start_date in stocks_to_update:
         try:
             new_data = _fetch_akshare(bs_code, start_date, today)
@@ -848,7 +848,7 @@ def _refresh_all_cached_stocks_impl():
     logger.info(f"[refresh] Done: {updated} updated (akshare: {updated - bs_fallback}, baostock: {bs_fallback}), {failed} failed, {no_data} no new data")
 
 
-def refresh_all_stocks_full(stock_codes: List[str] | None = None, start_date: str | None = None, end_date: str | None = None):
+def refresh_all_stocks_full(stock_codes: list[str] | None = None, start_date: str | None = None, end_date: str | None = None):
     """Full refresh via rqdatac. Manual trigger only.
 
     Fetches complete history for given stocks (or all cached stocks) and
@@ -913,7 +913,7 @@ def refresh_all_stocks_rqdatac_incremental():
         logger.info("[rq_incr] No cached stocks found")
         return
 
-    stocks_to_update: List[tuple] = []
+    stocks_to_update: list[tuple] = []
     for fname in parquet_files:
         bs_code = fname.replace(".parquet", "").replace("_", ".", 1)
         try:

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quantgpt.expression_parser import ExpressionParser, parse_expression
+from quantgpt.expression_parser import parse_expression
 
 
 @pytest.fixture

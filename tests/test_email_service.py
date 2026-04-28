@@ -1,12 +1,11 @@
 """Tests for quantgpt/email_service.py — code generation and email templates."""
 
-import re
 
 from quantgpt.email_service import (
-    generate_code,
+    _email_wrapper,
     _get_smtp_config,
     _truncate,
-    _email_wrapper,
+    generate_code,
 )
 
 
