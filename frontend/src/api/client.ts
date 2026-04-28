@@ -97,8 +97,6 @@ export function streamTask(
   onDone: () => void,
   _onError?: (err: Event) => void,
 ): () => void {
-  const token = _authDisabled ? null : getAccessToken();
-  const url = `${BASE}/api/v1/tasks/${taskId}/stream${token ? `?token=${token}` : ""}`;
   let closed = false;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let retryCount = 0;
@@ -126,8 +124,26 @@ export function streamTask(
     }, 3000);
   }
 
-  function connect() {
+  async function acquireTicket(): Promise<string | null> {
+    if (_authDisabled) return null;
+    try {
+      const res = await authFetch(`${BASE}/api/v1/tasks/${taskId}/sse-ticket`, {
+        method: "POST",
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.ticket as string;
+    } catch {
+      return null;
+    }
+  }
+
+  async function connect() {
     if (closed) return;
+
+    const ticket = await acquireTicket();
+    const url = `${BASE}/api/v1/tasks/${taskId}/stream${ticket ? `?ticket=${ticket}` : ""}`;
+
     const es = new EventSource(url);
 
     es.addEventListener("update", (e) => {
@@ -147,7 +163,7 @@ export function streamTask(
       if (closed) return;
       retryCount++;
       if (retryCount <= MAX_RETRIES) {
-        // Retry SSE after a short delay
+        // Retry SSE after a short delay (need new ticket each time)
         setTimeout(connect, 2000 * retryCount);
       } else {
         // Fall back to polling

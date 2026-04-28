@@ -11,6 +11,7 @@ Provides tools for Agent-driven backtest workflow:
 - run_rolling_validation: Walk-forward rolling validation
 """
 
+import asyncio
 import json
 import logging
 import sys
@@ -121,7 +122,7 @@ def validate_expression(expression: str) -> str:
 
 
 @mcp.tool()
-def run_backtest(
+async def run_backtest(
     expression: str,
     universe: str = "hs300",
     start_date: str = "2023-01-01",
@@ -153,11 +154,11 @@ def run_backtest(
     _result_str = None
     try:
         logger.info(f"Getting universe: {universe}")
-        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
+        market_df, stock_codes = await asyncio.to_thread(_fetch_data_for_market, universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available. Check date range and stock codes."})
 
-        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
+        market_df = await asyncio.to_thread(_enrich_with_fundamentals, expression, market_df, stock_codes, start_date, end_date)
 
         logger.info(f"Running backtest: {expression}")
         executor = get_executor()
@@ -165,7 +166,7 @@ def run_backtest(
             _run_backtest_in_process, market_df, expression, n_groups, holding_period,
             neutralize_industry=neutralize_industry, neutralize_cap=neutralize_cap,
         )
-        result = future.result(timeout=600)
+        result = await asyncio.to_thread(future.result, 600)
 
         # Anti-overfit analysis
         anti_overfit_result = None
@@ -173,17 +174,18 @@ def run_backtest(
         if factor_df is not None and len(factor_df) > 100:
             try:
                 from .anti_overfit import run_anti_overfit as _run_ao
-                anti_overfit_result = _run_ao(factor_df, holding_period)
+                anti_overfit_result = await asyncio.to_thread(_run_ao, factor_df, holding_period)
             except Exception as e:
                 logger.warning(f"Anti-overfit analysis failed: {e}")
 
         bm_returns = None
         try:
-            bm_returns = _fetch_benchmark_for_market(benchmark, start_date, end_date)
+            bm_returns = await asyncio.to_thread(_fetch_benchmark_for_market, benchmark, start_date, end_date)
         except Exception as e:
             logger.warning(f"Benchmark fetch failed: {e}")
 
-        report_result = generate_report(
+        report_result = await asyncio.to_thread(
+            generate_report,
             result["ls_returns"],
             benchmark_returns=bm_returns,
             title=f"Factor: {expression}",
@@ -240,7 +242,7 @@ def run_backtest(
 
 
 @mcp.tool()
-def score_factor(
+async def score_factor(
     expression: str,
     universe: str = "hs300",
     start_date: str = "2023-01-01",
@@ -275,27 +277,28 @@ def score_factor(
     _error_msg = None
     _result_str = None
     try:
-        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
+        market_df, stock_codes = await asyncio.to_thread(_fetch_data_for_market, universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
-        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
+        market_df = await asyncio.to_thread(_enrich_with_fundamentals, expression, market_df, stock_codes, start_date, end_date)
 
         executor = get_executor()
         future = executor.submit_cpu_work(
             _run_backtest_in_process, market_df, expression, n_groups, holding_period,
             neutralize_industry=neutralize_industry, neutralize_cap=neutralize_cap,
         )
-        result = future.result(timeout=600)
+        result = await asyncio.to_thread(future.result, 600)
 
         bm_returns = None
         try:
-            bm_returns = _fetch_benchmark_for_market(benchmark, start_date, end_date)
+            bm_returns = await asyncio.to_thread(_fetch_benchmark_for_market, benchmark, start_date, end_date)
         except Exception:
             pass
 
-        report_result = generate_report(
-            result["strategy_returns"],
+        report_result = await asyncio.to_thread(
+            generate_report,
+            result["ls_returns"],
             benchmark_returns=bm_returns,
             title="Factor Score",
         )
@@ -401,7 +404,7 @@ def diagnose_factor(
 
 
 @mcp.tool()
-def run_anti_overfit(
+async def run_anti_overfit(
     expression: str,
     universe: str = "hs300",
     start_date: str = "2023-01-01",
@@ -433,11 +436,11 @@ def run_anti_overfit(
     _error_msg = None
     _result_str = None
     try:
-        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
+        market_df, stock_codes = await asyncio.to_thread(_fetch_data_for_market, universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
-        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
+        market_df = await asyncio.to_thread(_enrich_with_fundamentals, expression, market_df, stock_codes, start_date, end_date)
 
         executor = get_executor()
         future = executor.submit_cpu_work(
@@ -445,12 +448,12 @@ def run_anti_overfit(
             holding_period=holding_period, cost_rate=0,
             neutralize_industry=neutralize_industry, neutralize_cap=neutralize_cap,
         )
-        result = future.result(timeout=600)
+        result = await asyncio.to_thread(future.result, 600)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for anti-overfit analysis."})
 
-        ao_result = _run_ao(factor_df, holding_period)
+        ao_result = await asyncio.to_thread(_run_ao, factor_df, holding_period)
         _result_str = json.dumps(ao_result, ensure_ascii=False, indent=2, default=str)
         return _result_str
 
@@ -467,7 +470,7 @@ def run_anti_overfit(
 
 
 @mcp.tool()
-def run_rolling_validation(
+async def run_rolling_validation(
     expression: str,
     universe: str = "hs300",
     start_date: str = "2020-01-01",
@@ -499,11 +502,11 @@ def run_rolling_validation(
     _error_msg = None
     _result_str = None
     try:
-        market_df, stock_codes = _fetch_data_for_market(universe, start_date, end_date)
+        market_df, stock_codes = await asyncio.to_thread(_fetch_data_for_market, universe, start_date, end_date)
         if market_df is None or len(market_df) == 0:
             return json.dumps({"error": "No market data available."})
 
-        market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
+        market_df = await asyncio.to_thread(_enrich_with_fundamentals, expression, market_df, stock_codes, start_date, end_date)
 
         executor = get_executor()
         future = executor.submit_cpu_work(
@@ -511,12 +514,12 @@ def run_rolling_validation(
             holding_period=holding_period, cost_rate=0,
             neutralize_industry=neutralize_industry, neutralize_cap=neutralize_cap,
         )
-        result = future.result(timeout=600)
+        result = await asyncio.to_thread(future.result, 600)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for rolling validation."})
 
-        rv_result = _run_rv(factor_df, holding_period)
+        rv_result = await asyncio.to_thread(_run_rv, factor_df, holding_period)
         _result_str = json.dumps(rv_result, ensure_ascii=False, indent=2, default=str)
         return _result_str
 

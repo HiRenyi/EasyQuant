@@ -227,3 +227,32 @@ class TestMonotonicity:
 
     def test_too_few_groups(self):
         assert _calc_monotonicity([0.01, 0.02]) == 0.0
+
+
+class TestPrecomputedFactorAlignment:
+    """Regression: precomputed_factor must align by index, not position."""
+
+    def test_shuffled_index_aligns_correctly(self, market_df):
+        from quantgpt.backtest import api_context
+
+        df = market_df.copy()
+        df["trade_date"] = pd.to_datetime(df["trade_date"])
+
+        factor = pd.Series(
+            np.random.RandomState(99).randn(len(df)),
+            index=df.index,
+        )
+
+        shuffled_factor = factor.sample(frac=1, random_state=42)
+
+        with api_context():
+            result = run_factor_backtest(
+                df,
+                precomputed_factor=shuffled_factor,
+                n_groups=3,
+                holding_period=5,
+                neutralize_industry=False,
+                neutralize_cap=False,
+            )
+        assert "strategy_returns" in result
+        assert len(result["strategy_returns"]) > 0

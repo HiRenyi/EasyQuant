@@ -10,7 +10,7 @@
 ## Findings
 | 文件 | 标签 | 摘要 |
 |------|------|------|
-| [vwap_deviation_best_seed](findings/vwap_deviation_best_seed.md) | vwap, seed | VWAP 偏离信号 fitness=0.955, Sharpe=1.659，最强种子 |
+| [vwap_deviation_best_seed](findings/vwap_deviation_best_seed.md) | vwap, seed, near_A | VWAP Decay Alpha: WQ BRAIN 6/7 PASS (Sharpe=1.47, Fitness=0.73)，最强种子 |
 | [reversal_5d_baseline](findings/reversal_5d_baseline.md) | reversal, baseline | 5日反转 rank(-ret5) 是稳定基线，Sharpe~1.17 |
 | [adv20_volume_enhancer](findings/adv20_volume_enhancer.md) | volume, enhancer | adv20/volume 乘数增强所有因子族 30-80%，但时间稳定性存疑 |
 | [low_vol_base_alpha](findings/low_vol_base_alpha.md) | volatility, baseline | 低波因子 -ts_mean((high-low)/close,5) 在 hs300 有稳定 alpha，fitness ~0.8-1.0 |

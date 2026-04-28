@@ -10,38 +10,48 @@ import Header from "./components/Header";
 import BacktestForm from "./components/BacktestForm";
 import ProgressTracker from "./components/ProgressTracker";
 import ResultsDashboard from "./components/ResultsDashboard";
-import SessionSidebar from "./components/SessionSidebar";
 import IterationPanel from "./components/IterationPanel";
-import FactorLibrary from "./components/FactorLibrary";
 import CompositeBuilder from "./components/CompositeBuilder";
 import FactorComparison from "./components/FactorComparison";
 import PaperTrading from "./components/PaperTrading";
 import StrategyBacktest from "./components/StrategyBacktest";
 import ResearchDashboard from "./components/ResearchDashboard";
-import { Star, MessageSquare, FlaskConical, Layers, BarChart3, LineChart, Code, LayoutDashboard } from "lucide-react";
+import TabNavigation, { TABS } from "./components/TabNavigation";
+import type { MainTab } from "./components/TabNavigation";
+import AppSidebar from "./components/AppSidebar";
 import { saveFactor, fetchFactors } from "./api/factorLibrary";
 import { submitCompositeBacktest } from "./api/composite";
 import type { CompositeBacktestPayload } from "./api/composite";
 
-type MainTab = "backtest" | "strategy" | "composite" | "comparison" | "paper" | "dashboard";
-
-const TABS: { id: MainTab; label: string; icon: typeof FlaskConical; color: string }[] = [
-  { id: "dashboard", label: "研究总览", icon: LayoutDashboard, color: "amber" },
-  { id: "backtest", label: "单因子回测", icon: FlaskConical, color: "blue" },
-  { id: "strategy", label: "策略回测", icon: Code, color: "orange" },
-  { id: "composite", label: "多因子组合", icon: Layers, color: "purple" },
-  { id: "comparison", label: "因子对比", icon: BarChart3, color: "emerald" },
-  { id: "paper", label: "模拟盘", icon: LineChart, color: "teal" },
-];
+function getTabFromHash(): MainTab {
+  const hash = window.location.hash.replace("#", "");
+  const validIds = TABS.map((t) => t.id);
+  if (validIds.includes(hash as MainTab)) return hash as MainTab;
+  return "dashboard";
+}
 
 export default function App() {
   const { isGuest } = useAuth();
   const { isDark } = useColorMode();
-  const [activeTab, setActiveTab] = useState<MainTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<MainTab>(getTabFromHash);
   const [sidebarTab, setSidebarTab] = useState<"sessions" | "factors">("sessions");
   const [factorLibKey, setFactorLibKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savedExpressions, setSavedExpressions] = useState<Set<string>>(new Set());
+
+  // Sync activeTab with URL hash
+  useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const tab = getTabFromHash();
+      setActiveTab(tab);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   // Load saved expressions on mount (skip for guests)
   useEffect(() => {
@@ -187,54 +197,7 @@ export default function App() {
       <Header />
 
       {/* Main navigation tabs */}
-      <div className={`border-b ${isDark ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
-        <div className="mx-auto max-w-7xl px-6">
-          <nav className="flex items-center gap-1 -mb-px">
-            {/* Tab buttons */}
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    isActive
-                      ? isDark
-                        ? "border-blue-400 text-blue-400"
-                        : `border-${tab.color}-600 text-${tab.color}-600`
-                      : isDark
-                        ? "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                  }`}
-                  style={isActive && !isDark ? {
-                    borderBottomColor: tab.color === "blue" ? "#2563eb"
-                      : tab.color === "rose" ? "#e11d48"
-                      : tab.color === "indigo" ? "#4f46e5"
-                      : tab.color === "amber" ? "#d97706"
-                      : tab.color === "purple" ? "#9333ea"
-                      : tab.color === "teal" ? "#0d9488"
-                      : "#059669",
-                    color: tab.color === "blue" ? "#2563eb"
-                      : tab.color === "rose" ? "#e11d48"
-                      : tab.color === "indigo" ? "#4f46e5"
-                      : tab.color === "amber" ? "#d97706"
-                      : tab.color === "purple" ? "#9333ea"
-                      : tab.color === "teal" ? "#0d9488"
-                      : "#059669",
-                  } : isActive && isDark ? {
-                    borderBottomColor: "#60a5fa",
-                    color: "#93bbfd",
-                  } : undefined}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
+      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} isDark={isDark} />
 
       <div className="mx-auto max-w-7xl px-6 py-6 flex gap-6">
         {/* Main content area — changes per tab */}
@@ -310,69 +273,25 @@ export default function App() {
 
         {/* Sidebar — visible on backtest and strategy tabs for logged-in users */}
         {(activeTab === "backtest" || activeTab === "strategy") && !isGuest && (
-          <aside className="w-72 shrink-0 hidden lg:block">
-            <div className="sticky top-6 max-h-[calc(100vh-3rem)] flex flex-col">
-              {activeTab === "backtest" && (
-                <div className="flex gap-1 mb-3 shrink-0">
-                  <button
-                    onClick={() => setSidebarTab("sessions")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      sidebarTab === "sessions" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100"
-                    }`}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    会话
-                  </button>
-                  <button
-                    onClick={() => setSidebarTab("factors")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      sidebarTab === "factors" ? "bg-amber-50 text-amber-700" : "text-gray-500 hover:bg-gray-100"
-                    }`}
-                  >
-                    <Star className="h-3.5 w-3.5" />
-                    因子库
-                  </button>
-                </div>
-              )}
-              {activeTab === "strategy" && (
-                <div className="flex gap-1 mb-3 shrink-0">
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-50 text-orange-700">
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    策略历史
-                  </span>
-                </div>
-              )}
-              <div className="overflow-y-auto min-h-0">
-                {activeTab === "strategy" ? (
-                  <SessionSidebar
-                    sessions={sessions}
-                    activeSessionId={activeSessionId}
-                    tasks={strategyTasks}
-                    activeTaskId={restoredStrategyTask?.task_id}
-                    onCreateSession={handleCreateSession}
-                    onSwitchSession={(id) => { switchSession(id); setRestoredStrategyTask(null); }}
-                    onRenameSession={renameSession}
-                    onDeleteSession={deleteSession}
-                    onSelectTask={(task) => setRestoredStrategyTask(task as unknown as StrategyTask)}
-                  />
-                ) : sidebarTab === "sessions" ? (
-                  <SessionSidebar
-                    sessions={sessions}
-                    activeSessionId={activeSessionId}
-                    tasks={tasks}
-                    activeTaskId={activeTask?.task_id}
-                    onCreateSession={handleCreateSession}
-                    onSwitchSession={handleSwitchSession}
-                    onRenameSession={renameSession}
-                    onDeleteSession={deleteSession}
-                    onSelectTask={(task) => setActiveTask(task)}
-                  />
-                ) : (
-                  <FactorLibrary key={factorLibKey} />
-                )}
-              </div>
-            </div>
-          </aside>
+          <AppSidebar
+            activeTab={activeTab}
+            sidebarTab={sidebarTab}
+            onSidebarTabChange={setSidebarTab}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            tasks={tasks}
+            activeTaskId={activeTask?.task_id}
+            onCreateSession={handleCreateSession}
+            onSwitchSession={handleSwitchSession}
+            onRenameSession={renameSession}
+            onDeleteSession={deleteSession}
+            onSelectTask={(task) => setActiveTask(task)}
+            factorLibKey={factorLibKey}
+            strategyTasks={strategyTasks}
+            restoredStrategyTaskId={restoredStrategyTask?.task_id}
+            onStrategySwitchSession={(id) => { switchSession(id); setRestoredStrategyTask(null); }}
+            onSelectStrategyTask={(task) => setRestoredStrategyTask(task as unknown as StrategyTask)}
+          />
         )}
       </div>
     </div>

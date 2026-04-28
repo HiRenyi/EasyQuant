@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 from collections import defaultdict
@@ -171,6 +172,50 @@ def persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_filen
             logger.error(f"[{task_id}] DB persist error: {e}")
     else:
         logger.error(f"[{task_id}] main event loop not available for DB persist")
+
+
+# ---- SSE ticket store (short-lived, single-use) ----
+
+_sse_tickets: dict[str, dict] = {}
+_sse_tickets_lock = threading.Lock()
+
+
+def create_sse_ticket(task_id: str, user_id: str) -> str:
+    """Generate a short-lived, single-use ticket for SSE authentication.
+
+    The ticket expires after 60 seconds and is consumed on first validation.
+    """
+    ticket = secrets.token_urlsafe()
+    with _sse_tickets_lock:
+        # Opportunistic cleanup of expired tickets
+        now = time.monotonic()
+        expired = [k for k, v in _sse_tickets.items() if v["expires"] < now]
+        for k in expired:
+            _sse_tickets.pop(k, None)
+
+        _sse_tickets[ticket] = {
+            "task_id": task_id,
+            "user_id": user_id,
+            "expires": now + 60,
+        }
+    return ticket
+
+
+def validate_sse_ticket(ticket: str, task_id: str) -> str | None:
+    """Validate and consume an SSE ticket.
+
+    Returns the user_id if valid, or None if the ticket is invalid, expired,
+    or does not match the requested task_id.
+    """
+    with _sse_tickets_lock:
+        entry = _sse_tickets.pop(ticket, None)
+    if entry is None:
+        return None
+    if entry["task_id"] != task_id:
+        return None
+    if time.monotonic() > entry["expires"]:
+        return None
+    return entry["user_id"]
 
 
 def persist_report_to_db(task_id: str, user_id: str, report_filename: str):

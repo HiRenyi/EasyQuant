@@ -57,10 +57,12 @@ from ..task_store import (
     check_rate_limit,
     cleanup_reports,
     cleanup_tasks,
+    create_sse_ticket,
     persist_task_to_db,
     sanitize_task_response,
     tasks,
     tasks_lock,
+    validate_sse_ticket,
 )
 
 logger = logging.getLogger(__name__)
@@ -605,6 +607,18 @@ async def get_task(
     return sanitize_task_response(resp)
 
 
+@router.post("/api/v1/tasks/{task_id}/sse-ticket")
+async def create_ticket(task_id: str, user: User = Depends(get_current_user)):
+    """Create a short-lived, single-use ticket for SSE stream authentication."""
+    task = tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("user_id") != str(user.id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    ticket = create_sse_ticket(task_id, str(user.id))
+    return {"ticket": ticket}
+
+
 @router.get("/api/v1/tasks/{task_id}/stream")
 async def stream_task(task_id: str, request: Request):
     import quantgpt.task_store as _ts
@@ -616,17 +630,12 @@ async def stream_task(task_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Task not found")
 
     if not is_auth_disabled():
-        token = request.query_params.get("token")
-        user_id: str | None = None
-
-        if not token or token.startswith("guest_"):
-            user_id = GUEST_USER_ID
-        else:
-            payload = decode_token(token)
-            if payload.get("type") != "access":
-                raise HTTPException(status_code=401, detail="无效的 Token")
-            user_id = payload.get("sub")
-
+        ticket = request.query_params.get("ticket")
+        if not ticket:
+            raise HTTPException(status_code=401, detail="Missing SSE ticket")
+        user_id = validate_sse_ticket(ticket, task_id)
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired SSE ticket")
         if task.get("user_id") != user_id:
             raise HTTPException(status_code=404, detail="Task not found")
 

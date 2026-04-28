@@ -30,7 +30,7 @@ jobs:
         env:
           JWT_SECRET_KEY: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///./test.db"
-        run: pytest tests/ -x -q --cov=quantgpt --cov-report=term-missing --cov-fail-under=25
+        run: pytest tests/ -x -q --cov=quantgpt --cov-report=term-missing --cov-fail-under=33
 
       - name: Dependency audit
         run: pip-audit --strict --desc -f json 2>/dev/null | python3 -c "
@@ -49,7 +49,7 @@ jobs:
               print(f'{len(critical)} direct-dependency vulnerabilities found')
           else:
               print('No direct-dependency vulnerabilities')
-          " || true
+          "
 
   frontend:
     runs-on: ubuntu-latest

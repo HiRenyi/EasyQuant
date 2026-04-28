@@ -78,6 +78,7 @@ EXAMPLES:
 条件因子: rank(where(ts_rank(volume,20) > 0.7, ts_delta(close,10)/close, 0)) * rank(volume/adv20)
 多头排列: rank(where(close > ts_mean(close, 5) and ts_mean(close, 5) > ts_mean(close, 10), close / ts_mean(close, 20), 0))
 衰减加权: decay_linear(rank(ts_corr(vwap, volume, 10)), 5)
+VWAP偏离(WQ BRAIN近A级): -1 * rank(ts_decay_linear(close / vwap, 5))
 复合因子: sign_power(rank(volume/adv20), 2) * rank((close-vwap)/close) * rank(ts_std(returns,20))
 裁剪因子: rank(clip(ts_corr(close, volume, 20), -0.5, 0.5)) * sign_power(ts_delta(close,20)/close, 0.5)
 价值因子: rank(-1 * pe)

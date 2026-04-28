@@ -260,3 +260,66 @@ class TestValidation:
     def test_unknown_function(self):
         with pytest.raises(ValueError, match="Unknown function"):
             parse_expression("bogus_func(close, 5)")
+
+
+class TestReturnsPerStock:
+    """Regression: returns must compute pct_change per stock, not across stock boundaries."""
+
+    def test_returns_no_cross_stock_contamination(self, sample_df):
+        df = sample_df.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
+        func = parse_expression("returns")
+        result = func(df)
+
+        for stock in df["stock_code"].unique():
+            mask = df["stock_code"] == stock
+            stock_df = df.loc[mask]
+            first_idx = stock_df.index[0]
+            assert pd.isna(result.iloc[first_idx]) or first_idx == 0, (
+                f"First row of {stock} should be NaN (not computed from previous stock)"
+            )
+
+    def test_returns_values_match_manual(self, sample_df):
+        df = sample_df.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
+        func = parse_expression("returns")
+        result = func(df)
+
+        for stock in df["stock_code"].unique():
+            mask = df["stock_code"] == stock
+            stock_close = df.loc[mask, "close"]
+            expected = stock_close.pct_change()
+            pd.testing.assert_series_equal(
+                result.loc[mask].reset_index(drop=True),
+                expected.reset_index(drop=True),
+                check_names=False,
+            )
+
+
+class TestAdvPerStock:
+    """Regression: adv{N} must compute rolling mean per stock."""
+
+    def test_adv20_no_cross_stock_contamination(self, sample_df):
+        df = sample_df.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
+        func = parse_expression("adv20")
+        result = func(df)
+
+        for stock in df["stock_code"].unique():
+            mask = df["stock_code"] == stock
+            stock_vol = df.loc[mask, "volume"]
+            expected = stock_vol.rolling(20, min_periods=1).mean()
+            pd.testing.assert_series_equal(
+                result.loc[mask].reset_index(drop=True),
+                expected.reset_index(drop=True),
+                check_names=False,
+            )
+
+    def test_adv5_first_row_equals_own_volume(self, sample_df):
+        df = sample_df.sort_values(["stock_code", "trade_date"]).reset_index(drop=True)
+        func = parse_expression("adv5")
+        result = func(df)
+
+        for stock in df["stock_code"].unique():
+            mask = df["stock_code"] == stock
+            first_idx = df.loc[mask].index[0]
+            assert result.iloc[first_idx] == pytest.approx(df.loc[first_idx, "volume"]), (
+                f"First row of {stock} adv5 should equal its own volume, not previous stock's"
+            )

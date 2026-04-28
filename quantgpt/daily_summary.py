@@ -12,504 +12,32 @@ import json
 import logging
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from openai import OpenAI
 
-from .expression_parser import parse_expression
+from .factor_signals import FactorSignal, compute_factor_signals
+from .industry_analysis import compute_industry_signals
 from .market_data import MarketDataFetcher, fetch_benchmark_returns, get_universe
+from .market_regime import derive_market_regime
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATES_PATH = Path(__file__).resolve().parent / "templates" / "factors.json"
 
-
-def _json_default(obj):
-    """Convert numpy types to native Python for JSON serialization."""
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (np.floating,)):
-        v = float(obj)
-        if np.isnan(v) or np.isinf(v):
-            return None
-        return v
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-
-def _sanitize_for_json(obj):
-    """Recursively replace NaN/Inf with None for JSON compatibility."""
-    if isinstance(obj, float):
-        if np.isnan(obj) or np.isinf(obj):
-            return None
-        return obj
-    if isinstance(obj, dict):
-        return {k: _sanitize_for_json(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize_for_json(v) for v in obj]
-    return obj
-
 _DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 _DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 _DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-
-# ─── Factor signal computation ───────────────────────────────────
-
-
-@dataclass
-class FactorSignal:
-    factor_id: str
-    factor_name: str
-    category: str
-    signal_description: str
-    direction: str          # "转强" | "转弱" | "持平"
-    dispersion: str         # "高分化" | "中等" | "低分化"
-    top_stocks: list        # [(code, value), ...]
-    bottom_stocks: list     # [(code, value), ...]
-    today_mean: float
-    yesterday_mean: float
-    # Percentile stats for compliant reporting
-    pct_above_median: float  # % of stocks above cross-sectional median
-    top10_pct_change: float  # avg change of top 10% vs yesterday
-    # Historical context (20-day rolling window)
-    percentile_20d: float   # today's mean percentile among recent 20-day means (0-100)
-    zscore_20d: float       # (today_mean - 20d_mean_avg) / 20d_mean_std
-    signal_strength: int    # -2 to +2 composite: direction + percentile
 
 
 def _load_factor_templates() -> list:
     """Load factor templates from JSON."""
     with open(_TEMPLATES_PATH, encoding="utf-8") as f:
         return json.load(f)
-
-
-def _safe_apply_factor(df: pd.DataFrame, factor_func) -> pd.Series:
-    """Apply factor function to a DataFrame, returning NaN on error."""
-    try:
-        result = factor_func(df)
-        if isinstance(result, pd.Series):
-            result.index = df.index
-        return result
-    except Exception:
-        return pd.Series(np.nan, index=df.index)
-
-
-def _strip_outer_rank(expression: str) -> str:
-    """Remove outer rank() wrapper from expression for signal analysis.
-
-    rank() normalizes values to [0, 1] percentiles, making cross-sectional
-    means ~0.5 every day. For day-over-day signal detection we need raw values.
-    Examples:
-        "rank(close/ts_mean(close,20))" -> "close/ts_mean(close,20)"
-        "rank(-1 * x) - rank(y)"        -> "rank(-1 * x) - rank(y)"  (not simple wrapper)
-    """
-    stripped = expression.strip()
-    if not stripped.startswith("rank("):
-        return expression
-    # Check if the entire expression is rank(...) by matching parentheses
-    depth = 0
-    for i, ch in enumerate(stripped):
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-            if depth == 0:
-                # If we're at the end, the whole thing is rank(...)
-                if i == len(stripped) - 1:
-                    return stripped[5:i]  # strip "rank(" and ")"
-                else:
-                    return expression  # rank(...) is only part of expr
-    return expression
-
-
-def _compute_factor_signals(
-    market_df: pd.DataFrame,
-    templates: list,
-) -> list[FactorSignal]:
-    """Compute factor signals for each template on today's market data.
-
-    Requires market_df to have at least 70 days of history for time-series
-    operators. Extracts today vs yesterday cross-sectional stats.
-    """
-    market_df = market_df.copy()
-    market_df["trade_date"] = pd.to_datetime(market_df["trade_date"])
-    market_df = market_df.sort_values(["stock_code", "trade_date"])
-
-    all_dates = sorted(market_df["trade_date"].unique())
-    if len(all_dates) < 2:
-        logger.warning("Not enough trading days for factor signal computation")
-        return []
-
-    today = all_dates[-1]
-    yesterday = all_dates[-2]
-
-    signals = []
-    for tmpl in templates:
-        try:
-            # Strip outer rank() for signal analysis — rank() normalizes to
-            # ~0.5 mean every day, hiding real cross-sectional changes.
-            # Raw factor values are needed to detect day-over-day shifts.
-            expr = tmpl["expression"]
-            raw_expr = _strip_outer_rank(expr)
-            factor_func = parse_expression(raw_expr)
-            market_df["_fv"] = _safe_apply_factor(market_df, factor_func)
-
-            # Today's cross-section
-            today_mask = market_df["trade_date"] == today
-            today_df = market_df.loc[today_mask, ["stock_code", "_fv"]].dropna(subset=["_fv"])
-
-            yesterday_mask = market_df["trade_date"] == yesterday
-            yesterday_df = market_df.loc[yesterday_mask, ["stock_code", "_fv"]].dropna(subset=["_fv"])
-
-            if len(today_df) < 10 or len(yesterday_df) < 10:
-                continue
-
-            today_mean = float(today_df["_fv"].mean())
-            yesterday_mean = float(yesterday_df["_fv"].mean())
-            today_std = float(today_df["_fv"].std())
-            today_median = float(today_df["_fv"].median())
-
-            # Direction
-            delta = today_mean - yesterday_mean
-            threshold = 0.05 * today_std if today_std > 0 else 0.001
-            if delta > threshold:
-                direction = "转强"
-            elif delta < -threshold:
-                direction = "转弱"
-            else:
-                direction = "持平"
-
-            # Dispersion — compare today's cross-sectional std to recent average
-            # Also collect daily cross-sectional means for percentile/z-score
-            recent_stds = []
-            recent_means = []
-            for d in all_dates[-20:]:
-                d_mask = market_df["trade_date"] == d
-                d_vals = market_df.loc[d_mask, "_fv"].dropna()
-                d_std = d_vals.std()
-                d_mean = d_vals.mean()
-                if not np.isnan(d_std):
-                    recent_stds.append(d_std)
-                if not np.isnan(d_mean):
-                    recent_means.append(float(d_mean))
-            avg_std = np.mean(recent_stds) if recent_stds else today_std
-            if avg_std > 0 and today_std > 1.2 * avg_std:
-                dispersion = "高分化"
-            elif avg_std > 0 and today_std < 0.8 * avg_std:
-                dispersion = "低分化"
-            else:
-                dispersion = "中等"
-
-            # 20-day percentile and z-score of today's cross-sectional mean
-            if len(recent_means) >= 3:
-                mean_arr = np.array(recent_means)
-                mean_avg = float(np.mean(mean_arr))
-                mean_std = float(np.std(mean_arr, ddof=1))
-                # Percentile: fraction of historical means <= today_mean
-                percentile_20d = round(float(np.sum(mean_arr <= today_mean) / len(mean_arr)) * 100, 1)
-                zscore_20d = round((today_mean - mean_avg) / mean_std, 2) if mean_std > 0 else 0.0
-            else:
-                percentile_20d = 50.0
-                zscore_20d = 0.0
-
-            # Signal strength: composite of direction + percentile
-            if direction == "转强":
-                signal_strength = 2 if percentile_20d >= 75 else 1
-            elif direction == "转弱":
-                signal_strength = -2 if percentile_20d <= 25 else -1
-            else:
-                signal_strength = 0
-
-            # Percentile stats for compliant reporting
-            pct_above_median = round(float((today_df["_fv"] > today_median).mean()) * 100, 1)
-
-            # Top 10% group average change
-            n_top = max(1, len(today_df) // 10)
-            sorted_today = today_df.sort_values("_fv", ascending=False)
-            top_codes = set(sorted_today.head(n_top)["stock_code"])
-            top_today_avg = sorted_today.head(n_top)["_fv"].mean()
-            top_yest = yesterday_df[yesterday_df["stock_code"].isin(top_codes)]["_fv"].mean()
-            top10_pct_change = round(float(top_today_avg - top_yest), 4) if not np.isnan(top_yest) else 0.0
-
-            # Top / bottom stocks (for signal cards, not for LLM)
-            top_stocks = [
-                (row["stock_code"], round(float(row["_fv"]), 4))
-                for _, row in sorted_today.head(3).iterrows()
-            ]
-            bottom_stocks = [
-                (row["stock_code"], round(float(row["_fv"]), 4))
-                for _, row in sorted_today.tail(3).iterrows()
-            ]
-
-            signals.append(FactorSignal(
-                factor_id=tmpl["id"],
-                factor_name=tmpl["name"],
-                category=tmpl["category"],
-                signal_description=tmpl.get("signal_description", ""),
-                direction=direction,
-                dispersion=dispersion,
-                top_stocks=top_stocks,
-                bottom_stocks=bottom_stocks,
-                today_mean=round(today_mean, 6),
-                yesterday_mean=round(yesterday_mean, 6),
-                pct_above_median=pct_above_median,
-                top10_pct_change=top10_pct_change,
-                percentile_20d=percentile_20d,
-                zscore_20d=zscore_20d,
-                signal_strength=signal_strength,
-            ))
-        except Exception as e:
-            logger.warning(f"Factor signal computation failed for {tmpl['id']}: {e}")
-
-    # Clean up temp column
-    if "_fv" in market_df.columns:
-        market_df.drop(columns=["_fv"], inplace=True)
-
-    return signals
-
-
-# ─── Industry-level signal computation ───────────────────────────
-
-# Map verbose CSRC industry names to short display names
-_INDUSTRY_SHORT_NAMES = {
-    "C39计算机、通信和其他电子设备制造业": "电子",
-    "J66货币金融服务": "银行",
-    "C38电气机械和器材制造业": "电力设备",
-    "J67资本市场服务": "券商",
-    "C27医药制造业": "医药",
-    "C26化学原料和化学制品制造业": "化工",
-    "C35专用设备制造业": "机械",
-    "C15酒、饮料和精制茶制造业": "食品饮料",
-    "I65软件和信息技术服务业": "计算机",
-    "C36汽车制造业": "汽车",
-    "D44电力、热力生产和供应业": "公用事业",
-    "E48土木工程建筑业": "建筑",
-    "C32有色金属冶炼和压延加工业": "有色金属",
-    "C30非金属矿物制品业": "建材",
-    "K70房地产业": "房地产",
-    "J68保险业": "保险",
-    "C37铁路、船舶、航空航天和其他运输设备制造业": "军工",
-    "G56航空运输业": "航空",
-    "B06煤炭开采和洗选业": "煤炭",
-    "I64互联网和相关服务": "互联网",
-    "I63电信、广播电视和卫星传输服务": "通信",
-    "C13农副食品加工业": "农业",
-    "B09有色金属矿采选业": "矿业",
-    "C31黑色金属冶炼和压延加工业": "钢铁",
-    "C29橡胶和塑料制品业": "化纤",
-    "C28化学纤维制造业": "纺织",
-    "M73研究和试验发展": "科研",
-    "Q84卫生": "医疗",
-    "C34通用设备制造业": "通用设备",
-    "B07石油和天然气开采业": "石油",
-    "G54道路运输业": "交运",
-    "R86广播、电视、电影和录音制作业": "传媒",
-    "C14食品制造业": "食品",
-    "C33金属制品业": "金属制品",
-    "N77生态保护和环境治理业": "环保",
-    "F51批发业": "商贸",
-    "F52零售业": "零售",
-    "L72商务服务业": "商务服务",
-    "G55水上运输业": "航运",
-}
-
-
-def _shorten_industry_name(name: str) -> str:
-    """Convert verbose CSRC industry name to short display name."""
-    return _INDUSTRY_SHORT_NAMES.get(name, name)
-
-
-def _compute_industry_signals(
-    market_df: pd.DataFrame,
-    templates: list,
-) -> list[dict]:
-    """Compute per-industry factor signals for sector rotation analysis.
-
-    For each factor template, computes the industry-level mean of raw factor
-    values on the latest trading day, then ranks industries across all factors
-    to produce a composite score.
-
-    Returns a list of dicts sorted by composite_score descending, each with:
-        industry, stock_count, composite_score, direction, factor_details, top_factors
-    """
-    from .neutralize import get_industry_data
-
-    market_df = market_df.copy()
-    market_df["trade_date"] = pd.to_datetime(market_df["trade_date"])
-    market_df = market_df.sort_values(["stock_code", "trade_date"])
-
-    all_dates = sorted(market_df["trade_date"].unique())
-    if len(all_dates) < 2:
-        return []
-
-    today = all_dates[-1]
-    yesterday = all_dates[-2]
-
-    # Get industry classification
-    stock_codes = market_df["stock_code"].unique().tolist()
-    ind_data = get_industry_data(stock_codes)
-    if ind_data is None or len(ind_data) == 0:
-        logger.warning("[industry_signals] No industry data available")
-        return []
-
-    # Merge industry into market_df
-    market_df = market_df.merge(
-        ind_data[["stock_code", "industry"]], on="stock_code", how="left"
-    )
-    market_df["industry"] = market_df["industry"].fillna("其他")
-
-    # Compute per-industry factor means for today and yesterday
-    industry_records: dict[str, dict] = {}  # industry -> {factor_details, ...}
-
-    for tmpl in templates:
-        try:
-            expr = tmpl["expression"]
-            raw_expr = _strip_outer_rank(expr)
-            factor_func = parse_expression(raw_expr)
-            market_df["_fv"] = _safe_apply_factor(market_df, factor_func)
-
-            for day_label, day_date in [("today", today), ("yesterday", yesterday)]:
-                day_df = market_df.loc[
-                    market_df["trade_date"] == day_date,
-                    ["stock_code", "industry", "_fv"],
-                ].dropna(subset=["_fv"])
-
-                if len(day_df) < 10:
-                    continue
-
-                ind_means = day_df.groupby("industry")["_fv"].mean()
-                for ind_name, mean_val in ind_means.items():
-                    if ind_name not in industry_records:
-                        industry_records[ind_name] = {
-                            "factor_details": {},
-                            "stock_count": 0,
-                        }
-                    fid = tmpl["id"]
-                    if fid not in industry_records[ind_name]["factor_details"]:
-                        industry_records[ind_name]["factor_details"][fid] = {
-                            "name": tmpl["name"],
-                        }
-                    industry_records[ind_name]["factor_details"][fid][
-                        f"{day_label}_mean"
-                    ] = round(float(mean_val), 6)
-
-            # Count stocks per industry (today only)
-            today_df = market_df.loc[
-                market_df["trade_date"] == today,
-                ["stock_code", "industry"],
-            ]
-            for ind_name, cnt in today_df.groupby("industry").size().items():
-                if ind_name in industry_records:
-                    industry_records[ind_name]["stock_count"] = int(cnt)
-
-        except Exception as e:
-            logger.warning(f"[industry_signals] Factor {tmpl['id']} failed: {e}")
-
-    if "_fv" in market_df.columns:
-        market_df.drop(columns=["_fv"], inplace=True)
-
-    if not industry_records:
-        return []
-
-    # Rank industries per factor and compute composite score
-    # For each factor, rank industries by today_mean (higher = stronger)
-    factor_ids = list({
-        fid
-        for rec in industry_records.values()
-        for fid in rec["factor_details"]
-    })
-    industries = list(industry_records.keys())
-
-    # Build matrix: rows=industries, cols=factors, values=today_mean
-    for fid in factor_ids:
-        vals = {}
-        for ind in industries:
-            fd = industry_records[ind]["factor_details"].get(fid, {})
-            vals[ind] = fd.get("today_mean", np.nan)
-
-        # Rank across industries (percentile rank 0-1)
-        series = pd.Series(vals)
-        ranked = series.rank(pct=True, na_option="keep")
-        for ind in industries:
-            fd = industry_records[ind]["factor_details"].get(fid)
-            if fd:
-                fd["rank"] = round(float(ranked.get(ind, 0.5)), 3)
-
-    # Composite score: average rank across all factors, scaled to [-2, +2]
-    results = []
-    for ind in industries:
-        rec = industry_records[ind]
-        if rec["stock_count"] < 3:
-            continue  # skip tiny industries
-
-        ranks = [
-            fd["rank"]
-            for fd in rec["factor_details"].values()
-            if "rank" in fd and not np.isnan(fd["rank"])
-        ]
-        if not ranks:
-            continue
-
-        avg_rank = float(np.mean(ranks))
-        # Scale: 0.5 = neutral, map to [-2, +2]
-        composite = round((avg_rank - 0.5) * 4, 2)
-
-        # Direction
-        if composite > 0.2:
-            direction = "偏强"
-        elif composite < -0.2:
-            direction = "偏弱"
-        else:
-            direction = "中性"
-
-        # Top factors: sort by rank, pick top 3 most extreme
-        factor_list = []
-        for fid, fd in rec["factor_details"].items():
-            if "rank" not in fd:
-                continue
-            deviation = fd["rank"] - 0.5
-            today_val = fd.get("today_mean", 0)
-            yest_val = fd.get("yesterday_mean", 0)
-            change = today_val - yest_val if yest_val else 0
-            factor_list.append({
-                "id": fid,
-                "name": fd["name"],
-                "rank": fd["rank"],
-                "deviation": round(deviation, 3),
-                "today_mean": today_val,
-                "change": round(change, 6),
-            })
-        factor_list.sort(key=lambda x: abs(x["deviation"]), reverse=True)
-        top_factors = factor_list[:3]
-
-        results.append({
-            "industry": _shorten_industry_name(ind),
-            "stock_count": rec["stock_count"],
-            "composite_score": composite,
-            "direction": direction,
-            "top_factors": top_factors,
-            "factor_details": {
-                fid: {
-                    "name": fd["name"],
-                    "rank": fd.get("rank", 0.5),
-                    "today_mean": fd.get("today_mean", 0),
-                    "yesterday_mean": fd.get("yesterday_mean", 0),
-                }
-                for fid, fd in rec["factor_details"].items()
-            },
-        })
-
-    results.sort(key=lambda x: x["composite_score"], reverse=True)
-    logger.info(
-        f"[industry_signals] Computed signals for {len(results)} industries"
-    )
-    return _sanitize_for_json(json.loads(json.dumps(results, default=_json_default)))
 
 
 # ─── Benchmark index changes ─────────────────────────────────────
@@ -541,113 +69,6 @@ def _get_today_index_changes(date: str | None = None) -> dict:
             metrics[f"{name}_change"] = 0.0
 
     return metrics
-
-
-# ─── Market regime derivation ────────────────────────────────────
-
-
-def _derive_market_regime(
-    factor_signals: list[FactorSignal],
-    index_changes: dict,
-) -> dict:
-    """Derive market regime from factor signals (not from price action).
-
-    Returns dict with regime/style/risk_level/dominant_category/headline,
-    stored directly in metrics JSON.
-    """
-    if not factor_signals:
-        return {}
-
-    # Group signals by category
-    by_cat: dict[str, list[FactorSignal]] = {}
-    for s in factor_signals:
-        by_cat.setdefault(s.category, []).append(s)
-
-    # --- Regime ---
-    trend_signals = by_cat.get("trend", [])
-    vol_signals = by_cat.get("volatility", [])
-    trend_avg_strength = (
-        np.mean([s.signal_strength for s in trend_signals]) if trend_signals else 0.0
-    )
-    trend_avg_pct = (
-        np.mean([s.percentile_20d for s in trend_signals]) if trend_signals else 50.0
-    )
-    vol_avg_strength = (
-        np.mean([s.signal_strength for s in vol_signals]) if vol_signals else 0.0
-    )
-
-    if trend_avg_strength >= 1.0 and trend_avg_pct >= 60:
-        regime = "趋势市"
-    elif vol_avg_strength <= -1.0:
-        regime = "高波动"
-    else:
-        regime = "震荡市"
-
-    # --- Style ---
-    csi1000_chg = index_changes.get("csi1000_change", 0.0)
-    hs300_chg = index_changes.get("hs300_change", 0.0)
-    size_diff = csi1000_chg - hs300_chg
-    if size_diff > 0.3:
-        size_style = "小盘"
-    elif size_diff < -0.3:
-        size_style = "大盘"
-    else:
-        size_style = "均衡"
-
-    # Momentum vs reversal — check trend factor direction
-    momentum_count = sum(1 for s in trend_signals if s.direction == "转强")
-    reversal_count = sum(1 for s in trend_signals if s.direction == "转弱")
-    if momentum_count > reversal_count:
-        driver = "动量驱动"
-    elif reversal_count > momentum_count:
-        driver = "反转驱动"
-    else:
-        driver = "均衡驱动"
-
-    style = f"{size_style} · {driver}"
-
-    # --- Risk level ---
-    risk_score = 0
-    total = len(factor_signals)
-    down_count = sum(1 for s in factor_signals if s.direction == "转弱")
-    if total > 0 and down_count / total >= 0.6:
-        risk_score += 1
-    # Volatility factors at low percentile = rising vol risk
-    if vol_signals and np.mean([s.percentile_20d for s in vol_signals]) <= 30:
-        risk_score += 1
-    # High dispersion across many factors
-    high_disp_count = sum(1 for s in factor_signals if s.dispersion == "高分化")
-    if high_disp_count >= 3:
-        risk_score += 1
-
-    if risk_score >= 2:
-        risk_level = "高"
-    elif risk_score >= 1:
-        risk_level = "中"
-    else:
-        risk_level = "低"
-
-    # --- Dominant category ---
-    cat_strengths = {}
-    for cat, sigs in by_cat.items():
-        cat_strengths[cat] = np.mean([abs(s.signal_strength) for s in sigs])
-    dominant_category = max(cat_strengths, key=cat_strengths.get) if cat_strengths else "trend"
-
-    # --- Headline ---
-    risk_comment = {
-        "低": "风险可控",
-        "中": "短期波动风险上升",
-        "高": "多因子共振预警",
-    }.get(risk_level, "")
-    headline = f"{size_style}{driver}{regime}，{risk_comment}"
-
-    return {
-        "regime": regime,
-        "style": style,
-        "risk_level": risk_level,
-        "dominant_category": dominant_category,
-        "headline": headline,
-    }
 
 
 # ─── LLM prompt building ─────────────────────────────────────────
@@ -838,7 +259,7 @@ def _build_llm_prompt(
     lines.append("严格按以下结构输出，不要有任何开场白：\n")
     lines.append(f"# A股市场量化研究日报 | {date}\n")
     lines.append("## 一、市场全景解读\n")
-    lines.append('**开头用 1-2 句加粗文字给出今日市场核心特征**（如\u201c这是一个典型的小盘风格占优交易日\u201d）。\n')
+    lines.append('**开头用 1-2 句加粗文字给出今日市场核心特征**（如“这是一个典型的小盘风格占优交易日”）。\n')
     lines.append("然后用编号列表展开：")
     lines.append("1. 行情特征：指数排序（如 中证1000 > 中证500 > 沪深300），说明大小盘分化")
     lines.append("2. 解读：结合趋势因子方向，判断市场风险偏好（Risk-on/Risk-off）")
@@ -854,15 +275,15 @@ def _build_llm_prompt(
         lines.append("注意：如果没有历史数据则跳过此章节\n")
 
     lines.append("## 二、核心因子信号深度拆解\n")
-    lines.append('**开头用 1 句话概括因子信号全貌**（如\u201c本报告通过X个维度监测了市场背后的逻辑\u201d）\n')
+    lines.append('**开头用 1 句话概括因子信号全貌**（如“本报告通过X个维度监测了市场背后的逻辑”）\n')
     lines.append("按类别逐一解读，每个类别：")
     lines.append("1. 类别小标题用 `### 1. 趋势类：xxx` 格式，冒号后用 3-5 字概括该类因子传递的信号")
     lines.append("2. 每个因子必须用 Markdown 列表格式（`- `开头），每个因子独占一段，格式：")
     lines.append("   `- **因子名（方向）：** 经济含义解读`")
-    lines.append('   - 不只报数字，要解释\u201c这意味着什么\u201d')
+    lines.append('   - 不只报数字，要解释“这意味着什么”')
     lines.append("   - 例：")
-    lines.append('   - **20日动量（转强）：** 意味着\u201c强者恒强\u201d。加速动量显著转强(+0.27)，说明市场不仅在涨，涨速还在加快，这是情绪进入高潮的标志。')
-    lines.append('   - 例：**5日反转（转弱）：** 意味着跌了去抄底的逻辑行不通了，现在的市场逻辑是\u201c追高\u201d。')
+    lines.append('   - **20日动量（转强）：** 意味着“强者恒强”。加速动量显著转强(+0.27)，说明市场不仅在涨，涨速还在加快，这是情绪进入高潮的标志。')
+    lines.append('   - 例：**5日反转（转弱）：** 意味着跌了去抄底的逻辑行不通了，现在的市场逻辑是“追高”。')
     lines.append("3. 每类因子解读完后，用 1 句话总结该类因子传递的整体信号\n")
 
     lines.append("## 三、参与者行为画像\n")
@@ -886,7 +307,7 @@ def _build_llm_prompt(
     else:
         lines.append("## 四、总结与操作建议\n")
     lines.append("### 1. 核心结论")
-    lines.append('用 2-3 句话总结今日市场全貌，提炼关键词（如\u201c情绪驱动\u201d\u201c中小盘领头\u201d\u201c动能加速\u201d等）\n')
+    lines.append('用 2-3 句话总结今日市场全貌，提炼关键词（如“情绪驱动”“中小盘领头”“动能加速”等）\n')
     lines.append("### 2. 投资建议")
     lines.append("用项目符号列出 3-4 条**基于因子逻辑的具体建议**：")
     lines.append("- 每条建议格式：**建议标题：** 具体说明 + 因子逻辑支撑")
@@ -1029,7 +450,7 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
                 logger.warning(f"[daily_summary] Fundamental enrichment failed: {e}")
                 templates = [t for t in templates if t["category"] != "valuation"]
 
-        factor_signals = _compute_factor_signals(market_df, templates)
+        factor_signals = compute_factor_signals(market_df, templates)
         logger.info(f"[daily_summary] Computed {len(factor_signals)} factor signals")
     else:
         logger.warning("[daily_summary] No market data, generating summary with index data only")
@@ -1038,12 +459,12 @@ async def generate_daily_summary(db, market: str = "a_share", date: str | None =
     industry_signals = []
     if market_df is not None and len(market_df) > 0 and templates:
         try:
-            industry_signals = _compute_industry_signals(market_df, templates)
+            industry_signals = compute_industry_signals(market_df, templates)
         except Exception as e:
             logger.warning(f"[daily_summary] Industry signal computation failed: {e}")
 
     # Step 4: Derive market regime from factor signals
-    regime_data = _derive_market_regime(factor_signals, index_changes)
+    regime_data = derive_market_regime(factor_signals, index_changes)
     if regime_data:
         logger.info(f"[daily_summary] Regime: {regime_data.get('headline', '')}")
 

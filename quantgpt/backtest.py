@@ -91,7 +91,7 @@ def run_factor_backtest(
     market_df = market_df.sort_values(["stock_code", "trade_date"])
 
     if precomputed_factor is not None:
-        market_df["factor_value"] = precomputed_factor.values if hasattr(precomputed_factor, 'values') else precomputed_factor
+        market_df["factor_value"] = precomputed_factor.reindex(market_df.index) if hasattr(precomputed_factor, 'reindex') else precomputed_factor
     elif expression is not None:
         from .rust_bridge import RUST_ENABLED, eval_factor_expression
         if RUST_ENABLED:

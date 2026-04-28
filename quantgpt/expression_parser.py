@@ -208,7 +208,7 @@ class ExpressionParser:
     # Special variable mappings (computed from DataFrame columns)
     _SPECIAL_VARS = {
         'vwap': lambda df: df['vwap'] if 'vwap' in df.columns else (df['amount'] / df['volume'].replace(0, np.nan) if 'amount' in df.columns else df['close']),
-        'returns': lambda df: df['close'].pct_change(),
+        'returns': lambda df: df.groupby('stock_code')['close'].pct_change() if 'stock_code' in df.columns else df['close'].pct_change(),
         'cap': lambda df: df.get('market_cap', df['close'] * df.get('shares', 1)),  # fallback if no market_cap
         'day': lambda df: pd.Series(df['trade_date'].dt.day, index=df.index, dtype=float),
         'weekday': lambda df: pd.Series(df['trade_date'].dt.weekday, index=df.index, dtype=float),  # 0=Mon, 4=Fri
@@ -721,7 +721,11 @@ class ExpressionParser:
         # Average daily volume: adv{N} (e.g., adv20, adv60) — case-insensitive
         if expr_lower.startswith('adv') and expr_lower[3:].isdigit():
             window = self._validate_window(int(expr_lower[3:]), 'adv')
-            return lambda df, _w=window: df['volume'].rolling(_w, min_periods=1).mean()
+            return lambda df, _w=window: (
+                df.groupby('stock_code')['volume'].transform(lambda x: x.rolling(_w, min_periods=1).mean())
+                if 'stock_code' in df.columns
+                else df['volume'].rolling(_w, min_periods=1).mean()
+            )
 
         # Column reference — only allow known columns (case-insensitive)
         col_name = expr_lower.strip()
