@@ -8,7 +8,10 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..auth import get_current_user
+from ..db import get_db
 from ..models import User
 from ..task_store import (
     active_task_count,
@@ -230,6 +233,7 @@ async def wq_brain_submit(
 async def wq_brain_pre_check(
     request: Request,
     user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ):
     body = await request.json()
     expression = body.get("expression", "")
@@ -238,36 +242,34 @@ async def wq_brain_pre_check(
         raise HTTPException(status_code=400, detail="expression is required")
 
     from ..alpha_tracker import check_self_correlation
-    result = await check_self_correlation(str(user.id), expression, threshold=threshold)
+    result = await check_self_correlation(str(user.id), expression, threshold=threshold, session=session)
     return result
 
 
 @router.get("/submitted-alphas")
 async def list_submitted_alphas(
     user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
     limit: int = 50,
     offset: int = 0,
 ):
-    from sqlalchemy import func, select
+    from sqlalchemy import func, select as sa_select
 
-    from ..db import _get_session_factory
     from ..models import SubmittedAlpha
 
-    factory = _get_session_factory()
-    async with factory() as session:
-        count_q = await session.execute(
-            select(func.count()).where(SubmittedAlpha.user_id == user.id)
-        )
-        total = count_q.scalar() or 0
+    count_q = await session.execute(
+        sa_select(func.count()).where(SubmittedAlpha.user_id == user.id)
+    )
+    total = count_q.scalar() or 0
 
-        q = await session.execute(
-            select(SubmittedAlpha)
-            .where(SubmittedAlpha.user_id == user.id)
-            .order_by(SubmittedAlpha.submitted_at.desc())
-            .offset(offset)
-            .limit(min(limit, 100))
-        )
-        alphas = q.scalars().all()
+    q = await session.execute(
+        sa_select(SubmittedAlpha)
+        .where(SubmittedAlpha.user_id == user.id)
+        .order_by(SubmittedAlpha.submitted_at.desc())
+        .offset(offset)
+        .limit(min(limit, 100))
+    )
+    alphas = q.scalars().all()
 
     return {
         "total": total,

@@ -40,12 +40,13 @@ async def record_submitted_alpha(
     from .models import SubmittedAlpha
 
     normalized = normalize_expression(expression)
+    uid = _uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     factory = _get_session_factory()
 
     async with factory() as session:
         try:
             record = SubmittedAlpha(
-                user_id=user_id,
+                user_id=uid,
                 alpha_id=alpha_id,
                 expression=expression,
                 expression_normalized=normalized,
@@ -124,19 +125,27 @@ async def check_self_correlation(
     user_id: str,
     expression: str,
     threshold: float = 0.85,
+    session=None,
 ) -> dict:
-    from .db import _get_session_factory
     from .expression_parser import normalize_expression
     from .models import SubmittedAlpha
 
+    uid = _uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     normalized = normalize_expression(expression)
-    factory = _get_session_factory()
 
-    async with factory() as session:
+    if session is not None:
         result = await session.execute(
-            select(SubmittedAlpha).where(SubmittedAlpha.user_id == user_id)
+            select(SubmittedAlpha).where(SubmittedAlpha.user_id == uid)
         )
         existing = result.scalars().all()
+    else:
+        from .db import _get_session_factory
+        factory = _get_session_factory()
+        async with factory() as _session:
+            result = await _session.execute(
+                select(SubmittedAlpha).where(SubmittedAlpha.user_id == uid)
+            )
+            existing = result.scalars().all()
 
     if not existing:
         return {"safe": True, "matches": [], "total_submitted": 0}
