@@ -25,6 +25,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/wq-brain", tags=["wq_brain"])
 
 
+def _safe_float(val) -> float | None:
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fitness_to_grade(fitness: float | None) -> str:
+    if fitness is None:
+        return "D"
+    if fitness >= 1.0:
+        return "A"
+    if fitness >= 0.5:
+        return "B"
+    if fitness >= 0.25:
+        return "C"
+    return "D"
+
+
 class WQBrainSubmitRequest(BaseModel):
     expression: str = Field(..., description="FASTEXPR factor expression")
     region: str = Field("USA", description="Market region")
@@ -89,18 +110,46 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
 
         client.close()
 
+        is_data = result.get("is", {})
+        oos_data = result.get("oos", {})
+
+        sharpe = _safe_float(is_data.get("sharpe"))
+        fitness = _safe_float(is_data.get("fitness"))
+        returns_val = _safe_float(is_data.get("returns"))
+        turnover = _safe_float(is_data.get("turnover"))
+
+        rating = _fitness_to_grade(fitness)
+
         task["status"] = "completed"
         task["expression"] = req.expression
         task["result"] = {
             "expression": req.expression,
             "alpha_id": alpha_id,
-            "is_metrics": result.get("is", {}),
-            "oos_metrics": result.get("oos", {}),
+            "is_metrics": is_data,
+            "oos_metrics": oos_data,
             "settings": result.get("settings", {}),
             "checks": checks,
             "submittable": submittable,
             "submitted": submitted,
             "simulation_id": result.get("simulation_id"),
+            "backtest_summary": {
+                "long_short_sharpe": sharpe,
+                "wq_fitness": fitness,
+                "rank_ic_mean": None,
+                "turnover": turnover,
+                "wq_rating": rating,
+            },
+            "wq_brain": {
+                "wq_sharpe": sharpe,
+                "wq_fitness": fitness,
+                "wq_returns": returns_val,
+                "wq_turnover": turnover,
+                "wq_rating": rating,
+                "submittable": submittable,
+            },
+            "interpretation": {
+                "rating": rating,
+            },
         }
         logger.info(f"[{task_id}] WQ BRAIN completed: alpha_id={alpha_id} submittable={submittable}")
 
@@ -109,6 +158,8 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
         task["status"] = "failed"
         task["error"] = f"WQ BRAIN 提交异常: {e}"
     finally:
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
         try:
             persist_task_to_db(task_id, user_id, task)
         except Exception as e:

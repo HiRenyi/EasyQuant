@@ -217,6 +217,8 @@ def _run_strategy_backtest_task(
         task["status"] = "failed"
         task["error"] = "策略回测过程中发生内部错误"
     finally:
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
         try:
             _persist_task_to_db(task_id, user_id, task)
         except Exception as e:

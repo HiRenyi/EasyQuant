@@ -271,4 +271,4 @@ rank(roe / pe)
 ---
 
 > **QuantGPT** — 用一句中文，回测一个 A 股因子。
-> 在线体验：[https://quantgpt.online](https://quantgpt.online)
+> 本地运行：`http://localhost:8003`

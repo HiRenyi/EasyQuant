@@ -8,7 +8,7 @@ Usage from skill (via bash):
   import sys; sys.path.insert(0, '.')
   from scripts.factor_miner import evaluate
   import json
-  result = evaluate('https://quantgpt.online', 'rank(...)', {...})
+  result = evaluate('http://localhost:8003', 'rank(...)', {...})
   print(json.dumps(result, ensure_ascii=False) if result else '{\"error\": \"failed\"}')
   "
 """
@@ -21,7 +21,7 @@ from typing import Optional
 
 import requests
 
-DEFAULT_SERVER = "https://quantgpt.online"
+DEFAULT_SERVER = "http://localhost:8003"
 
 
 @dataclass

@@ -39,7 +39,7 @@ mcp = FastMCP(
     streamable_http_path="/",
     stateless_http=True,
     transport_security=TransportSecuritySettings(
-        allowed_hosts=["quantgpt.online", "www.quantgpt.online", "localhost", "localhost:8003", "127.0.0.1", "127.0.0.1:8003"],
+        allowed_hosts=["localhost", "localhost:8003", "127.0.0.1", "127.0.0.1:8003"],
     ),
 )
 

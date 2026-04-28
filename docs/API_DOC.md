@@ -264,7 +264,7 @@ Authorization: Bearer <access_token>
 **请求示例:**
 
 ```bash
-curl -X POST https://quantgpt.online/api/v1/auto_backtest \
+curl -X POST http://localhost:8003/api/v1/auto_backtest \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -559,7 +559,7 @@ es.addEventListener("done", (e) => {
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  https://quantgpt.online/api/v1/reports/backtest_report_20260321.html \
+  http://localhost:8003/api/v1/reports/backtest_report_20260321.html \
   -o report.html
 ```
 

@@ -41,7 +41,7 @@ Design 1–3 factor expressions based on research context and knowledge base:
 from scripts.factor_miner import batch_evaluate
 
 results = batch_evaluate(
-    server="https://quantgpt.online",
+    server="http://localhost:8003",
     expressions=[
         "rank(ts_delta(close, 5) / ts_shift(close, 5))",
         "rank(close / ts_mean(close, 10))",
@@ -203,7 +203,7 @@ from scripts.factor_miner import batch_evaluate, evaluate
 
 # Single factor evaluation
 result = evaluate(
-    server="https://quantgpt.online",
+    server="http://localhost:8003",
     expression="rank(ts_delta(close, 5) / ts_shift(close, 5))",
     params={"universe": "hs300", "holding_period": 5, "n_groups": 5},
 )
@@ -211,7 +211,7 @@ result = evaluate(
 
 # Batch evaluation (10-20 expressions, concurrent)
 results = batch_evaluate(
-    server="https://quantgpt.online",
+    server="http://localhost:8003",
     expressions=["rank(...)", "rank(...)", ...],
     params={...},
     max_concurrent=10,

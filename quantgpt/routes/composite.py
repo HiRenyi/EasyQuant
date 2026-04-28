@@ -232,6 +232,8 @@ def _run_composite_task(task_id: str, req: CompositeBacktestRequest, user_id: st
         task["status"] = "failed"
         task["error"] = f"多因子组合回测失败: {str(e)}"
     finally:
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
         try:
             _persist_task_to_db(task_id, user_id, task, report_filename)
         except Exception as e:

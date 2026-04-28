@@ -169,7 +169,7 @@ _CHARTS_DIR = Path(__file__).resolve().parent.parent / "reports" / "charts"
 _embedded_images: list[tuple[str, bytes]] = []
 
 # Base URL for chart images in emails
-_CHARTS_BASE_URL = "https://quantgpt.online/charts"
+_CHARTS_BASE_URL = "http://localhost:8003/charts"
 
 
 def _img_tag(fig: plt.Figure, alt: str = "") -> str:

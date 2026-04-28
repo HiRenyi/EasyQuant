@@ -112,7 +112,7 @@ HTML = _email_wrapper("""
 
 <!-- CTA -->
 <div style="text-align:center;margin:0 0 20px;">
-  <a href="https://quantgpt.online" style="display:inline-block;background:#f97316;color:#fff;padding:14px 40px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.5px;">
+  <a href="http://localhost:8003" style="display:inline-block;background:#f97316;color:#fff;padding:14px 40px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.5px;">
     立即体验 v2.5.0
   </a>
   <p style="color:#94a3b8;font-size:12px;margin:12px 0 0;">注册即可使用，完全免费</p>

@@ -140,7 +140,7 @@ async def send_feedback_resolved_email(email: str, feedback_id: str, description
     <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 16px;">
       欢迎回来试试看，如果还有其他想法或建议，随时告诉我们。
     </p>
-    <a href="https://quantgpt.online" style="display:inline-block;background:{_BRAND_COLOR};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">
+    <a href="http://localhost:8003" style="display:inline-block;background:{_BRAND_COLOR};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">
       打开 QuantGPT
     </a>""")
     await _send_email(email, "QuantGPT — 你的反馈已处理", html)
