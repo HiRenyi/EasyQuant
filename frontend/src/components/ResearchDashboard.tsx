@@ -48,8 +48,8 @@ export default function ResearchDashboard() {
 
   const hasActiveTasks = tasks.some((t) => t.status !== "completed" && t.status !== "failed");
   useEffect(() => {
-    if (!hasActiveTasks) return;
-    const id = setInterval(() => { loadStats(); loadTasks(); }, 5000);
+    const interval = hasActiveTasks ? 5000 : 15000;
+    const id = setInterval(() => { loadStats(); loadTasks(); }, interval);
     return () => clearInterval(id);
   }, [hasActiveTasks, loadStats, loadTasks]);
 

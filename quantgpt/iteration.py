@@ -17,7 +17,7 @@ from typing import Callable, Optional
 import numpy as np
 import pandas as pd
 
-from .backtest import run_factor_backtest
+from .backtest import run_factor_backtest, api_context
 from .expression_parser import parse_expression
 from .mutation_engine import MutationEngine
 from .meta_evolution import EvolutionStrategy, select_strategy
@@ -185,7 +185,8 @@ def _evaluate_candidate(
     """Run backtest + anti-overfit + report + score for a single expression."""
     n_groups = params.get("n_groups", 5)
     holding_period = params.get("holding_period", 5)
-    result = run_factor_backtest(market_df, expression, n_groups, holding_period)
+    with api_context():
+        result = run_factor_backtest(market_df, expression, n_groups, holding_period)
 
     # Fast anti-overfit (IC stability + half-life only)
     anti_overfit_result = None

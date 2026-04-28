@@ -10,7 +10,7 @@ from typing import Dict, List, Literal
 import pandas as pd
 
 from .expression_parser import parse_expression
-from .backtest import run_factor_backtest, _safe_apply_factor
+from .backtest import run_factor_backtest, _safe_apply_factor, api_context
 
 logger = logging.getLogger(__name__)
 
@@ -166,13 +166,14 @@ def run_composite_backtest(
     df["trade_date"] = pd.to_datetime(df["trade_date"])
     df = df.sort_values(["stock_code", "trade_date"])
 
-    result = run_factor_backtest(
-        df,
-        n_groups=n_groups,
-        holding_period=holding_period,
-        cost_rate=cost_rate,
-        precomputed_factor=composite_vals,
-    )
+    with api_context():
+        result = run_factor_backtest(
+            df,
+            n_groups=n_groups,
+            holding_period=holding_period,
+            cost_rate=cost_rate,
+            precomputed_factor=composite_vals,
+        )
 
     # 5. Compute factor correlation
     correlation = compute_factor_correlation(market_df, factors)

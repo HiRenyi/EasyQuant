@@ -23,7 +23,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from .expression_parser import ExpressionParser, parse_expression
 from .expression_parser import __doc__ as _expr_module_doc
 from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns, UNIVERSES, BENCHMARK_CODES
-from .backtest import run_factor_backtest
+from .backtest import run_factor_backtest, api_context
 from .report import generate_report
 from .fundamental_data import ALL_FUNDAMENTAL_NAMES
 from .mcp_tracking import track_mcp_result
@@ -193,9 +193,10 @@ def run_backtest(
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
         logger.info(f"Running backtest: {expression}")
-        result = run_factor_backtest(market_df, expression, n_groups, holding_period,
-                                     neutralize_industry=neutralize_industry,
-                                     neutralize_cap=neutralize_cap)
+        with api_context():
+            result = run_factor_backtest(market_df, expression, n_groups, holding_period,
+                                         neutralize_industry=neutralize_industry,
+                                         neutralize_cap=neutralize_cap)
 
         # Anti-overfit analysis
         anti_overfit_result = None
@@ -311,9 +312,10 @@ def score_factor(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, n_groups, holding_period,
-                                     neutralize_industry=neutralize_industry,
-                                     neutralize_cap=neutralize_cap)
+        with api_context():
+            result = run_factor_backtest(market_df, expression, n_groups, holding_period,
+                                         neutralize_industry=neutralize_industry,
+                                         neutralize_cap=neutralize_cap)
 
         bm_returns = None
         try:
@@ -466,9 +468,10 @@ def run_anti_overfit(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
-                                     neutralize_industry=neutralize_industry,
-                                     neutralize_cap=neutralize_cap)
+        with api_context():
+            result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
+                                         neutralize_industry=neutralize_industry,
+                                         neutralize_cap=neutralize_cap)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for anti-overfit analysis."})
@@ -528,9 +531,10 @@ def run_rolling_validation(
 
         market_df = _enrich_with_fundamentals(expression, market_df, stock_codes, start_date, end_date)
 
-        result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
-                                     neutralize_industry=neutralize_industry,
-                                     neutralize_cap=neutralize_cap)
+        with api_context():
+            result = run_factor_backtest(market_df, expression, holding_period=holding_period, cost_rate=0,
+                                         neutralize_industry=neutralize_industry,
+                                         neutralize_cap=neutralize_cap)
         factor_df = result.get("_factor_df")
         if factor_df is None or len(factor_df) < 100:
             return json.dumps({"error": "Insufficient factor data for rolling validation."})

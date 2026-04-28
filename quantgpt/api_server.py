@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .expression_parser import parse_expression
 from .expression_parser import __doc__ as _expr_module_doc
 from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns
-from .backtest import run_factor_backtest
+from .backtest import run_factor_backtest, api_context
 from .report import generate_report
 from .iteration import compute_factor_score, generate_iteration_candidates
 from .db import get_db, init_db, close_db
@@ -939,10 +939,11 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         # 4. Run backtest
         _check_cancelled(task_id)
         task["status"] = "backtesting"
-        result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
-                                     neutralize_industry=req.neutralize_industry,
-                                     neutralize_cap=req.neutralize_cap,
-                                     trading_days_per_year=252)
+        with api_context():
+            result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
+                                         neutralize_industry=req.neutralize_industry,
+                                         neutralize_cap=req.neutralize_cap,
+                                         trading_days_per_year=252)
 
         # 4a. Anti-overfit analysis
         _check_cancelled(task_id)

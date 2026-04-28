@@ -15,7 +15,14 @@ os.environ.setdefault("QUANTGPT_ADMIN_PASSWORD", "test-admin-pw")
 
 from quantgpt.models import Base, User
 from quantgpt.auth import hash_password, create_access_token
+from quantgpt.backtest import api_context
 from quantgpt import db as db_module
+
+
+@pytest.fixture(autouse=True)
+def _enable_api_context():
+    with api_context():
+        yield
 
 
 @pytest_asyncio.fixture

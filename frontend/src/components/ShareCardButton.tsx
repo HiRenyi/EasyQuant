@@ -196,7 +196,7 @@ function drawShareCard(canvas: HTMLCanvasElement, result: BacktestResult) {
   ctx.fillText(footer, 24, H - 16);
   ctx.fillStyle = "#64748b";
   ctx.textAlign = "right";
-  ctx.fillText("quantgpt.online", W - 24, H - 16);
+  ctx.fillText("QuantGPT", W - 24, H - 16);
   ctx.textAlign = "left";
 }
 

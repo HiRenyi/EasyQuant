@@ -43,11 +43,23 @@ def wq_simulate(
     daily_pnl = []
     turnovers = []
     current_weights = None
+    pending_weights = None
     prev_weights = None
     max_weight = 0.0
 
     for date in dates:
         day_data = work_df[work_df["trade_date"] == date]
+
+        if pending_weights is not None:
+            prev_weights = current_weights
+            current_weights = pending_weights
+            pending_weights = None
+
+            if prev_weights is not None:
+                all_stocks = prev_weights.index.union(current_weights.index)
+                old_w = prev_weights.reindex(all_stocks, fill_value=0)
+                new_w = current_weights.reindex(all_stocks, fill_value=0)
+                turnovers.append(float((new_w - old_w).abs().sum() / 2))
 
         if date in rebal_set:
             factor_vals = day_data.set_index("stock_code")["factor_value"].dropna()
@@ -60,16 +72,8 @@ def wq_simulate(
                 continue
             weights = weights / total_abs
 
-            prev_weights = current_weights
-            current_weights = weights
-
             max_weight = max(max_weight, float(weights.abs().max()))
-
-            if prev_weights is not None:
-                all_stocks = prev_weights.index.union(current_weights.index)
-                old_w = prev_weights.reindex(all_stocks, fill_value=0)
-                new_w = current_weights.reindex(all_stocks, fill_value=0)
-                turnovers.append(float((new_w - old_w).abs().sum() / 2))
+            pending_weights = weights
 
         if current_weights is None:
             continue
@@ -169,10 +173,15 @@ def _sub_universe_sharpe(
         sub_df = work_df[work_df["stock_code"].isin(stock_set)]
         dates = sorted(sub_df["trade_date"].unique())
         current_weights = None
+        pending_weights = None
         daily_pnl = []
 
         for date in dates:
             day_data = sub_df[sub_df["trade_date"] == date]
+
+            if pending_weights is not None:
+                current_weights = pending_weights
+                pending_weights = None
 
             if date in rebal_set:
                 factor_vals = day_data.set_index("stock_code")["factor_value"].dropna()
@@ -182,7 +191,7 @@ def _sub_universe_sharpe(
                 total_abs = weights.abs().sum()
                 if total_abs < 1e-12:
                     continue
-                current_weights = weights / total_abs
+                pending_weights = weights / total_abs
 
             if current_weights is None:
                 continue

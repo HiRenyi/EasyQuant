@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .backtest import run_factor_backtest
+from .backtest import run_factor_backtest, api_context
 from .expression_parser import parse_expression
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,8 @@ def compute_factor_attribution(
         expr = sf["expression"]
         label = sf.get("label", f"Factor_{i+1}")
         try:
-            result = run_factor_backtest(market_df, expr, n_groups, holding_period)
+            with api_context():
+                result = run_factor_backtest(market_df, expr, n_groups, holding_period)
             factor_results.append({
                 "expression": expr,
                 "label": label,
@@ -86,7 +87,8 @@ def compute_factor_attribution(
     composite_result = None
     if composite_expression:
         try:
-            result = run_factor_backtest(market_df, composite_expression, n_groups, holding_period)
+            with api_context():
+                result = run_factor_backtest(market_df, composite_expression, n_groups, holding_period)
             composite_result = {
                 "expression": composite_expression,
                 "sharpe": result.get("long_short_sharpe", 0),

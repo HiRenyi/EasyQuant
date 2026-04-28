@@ -6,6 +6,7 @@ returns per group. The strategy return is the top group's daily return.
 """
 
 import logging
+import threading
 from typing import Dict, List
 
 import numpy as np
@@ -17,6 +18,35 @@ from .market_data import MarketDataFetcher
 from .wq_simulate import wq_simulate
 
 logger = logging.getLogger(__name__)
+
+_api_context = threading.local()
+
+
+def _require_api_context():
+    if not getattr(_api_context, "active", False):
+        raise RuntimeError(
+            "run_factor_backtest must be called through the API task system. "
+            "Direct calls are forbidden. Submit via /api/v1/auto_backtest."
+        )
+
+
+def enable_api_context():
+    _api_context.active = True
+
+
+def disable_api_context():
+    _api_context.active = False
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def api_context():
+    enable_api_context()
+    try:
+        yield
+    finally:
+        disable_api_context()
 
 
 def run_factor_backtest(
@@ -31,6 +61,8 @@ def run_factor_backtest(
     trading_days_per_year: int = 252,
 ) -> Dict:
     """Run quantile group backtest on a factor expression (long-only).
+
+    IMPORTANT: Must be called through API task system. Direct calls raise RuntimeError.
 
     Strategy: on each rebalance date (every holding_period trading days),
     rank all stocks by factor value, split into n_groups quantile groups,
@@ -52,6 +84,8 @@ def run_factor_backtest(
         Dict with keys: strategy_returns (daily Series), group_returns,
         top_group_sharpe, monotonicity_score, spread, cost_adjusted, etc.
     """
+    _require_api_context()
+
     # 1. Compute factor values
     market_df = market_df.copy()
     market_df["trade_date"] = pd.to_datetime(market_df["trade_date"])
@@ -305,7 +339,10 @@ def run_factor_backtest(
         wq_fitness = float(ls_sharpe * np.sqrt(abs(ls_annual) / effective_turnover))
 
     # 13. WQ BRAIN dollar-neutral simulation (continuous weights, WQ-aligned metrics)
-    wq_brain = wq_simulate(work, rebalance_dates_set, trading_days_per_year)
+    wq_work = work[["trade_date", "stock_code", "factor_value", "daily_ret"]].copy()
+    if flipped:
+        wq_work["factor_value"] = -wq_work["factor_value"]
+    wq_brain = wq_simulate(wq_work, rebalance_dates_set, trading_days_per_year)
 
     return {
         "strategy_returns": strategy_series,

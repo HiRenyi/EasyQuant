@@ -52,7 +52,7 @@ async def compare_factors(
 
     返回各因子的核心指标 + 相关性矩阵 + Top组逐日累计收益序列。
     """
-    from ..backtest import run_factor_backtest
+    from ..backtest import run_factor_backtest, api_context
     from ..composite import compute_factor_correlation
 
     # 1. Fetch data once
@@ -83,9 +83,10 @@ async def compare_factors(
     for f in req.factors:
         label = f.label or f.expression[:40]
         try:
-            bt = run_factor_backtest(
-                market_df, f.expression, req.n_groups, req.holding_period
-            )
+            with api_context():
+                bt = run_factor_backtest(
+                    market_df, f.expression, req.n_groups, req.holding_period
+                )
             # Extract top-group cumulative returns as list
             cum_ret = (1 + bt["strategy_returns"]).cumprod()
             cum_ret_list = [

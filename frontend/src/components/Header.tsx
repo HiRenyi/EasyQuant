@@ -233,7 +233,7 @@ function McpGuideModal({ onClose }: { onClose: () => void }) {
   const openclawNativeCode = `from openclaw.tools.mcp import MCPClient
 
 client = MCPClient(
-    server_url="https://quantgpt.online/mcp"
+    server_url="http://localhost:8002/mcp"
 )
 
 agent = Agent(
@@ -244,7 +244,7 @@ agent = Agent(
 
 def backtest_tool(expression: str, **kwargs):
     return requests.post(
-        "https://quantgpt.online/mcp",
+        "http://localhost:8002/mcp",
         json={"expression": expression, **kwargs}
     ).json()
 
@@ -380,7 +380,7 @@ agent.register_tool(backtest_tool)`;
       ↓
 [MCP Client]
       ↓  Streamable HTTP
-[QuantGPT MCP Server (quantgpt.online)]
+[QuantGPT MCP Server (localhost:8002)]
       ↓
 [回测 / 评分 / 诊断 / 验证]`}</pre>
               </div>
@@ -391,7 +391,7 @@ agent.register_tool(backtest_tool)`;
                   <span className={`h-5 w-5 rounded-full ${isDark ? "bg-gray-100" : "bg-gray-900"} ${isDark ? "text-gray-900" : "text-white"} text-xs flex items-center justify-center font-medium`}>1</span>
                   <h3 className={`text-sm font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>在 Agent 中接入</h3>
                 </div>
-                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5`}>MCP 端点地址：<code className={`${isDark ? "bg-gray-800" : "bg-gray-100"} px-1 rounded`}>https://quantgpt.online/mcp</code></p>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5`}>MCP 端点地址：<code className={`${isDark ? "bg-gray-800" : "bg-gray-100"} px-1 rounded`}>http://localhost:8002/mcp</code></p>
                 <div className="space-y-3">
                   <div>
                     <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mb-1.5 font-medium`}>方式 A：原生 MCP Client（推荐）</p>
