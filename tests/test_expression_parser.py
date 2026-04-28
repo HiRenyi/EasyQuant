@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from quantgpt.expression_parser import parse_expression
+from quantgpt.expression_parser import (
+    extract_components,
+    normalize_expression,
+    parse_expression,
+)
 
 
 @pytest.fixture
@@ -323,3 +327,129 @@ class TestAdvPerStock:
             assert result.iloc[first_idx] == pytest.approx(df.loc[first_idx, "volume"]), (
                 f"First row of {stock} adv5 should equal its own volume, not previous stock's"
             )
+
+
+class TestWQMode:
+    def test_wq_accepts_standard_operators(self):
+        fn = parse_expression("rank(close)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_extended_fields(self):
+        fn = parse_expression("rank(earnings)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_mdf_fields(self):
+        fn = parse_expression("rank(mdf_oey)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_options_fields(self):
+        fn = parse_expression("rank(implied_volatility)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_news_prefix_fields(self):
+        fn = parse_expression("rank(nws12_afterhsz_sl)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_sentiment_fields(self):
+        fn = parse_expression("rank(snt_buzz_ret)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_accepts_relationship_fields(self):
+        fn = parse_expression("rank(short_interest)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_vector_neut(self):
+        fn = parse_expression("vector_neut(rank(close), adv20)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_pasteurize(self):
+        fn = parse_expression("pasteurize(rank(close))", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_ts_regression(self):
+        fn = parse_expression("ts_regression(close, volume, 20, 1, 2)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_vec_avg(self):
+        fn = parse_expression("vec_avg(close, open)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_humpdecay(self):
+        fn = parse_expression("humpdecay(close, 5)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_days_from_last_change(self):
+        fn = parse_expression("days_from_last_change(volume)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_indneutralize(self):
+        fn = parse_expression("indneutralize(close, IndClass.industry)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_remote_only_rejected_in_local(self):
+        with pytest.raises(ValueError, match="仅在 WQ 模式"):
+            parse_expression("vector_neut(close, adv20)", mode="local")
+
+    def test_wq_remote_stub_raises_on_execution(self, sample_df):
+        fn = parse_expression("pasteurize(close)", mode="wq")
+        with pytest.raises(RuntimeError, match="仅支持 WQ BRAIN 远程执行"):
+            fn(sample_df)
+
+    def test_wq_extended_field_stub_raises_on_execution(self, sample_df):
+        fn = parse_expression("rank(earnings)", mode="wq")
+        with pytest.raises(RuntimeError, match="WQ 字段.*无本地数据"):
+            fn(sample_df)
+
+    def test_wq_rejects_local_only_operator(self):
+        with pytest.raises(ValueError, match="WQ 模式下不支持算子"):
+            parse_expression("tanh(close)", mode="wq")
+
+    def test_wq_rejects_local_only_column(self):
+        with pytest.raises(ValueError, match="WQ 模式下不支持列"):
+            parse_expression("rank(amount)", mode="wq")
+
+    def test_wq_arg_count_validation(self):
+        with pytest.raises(ValueError, match="至少需要 2 个参数"):
+            parse_expression("vector_neut(close)", mode="wq")
+
+    def test_wq_complex_expression(self):
+        fn = parse_expression(
+            "vector_neut(rank(ts_decay_linear(close / vwap, 10)), adv20)",
+            mode="wq",
+        )
+        assert callable(fn)
+
+    def test_wq_group_neutralize(self):
+        fn = parse_expression("group_neutralize(close, IndClass.industry)", mode="wq")
+        assert callable(fn)
+
+
+class TestNormalizeExpression:
+    def test_whitespace_removed(self):
+        assert normalize_expression("rank( close )") == "rank(close)"
+
+    def test_aliases_normalized(self):
+        assert "ts_delta" in normalize_expression("delta(close, 5)")
+        assert "ts_shift" in normalize_expression("delay(close, 1)")
+
+    def test_case_insensitive(self):
+        assert normalize_expression("Rank(Close)") == normalize_expression("rank(close)")
+
+
+class TestExtractComponents:
+    def test_basic(self):
+        result = extract_components("rank(close / open)")
+        assert "rank" in result["operators"]
+        assert "close" in result["fields"]
+        assert "open" in result["fields"]
+
+    def test_nested(self):
+        result = extract_components("-1 * rank(ts_decay_linear(close / vwap, 10))")
+        assert "rank" in result["operators"]
+        assert "ts_decay_linear" in result["operators"]
+        assert "close" in result["fields"]
+        assert "vwap" in result["fields"]
+
+    def test_no_numeric_in_fields(self):
+        result = extract_components("ts_mean(close, 20)")
+        assert "20" not in result["fields"]

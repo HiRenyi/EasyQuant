@@ -115,6 +115,13 @@ def _extract_summary(result_str: str, task_type: str) -> dict | None:
             "submittable": data.get("submittable"),
             "submitted": data.get("submitted"),
         }
+    elif task_type == "mcp_wq_brain_batch":
+        return {
+            "total_combinations": data.get("total_combinations"),
+            "best_fitness": data.get("best_fitness"),
+            "best_key": data.get("best_key"),
+            "submittable_count": data.get("submittable_count"),
+        }
     return None
 
 

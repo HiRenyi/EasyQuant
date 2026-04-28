@@ -211,6 +211,34 @@ class PaperOrder(Base):
     strategy = relationship("PaperStrategy", back_populates="orders")
 
 
+class SubmittedAlpha(Base):
+    __tablename__ = "submitted_alphas"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    alpha_id = Column(String(50), nullable=False, index=True)
+    expression = Column(Text, nullable=False)
+    expression_normalized = Column(Text, nullable=True)
+    region = Column(String(10), nullable=False, default="USA")
+    universe = Column(String(20), nullable=False, default="TOP3000")
+    delay = Column(Integer, nullable=False, default=1)
+    decay = Column(Integer, nullable=False, default=0)
+    neutralization = Column(String(30), nullable=False, default="SUBINDUSTRY")
+    truncation = Column(Float, nullable=False, default=0.08)
+    sharpe = Column(Float, nullable=True)
+    fitness = Column(Float, nullable=True)
+    returns = Column(Float, nullable=True)
+    turnover = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="submitted")
+    submitted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_submitted_alphas_user_expr", "user_id", "expression_normalized"),
+    )
+
+
 class DailySummary(Base):
     __tablename__ = "daily_summaries"
 

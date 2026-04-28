@@ -205,15 +205,21 @@ class WQBrainClient:
                 return {}
         return {}
 
-    def check_alpha(self, alpha_id: str) -> dict:
-        r = self._get_session().get(f"{API_BASE}/alphas/{alpha_id}/check")
-        if r.status_code == 200:
-            try:
-                return r.json()
-            except Exception:
-                logger.warning(f"Empty/invalid JSON from /alphas/{alpha_id}/check")
-                return {}
-        return {"error": f"HTTP {r.status_code}: {r.text[:300]}"}
+    def check_alpha(self, alpha_id: str, retries: int = 3) -> dict:
+        for attempt in range(retries):
+            r = self._get_session().get(f"{API_BASE}/alphas/{alpha_id}/check")
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                    if data.get("is", {}).get("checks"):
+                        return data
+                    logger.info(f"Check {alpha_id}: empty checks (attempt {attempt+1}), retrying...")
+                except Exception:
+                    logger.warning(f"Invalid JSON from /alphas/{alpha_id}/check (attempt {attempt+1})")
+            else:
+                logger.warning(f"Check {alpha_id}: HTTP {r.status_code} (attempt {attempt+1})")
+            time.sleep(5 * (attempt + 1))
+        return {}
 
     def submit_alpha(self, alpha_id: str) -> dict:
         r = self._get_session().post(f"{API_BASE}/alphas/{alpha_id}/submit")
@@ -225,6 +231,8 @@ class WQBrainClient:
 
     def is_submittable(self, checks: dict) -> bool:
         is_checks = checks.get("is", {}).get("checks", [])
+        if not is_checks:
+            return False
         fails = [c for c in is_checks if c.get("result") == "FAIL"]
         pending = [c for c in is_checks if c.get("result") == "PENDING"]
         return len(fails) == 0 and len(pending) == 0

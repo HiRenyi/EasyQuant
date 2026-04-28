@@ -108,6 +108,19 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
             submit_result = client.submit_alpha(alpha_id)
             submitted = submit_result.get("ok", False)
 
+        if submitted and alpha_id:
+            try:
+                from ..alpha_tracker import record_submitted_alpha_sync
+                record_submitted_alpha_sync(
+                    user_id=user_id, alpha_id=alpha_id, expression=req.expression,
+                    region=req.region, universe=req.universe, delay=req.delay,
+                    decay=req.decay, neutralization=req.neutralization,
+                    truncation=req.truncation, sharpe=sharpe, fitness=fitness,
+                    returns=returns_val, turnover=turnover,
+                )
+            except Exception as e:
+                logger.warning(f"[{task_id}] alpha tracking failed: {e}")
+
         client.close()
 
         is_data = result.get("is", {})
@@ -213,6 +226,71 @@ async def wq_brain_submit(
     return {"task_id": task_id, "status": "pending"}
 
 
+@router.post("/pre-check")
+async def wq_brain_pre_check(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    body = await request.json()
+    expression = body.get("expression", "")
+    threshold = body.get("threshold", 0.85)
+    if not expression:
+        raise HTTPException(status_code=400, detail="expression is required")
+
+    from ..alpha_tracker import check_self_correlation
+    result = await check_self_correlation(str(user.id), expression, threshold=threshold)
+    return result
+
+
+@router.get("/submitted-alphas")
+async def list_submitted_alphas(
+    user: User = Depends(get_current_user),
+    limit: int = 50,
+    offset: int = 0,
+):
+    from sqlalchemy import func, select
+
+    from ..db import _get_session_factory
+    from ..models import SubmittedAlpha
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        count_q = await session.execute(
+            select(func.count()).where(SubmittedAlpha.user_id == user.id)
+        )
+        total = count_q.scalar() or 0
+
+        q = await session.execute(
+            select(SubmittedAlpha)
+            .where(SubmittedAlpha.user_id == user.id)
+            .order_by(SubmittedAlpha.submitted_at.desc())
+            .offset(offset)
+            .limit(min(limit, 100))
+        )
+        alphas = q.scalars().all()
+
+    return {
+        "total": total,
+        "alphas": [
+            {
+                "alpha_id": a.alpha_id,
+                "expression": a.expression,
+                "region": a.region,
+                "universe": a.universe,
+                "delay": a.delay,
+                "neutralization": a.neutralization,
+                "sharpe": a.sharpe,
+                "fitness": a.fitness,
+                "returns": a.returns,
+                "turnover": a.turnover,
+                "status": a.status,
+                "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
+            }
+            for a in alphas
+        ],
+    }
+
+
 @router.post("/{task_id}/submit-alpha")
 async def submit_alpha_from_task(
     task_id: str,
@@ -243,6 +321,23 @@ async def submit_alpha_from_task(
 
     if submit_result.get("ok"):
         task["result"]["submitted"] = True
+        try:
+            from ..alpha_tracker import record_submitted_alpha_sync
+            params = task.get("params", {})
+            is_metrics = result.get("is_metrics", {})
+            record_submitted_alpha_sync(
+                user_id=user_id, alpha_id=alpha_id, expression=result.get("expression", ""),
+                region=params.get("region", "USA"), universe=params.get("universe", "TOP3000"),
+                delay=params.get("delay", 1), decay=params.get("decay", 0),
+                neutralization=params.get("neutralization", "SUBINDUSTRY"),
+                truncation=params.get("truncation", 0.08),
+                sharpe=_safe_float(is_metrics.get("sharpe")),
+                fitness=_safe_float(is_metrics.get("fitness")),
+                returns=_safe_float(is_metrics.get("returns")),
+                turnover=_safe_float(is_metrics.get("turnover")),
+            )
+        except Exception as e:
+            logger.warning(f"Alpha tracking failed for manual submit: {e}")
 
     return {
         "alpha_id": alpha_id,

@@ -70,7 +70,7 @@ class TestWQBrainClient:
 
     def test_is_submittable_empty(self):
         c = WQBrainClient(email="a", password="b")
-        assert c.is_submittable({}) is True
+        assert c.is_submittable({}) is False
 
     @patch("quantgpt.wq_brain_client.httpx.Client")
     def test_authenticate_success(self, mock_client_cls):
@@ -142,6 +142,40 @@ class TestWQBrainSubmitEndpoint:
                 data = resp.json()
                 assert "task_id" in data
                 assert data["status"] == "pending"
+
+
+class TestPreCheckEndpoint:
+    async def test_pre_check_requires_auth(self, client):
+        resp = await client.post("/api/v1/wq-brain/pre-check", json={
+            "expression": "rank(close)",
+        })
+        assert resp.status_code in (401, 403)
+
+    async def test_pre_check_requires_expression(self, client, test_user, auth_headers):
+        resp = await client.post("/api/v1/wq-brain/pre-check", json={}, headers=auth_headers)
+        assert resp.status_code == 400
+
+    async def test_pre_check_returns_safe_when_no_alphas(self, client, test_user, auth_headers):
+        resp = await client.post("/api/v1/wq-brain/pre-check", json={
+            "expression": "rank(close)",
+        }, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["safe"] is True
+        assert data["total_submitted"] == 0
+
+
+class TestSubmittedAlphasEndpoint:
+    async def test_list_requires_auth(self, client):
+        resp = await client.get("/api/v1/wq-brain/submitted-alphas")
+        assert resp.status_code in (401, 403)
+
+    async def test_list_returns_empty(self, client, test_user, auth_headers):
+        resp = await client.get("/api/v1/wq-brain/submitted-alphas", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["alphas"] == []
 
 
 class TestSubmitAlphaEndpoint:

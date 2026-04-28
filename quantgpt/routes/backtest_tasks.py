@@ -508,6 +508,7 @@ async def list_tasks(
     session_id: str | None = Query(None, description="按会话 ID 过滤"),
     task_type: str | None = Query(None, description="按任务类型过滤: backtest / strategy_backtest / iteration"),
     status: str | None = Query(None, description="按状态过滤: completed / failed / pending"),
+    rating: str | None = Query(None, description="按评级过滤: A / B / C / D"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -528,6 +529,11 @@ async def list_tasks(
                         if t_status in ("completed", "failed"):
                             continue
                     elif t_status != status:
+                        continue
+                if rating is not None:
+                    r = t.get("result", {}) or {}
+                    t_rating = (r.get("interpretation", {}) or {}).get("rating") or (r.get("backtest_summary", {}) or {}).get("wq_rating", "")
+                    if t_rating != rating:
                         continue
                 safe = {k: v for k, v in t.items() if k not in ("user_id",)}
                 memory_tasks.append(safe)
@@ -550,7 +556,7 @@ async def list_tasks(
             dur = None
             if dt.status in ("completed", "failed", "cancelled", "iteration_completed") and dt.created_at and dt.updated_at:
                 dur = round((dt.updated_at - dt.created_at).total_seconds(), 1)
-            merged.append({
+            task_dict = {
                 "task_id": dt.id,
                 "status": dt.status,
                 "task_type": dt.task_type,
@@ -562,7 +568,13 @@ async def list_tasks(
                 "created_at": dt.created_at.isoformat() if dt.created_at else None,
                 "completed_at": dt.updated_at.isoformat() if dt.status in ("completed", "failed", "cancelled", "iteration_completed") and dt.updated_at else None,
                 "duration_seconds": dur,
-            })
+            }
+            if rating is not None:
+                r = task_dict.get("result", {}) or {}
+                t_rating = (r.get("interpretation", {}) or {}).get("rating") or (r.get("backtest_summary", {}) or {}).get("wq_rating", "")
+                if t_rating != rating:
+                    continue
+            merged.append(task_dict)
 
     def _sort_key(t: dict) -> float:
         ca = t.get("created_at")

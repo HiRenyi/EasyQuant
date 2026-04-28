@@ -632,6 +632,175 @@ async def wq_brain_submit(
                          _result_str, _error_msg, time.monotonic() - _start)
 
 
+@mcp.tool()
+async def wq_brain_pre_check(
+    expression: str,
+    threshold: float = 0.85,
+) -> str:
+    """提交前自相关检查 — 检测新表达式是否与已提交的 alpha 过于相似。
+
+    WQ BRAIN 会拒绝与已提交 alpha 高度相关的新提交。此工具在提交前扫描
+    已记录的 alpha 库，找出相似表达式，避免浪费提交额度。
+
+    Args:
+        expression: 待检查的 FASTEXPR 表达式
+        threshold: 相似度阈值 (0-1, 默认 0.85)
+
+    Returns:
+        JSON with safe (bool), matches (similar alphas), total_submitted count.
+    """
+    from .alpha_tracker import check_self_correlation
+    from .mcp_tracking import MCP_USER_ID
+
+    try:
+        result = await check_self_correlation(MCP_USER_ID, expression, threshold=threshold)
+        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        logger.error(f"WQ pre-check failed: {traceback.format_exc()}")
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+async def wq_brain_batch_submit(
+    expression: str,
+    regions: list[str] | None = None,
+    delays: list[int] | None = None,
+    universes: list[str] | None = None,
+    neutralizations: list[str] | None = None,
+    decay: int = 0,
+    truncation: float = 0.08,
+    auto_submit: bool = False,
+) -> str:
+    """批量扫描因子表达式在多个参数组合下的 WQ BRAIN 表现。
+
+    在 region × delay × universe × neutralization 的网格上逐一模拟，
+    返回每个组合的 IS 指标和最优组合。适合找出同一表达式的最佳参数。
+
+    Args:
+        expression: FASTEXPR 表达式
+        regions: 市场区域列表 (默认 ["USA"])
+        delays: 信号延迟列表 (默认 [1])
+        universes: Universe 列表 (默认 ["TOP3000"])
+        neutralizations: 中性化列表 (默认 ["SUBINDUSTRY"])
+        decay: Alpha 衰减 (0-20, 共用)
+        truncation: 权重截断 (0-0.5, 共用)
+        auto_submit: 全部检查通过时自动提交
+
+    Returns:
+        JSON with per-combination results, best_fitness, submittable_count.
+    """
+    from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
+    try:
+        if not _wq_configured():
+            _result_str = json.dumps({"error": "WQ BRAIN 未配置 — 请设置 WQ_BRAIN_EMAIL 和 WQ_BRAIN_PASSWORD"})
+            return _result_str
+
+        regions = regions or ["USA"]
+        delays = delays or [1]
+        universes = universes or ["TOP3000"]
+        neutralizations = neutralizations or ["SUBINDUSTRY"]
+
+        import itertools
+        combos = list(itertools.product(regions, delays, universes, neutralizations))
+        if len(combos) > 36:
+            _result_str = json.dumps({"error": f"组合数 {len(combos)} 超过上限 36"})
+            return _result_str
+
+        client = WQBrainClient()
+        authenticated = await asyncio.to_thread(client.authenticate)
+        if not authenticated:
+            _result_str = json.dumps({"error": "WQ BRAIN 认证失败"})
+            return _result_str
+
+        best_fitness = -999
+        best_key = None
+        submittable_count = 0
+        sub_results = {}
+
+        for region, delay, universe, neut in combos:
+            key = f"{region}_D{delay}_{universe}_{neut}"
+
+            result = await asyncio.to_thread(
+                client.simulate,
+                expression, region=region, universe=universe,
+                delay=delay, decay=decay, neutralization=neut,
+                truncation=truncation,
+            )
+
+            sub = {"key": key, "region": region, "delay": delay, "universe": universe, "neutralization": neut}
+
+            if not result.get("ok"):
+                sub["status"] = "failed"
+                sub["error"] = result.get("error", "unknown")
+            else:
+                alpha_id = result.get("alpha_id")
+                is_data = result.get("is", {})
+                checks = {}
+                submittable = False
+                if alpha_id:
+                    checks = await asyncio.to_thread(client.check_alpha, alpha_id)
+                    submittable = client.is_submittable(checks)
+
+                submitted = False
+                if auto_submit and submittable and alpha_id:
+                    submit_result = await asyncio.to_thread(client.submit_alpha, alpha_id)
+                    submitted = submit_result.get("ok", False)
+
+                def _safe_float(val):
+                    if val is None:
+                        return None
+                    try:
+                        return float(val)
+                    except (TypeError, ValueError):
+                        return None
+
+                fitness = _safe_float(is_data.get("fitness"))
+                sub["status"] = "completed"
+                sub["alpha_id"] = alpha_id
+                sub["sharpe"] = _safe_float(is_data.get("sharpe"))
+                sub["fitness"] = fitness
+                sub["returns"] = _safe_float(is_data.get("returns"))
+                sub["turnover"] = _safe_float(is_data.get("turnover"))
+                sub["submittable"] = submittable
+                sub["submitted"] = submitted
+
+                if submittable:
+                    submittable_count += 1
+                if fitness is not None and fitness > best_fitness:
+                    best_fitness = fitness
+                    best_key = key
+
+            sub_results[key] = sub
+
+        await asyncio.to_thread(client.close)
+
+        output = {
+            "expression": expression,
+            "total_combinations": len(combos),
+            "best_fitness": round(best_fitness, 4) if best_fitness > -999 else None,
+            "best_key": best_key,
+            "submittable_count": submittable_count,
+            "sub_results": sub_results,
+        }
+        _result_str = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        return _result_str
+
+    except Exception as e:
+        logger.error(f"WQ BRAIN batch failed: {traceback.format_exc()}")
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_wq_brain_batch", expression,
+                         {"regions": regions, "delays": delays, "universes": universes,
+                          "neutralizations": neutralizations},
+                         _result_str, _error_msg, time.monotonic() - _start)
+
+
 # Operator documentation fallback
 _OPERATORS_DOC = """
 因子表达式操作符:

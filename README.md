@@ -2,9 +2,9 @@
 
 # QuantGPT
 
-**Automated Alpha Signal Factory — From Natural Language to BRAIN-Ready Factors in 2 Minutes**
+**Agent-Driven LLM Quant Research Engine — Autonomous Factor Mining at WorldQuant BRAIN Submission Quality**
 
-自然语言描述 → AI 因子设计 → 全市场回测 → 多维评分 → WorldQuant BRAIN 直接验证 | 370+ 回测任务实战验证
+LLM Agent 自治因子挖矿 → 批量回测 → 多维评分 → 反过拟合验证 → WQ BRAIN 自动提交 | 全程零人工干预
 
 [![CI](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml/badge.svg)](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
@@ -23,17 +23,50 @@
 
 ---
 
-## Why This Project Matters
+## What Is QuantGPT
 
-QuantGPT is the factor research engine extracted from a production multi-factor research infrastructure, focused on the most time-consuming part of quant research: **factor discovery and validation**.
+QuantGPT is an **agent-driven factor research engine** — not a backtest library, not a chatbot wrapper. It gives an LLM Agent (Claude, via MCP) a complete toolkit to autonomously discover, evaluate, iterate, and submit alpha factors to WorldQuant BRAIN, with zero human intervention per research cycle.
 
-传统因子研究的"构思→编码→回测→评估"流程通常需要数小时。QuantGPT 将其压缩到 **2 分钟以内**：
+The core architecture:
 
 ```
-"找一个基于价量背离的短期反转因子"
+LLM Agent (Claude Code / Claude Desktop)
+    │
+    ├── MCP Tools (8 个)          ← Agent 的工具箱
+    │   ├── run_backtest           ← 全市场分组回测
+    │   ├── score_factor           ← 0-100 综合评分
+    │   ├── diagnose_factor        ← 失败模式诊断
+    │   ├── run_anti_overfit       ← 4 项反过拟合检验
+    │   ├── run_rolling_validation ← Walk-forward 验证
+    │   ├── validate_expression    ← 语法校验
+    │   ├── list_operators         ← 50+ 算子文档
+    │   └── list_universes         ← 股票池和基准
+    │
+    ├── Evolution Engine           ← 因子进化引擎
+    │   ├── MutationEngine (8 方向突变)
+    │   ├── CrossoverEngine (高分因子交叉)
+    │   ├── MetaEvolutionSelector (自适应策略)
+    │   └── TrajectoryAnalyzer (轨迹分析)
+    │
+    ├── WQ BRAIN Integration       ← WorldQuant 直连
+    │   ├── Dollar-neutral 模拟
+    │   ├── IS 检测对齐
+    │   ├── Fitness 评分
+    │   └── 一键正式提交
+    │
+    └── Knowledge Base             ← 跨会话知识积累
+        ├── rules/    (已验证规则)
+        ├── findings/ (经验发现)
+        └── failures/ (已证伪路径)
 ```
 
-一句自然语言输入，系统自动完成：LLM 因子设计 → 表达式生成 → A 股全市场回测 → 多维度评分 → 反过拟合检测 → HTML 报告输出。全程零代码、零人工干预。
+### How It Differs from "AI Backtest Tools"
+
+传统工具（包括 ChatGPT + 回测库）的模式是：**人类想因子 → 工具跑回测 → 人类看结果**。Agent 是执行者，人类是决策者。
+
+QuantGPT 的模式是：**人类定义目标 → Agent 自治研究 → 人类审阅产出**。Agent 是研究者，人类是审阅者。
+
+这不是接口层的区别（自然语言 vs. 代码），而是**决策权**的区别。Agent 自主决定：探索哪个方向、生成什么表达式、评估哪些指标、何时迭代、何时放弃、何时提交。
 
 ### Production Track Record
 
@@ -41,16 +74,13 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
 |:-------|:------|
 | 累计回测任务 | **370+** |
 | 单轮迭代（8 候选因子） | **~15 分钟** |
-| 自然语言 → 完整报告 | **< 2 分钟** |
 | 表达式算子标准 | **WorldQuant BRAIN 对齐** |
 | BRAIN 正式提交 | **Fitness 1.07, IS 全部 PASS, 已提交** |
 | WQ BRAIN 集成 | **内置 API — 一键模拟 + 自动提交** |
 
-所有因子表达式采用 WorldQuant BRAIN 算子标准。QuantGPT 已内置 WQ BRAIN API 集成，**从因子设计到 BRAIN 正式提交全程自动化**，无需手动登录平台。首个因子已通过全部 IS 检测并正式提交（alpha_id: `78aAQjoL`）。
-
 ---
 
-## Validated Results — First Factor Officially Submitted to BRAIN
+## Validated Results — First Factor Submitted to BRAIN
 
 经过系统化参数优化（9 个变体网格搜索），首个因子已**通过 WQ BRAIN 全部 IS 检测并正式提交**：
 
@@ -60,14 +90,14 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
 | Price-Volume Divergence (5d) | `-1 * rank(ts_corr(close, volume, 5))` | 1.73 | 0.60 | 6/7 PASS | Validated |
 | Dual Divergence Composite | `rank(-1*ts_corr(close,volume,5))*rank(-1*ts_corr(high,volume,10))` | 1.20 | 0.41 | 6/7 PASS | Validated |
 
-> **VWAP Decay Reversal** 是 QuantGPT 首个正式提交 BRAIN 的因子（alpha_id: `78aAQjoL`）。突破关键：将中性化从 SUBINDUSTRY 切到 MARKET，Fitness 从 0.88 → 1.07，Returns 从 14.51% → 18.63%。全程通过 QuantGPT 内置 WQ BRAIN API 完成，无需手动登录平台。
+> **VWAP Decay Reversal** 是 QuantGPT Agent 流程产出的首个正式提交因子（alpha_id: `78aAQjoL`）。突破关键：将中性化从 SUBINDUSTRY 切到 MARKET，Fitness 从 0.88 → 1.07。全程通过 Agent 驱动完成。
 
 <p align="center">
   <img src="example_factor/4-1.png" width="49%" alt="WQ BRAIN PnL — VWAP Decay Reversal (Submitted)" />
   <img src="example_factor/4-2.png" width="49%" alt="WQ BRAIN IS Summary — VWAP Decay Reversal (Submitted)" />
 </p>
 <p align="center">
-  <sub>VWAP Decay Reversal — 已正式提交：Sharpe 1.69, Fitness 1.07, IS 全部 PASS，逐年 Sharpe 全正（2019: 2.35, 2020: 3.43, 2021: 1.95, 2022: 0.83, 2023: 1.26）</sub>
+  <sub>VWAP Decay Reversal — 已正式提交：Sharpe 1.69, Fitness 1.07, IS 全部 PASS</sub>
 </p>
 
 <p align="center">
@@ -88,13 +118,13 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
 
 ---
 
-## AI Factor Mining — Autonomous Research Loop
+## Autonomous Factor Mining — The Core Loop
 
-> **This is what makes QuantGPT fundamentally different from every other quant tool.**
+> **This is QuantGPT's defining capability.**
 >
-> 传统工具给你一个回测引擎，然后说"去写因子吧"。QuantGPT 给你一个**自主研究员**——它读文献、设计假设、批量实验、分析结果、积累知识、自我迭代，而且每个结论都经过双模型交叉验证。
+> Agent 读知识库、设计假设、批量实验、分析结果、积累知识、自我迭代，每个结论经过双模型交叉验证。一个研究循环产出经过验证的、可提交 WQ BRAIN 的因子。
 
-### How It Works
+### Research Cycle
 
 ```
                     ┌─────────────────────────────┐
@@ -137,18 +167,6 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
           └──────────────────┘
 ```
 
-### Why This Matters — Competitive Comparison
-
-| Capability | Manual Research | ChatGPT + Backtest | **QuantGPT Factor Mining** |
-|:-----------|:--------------:|:------------------:|:--------------------------:|
-| Factor design | Human | Single LLM, one-shot | **LLM + knowledge base + hypothesis-driven** |
-| Experiment scale | 1-3 per hour | 1-3 per session | **10-20 concurrent per batch** |
-| Anti-bias | Researcher's judgment | None | **Dual-LLM cross-review (mandatory)** |
-| Knowledge accumulation | Personal notes | Lost between sessions | **Structured KB: rules / findings / failures** |
-| Checkpoint & resume | Manual | Start over | **Auto-detect unfinished directions** |
-| Research discipline | Varies by person | None enforced | **Control variables, no repeats, record failures** |
-| Convergence detection | Intuition | None | **Auto-stop after N rounds without improvement** |
-
 ### Key Mechanisms
 
 <table>
@@ -157,7 +175,7 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
 
 **Dual-LLM Cross-Review**
 
-每个结论性判断（采用/不采用/关闭方向）必须经过第二个 LLM 独立评审。不是简单的"再问一遍"——是把事实数据和第一个模型的推理链一起发给 DeepSeek Reasoner，要求它独立评估推理是否合理、是否有遗漏角度。
+每个结论性判断（采用/不采用/关闭方向）必须经过第二个 LLM 独立评审。把事实数据和第一个模型的推理链一起发给 DeepSeek Reasoner，要求独立评估推理是否合理、是否有遗漏角度。
 
 共识 → 直接输出。分歧 → 呈现双方证据，采用更保守结论。
 
@@ -220,48 +238,48 @@ results = batch_evaluate(
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        QuantGPT Platform                        │
-├──────────┬──────────────────────────────┬───────────────────────┤
-│          │          Core Engine         │                       │
-│  Client  │  ┌──────────────────────┐   │   Data Layer          │
-│  Layer   │  │  Expression Parser   │   │  ┌─────────────────┐  │
-│          │  │  50+ operators       │   │  │ baostock (free)  │  │
-│ Web SPA  │  │  WQ BRAIN compatible │   │  │ akshare (free)   │  │
-│ REST API │  └──────────┬───────────┘   │  │ Parquet cache    │  │
-│ MCP      │  ┌──────────▼───────────┐   │  └─────────────────┘  │
-│          │  │  Backtest Engine     │   │                       │
-│          │  │  Rank-based grouping │   │   AI Layer            │
-│          │  │  WQ BRAIN aligned    │   │  ┌─────────────────┐  │
-│          │  └──────────┬───────────┘   │  │ DeepSeek LLM    │  │
-│          │  ┌──────────▼───────────┐   │  │ Factor design   │  │
-│          │  │  Validation Suite    │   │  │ Iteration       │  │
-│          │  │  Anti-overfit (4x)   │   │  │ Mutation engine │  │
-│          │  │  Walk-forward        │   │  └─────────────────┘  │
-│          │  │  WQ BRAIN simulation │   │                       │
-│          │  └──────────────────────┘   │   Storage             │
-│          │                             │  ┌─────────────────┐  │
-│          │  Factor Iteration Engine    │  │ SQLite (default)│  │
-│          │  Trajectory → Meta-Evo →    │  │ PostgreSQL (opt)│  │
-│          │  Mutation / Crossover       │  └─────────────────┘  │
-├──────────┴──────────────────────────────┴───────────────────────┤
-│  Deploy: Alibaba Cloud ECS · Nginx · Cloudflare · systemd      │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                     QuantGPT Research Engine                       │
+├─────────────┬──────────────────────────────┬───────────────────────┤
+│             │         Core Engine          │                       │
+│  Agent      │  ┌──────────────────────┐   │   Data Layer          │
+│  Interface  │  │  Expression Parser   │   │  ┌─────────────────┐  │
+│             │  │  50+ operators       │   │  │ baostock (free)  │  │
+│ MCP Tools   │  │  WQ BRAIN compatible │   │  │ akshare (free)   │  │
+│ REST API    │  └──────────┬───────────┘   │  │ PolarDB (opt)    │  │
+│ Web UI      │  ┌──────────▼───────────┐   │  │ Parquet cache    │  │
+│ (monitor)   │  │  Backtest Engine     │   │  └─────────────────┘  │
+│             │  │  Rank-based grouping │   │                       │
+│             │  │  WQ BRAIN aligned    │   │   AI Layer            │
+│             │  └──────────┬───────────┘   │  ┌─────────────────┐  │
+│             │  ┌──────────▼───────────┐   │  │ DeepSeek LLM    │  │
+│             │  │  Validation Suite    │   │  │ Factor design   │  │
+│             │  │  Anti-overfit (4x)   │   │  │ Cross-review    │  │
+│             │  │  Walk-forward        │   │  │ Mutation engine │  │
+│             │  │  WQ BRAIN simulation │   │  └─────────────────┘  │
+│             │  └──────────────────────┘   │                       │
+│             │                             │   Storage             │
+│             │  Evolution Engine           │  ┌─────────────────┐  │
+│             │  Trajectory → Meta-Evo →    │  │ SQLite (default)│  │
+│             │  Mutation / Crossover       │  │ PostgreSQL (opt)│  │
+│             │                             │  └─────────────────┘  │
+├─────────────┴──────────────────────────────┴───────────────────────┤
+│  Agent Orchestrator: Claude Code skill loop / Claude Desktop MCP   │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tech Stack
 
 | Layer | Technology |
 |:------|:-----------|
+| Agent | Claude Code (skill loop) / Claude Desktop (MCP) |
 | Backend | Python 3.10+, FastAPI, uvicorn, SQLAlchemy 2.0 async |
 | Database | SQLite (default, zero-config) / PostgreSQL (optional) |
-| AI/LLM | DeepSeek (optional — expression-only mode works without LLM) |
-| Market Data | baostock + akshare (free) → Parquet cache → rqdatac (optional) |
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS 4 |
-| Auth | JWT (access + refresh) + email verification + bcrypt |
+| AI/LLM | DeepSeek (factor generation + cross-review) |
+| Market Data | baostock + akshare (free) → Parquet cache |
+| Frontend | React 18 + TypeScript + Tailwind CSS 4 (monitoring dashboard) |
 | MCP | FastMCP (stdio / SSE / streamable-http) |
 | Report | QuantStats HTML |
-| Deploy | Alibaba Cloud ECS, Nginx, Cloudflare, systemd |
 
 ---
 
@@ -297,25 +315,13 @@ TrajectoryAnalyzer → MetaEvolutionSelector → Strategy Execution
 
 8 种定向突变：时间窗口变异、算子替换、复杂度调整、截面变换叠加等。5 维评分驱动迭代方向。
 
-### 4. Free Data Sources with Graceful Degradation
+### 4. Agent-First Access Model
 
-```
-Parquet local cache (zero network, CACHE_ONLY mode for offline)
-    ↓ cache miss?
-baostock (free, no account needed, T+1 data)
-    ↓ need same-day data?
-akshare (free, same-day data from 东方财富)
-    ↓ need batch API?
-rqdatac (optional, paid, professional batch API)
-```
-
-### 5. Three Access Modes
-
-| Mode | Use Case |
-|:-----|:---------|
-| **Web SPA** | 自然语言输入 + SSE 实时进度 + 交互式报告 |
-| **REST API** | 程序化批量回测、与外部系统集成 |
-| **MCP** | Claude Code / Claude Desktop 原生调用，AI Agent 直接具备因子研究能力 |
+| Mode | Role | Use Case |
+|:-----|:-----|:---------|
+| **MCP (primary)** | Agent toolkit | Claude Code / Claude Desktop 通过 MCP 调用所有研究工具，驱动自治研究循环 |
+| **REST API** | Programmatic access | 批量回测、外部系统集成、CI/CD 因子验证 |
+| **Web UI** | Monitoring dashboard | 任务监控、报告查看、因子库管理 |
 
 <details>
 <summary><b>MCP Tools (8 个)</b></summary>
@@ -335,101 +341,33 @@ rqdatac (optional, paid, professional batch API)
 
 ---
 
-## Product Features
+## Competitive Landscape
 
-<table>
-<tr>
-<td width="50%">
-
-**Factor Backtesting**
-- 自然语言 / 表达式双入口
-- SSE 实时进度推送
-- IC/IR、多空夏普、换手率、单调性
-- 交易成本扣除
-- QuantStats HTML 完整报告
-
-</td>
-<td width="50%">
-
-**Factor Iteration**
-- LLM 驱动的自动化因子搜索
-- 8 种变异方向 + 交叉引擎
-- 元演化策略自适应选择
-- 5 维评分体系
-- 轨迹分析防止无效迭代
-
-</td>
-</tr>
-<tr>
-<td>
-
-**Validation & Risk Control**
-- 4 项反过拟合统计检验
-- Walk-forward 滚动验证
-- WQ BRAIN dollar-neutral 模拟
-- 行业 + 市值中性化
-- 自动因子方向检测
-
-</td>
-<td>
-
-**Platform Capabilities**
-- 因子库收藏与管理
-- 多因子合成（等权 / IC 加权）
-- 因子对比（相关性矩阵）
-- 每日量化日报（LLM 生成）
-- 模拟盘（每日自动结算）
-- 策略回测（聚宽平台对接）
-
-</td>
-</tr>
-</table>
+| Capability | JoinQuant | Backtrader | ChatGPT + Backtest | **QuantGPT** |
+|:-----------|:------:|:------:|:------:|:------:|
+| Research mode | Human writes code | Human writes code | Human prompts, tool executes | **Agent autonomously researches** |
+| Factor discovery | Manual | Manual | One-shot LLM | **Multi-round evolution + knowledge base** |
+| Anti-bias | Researcher judgment | None | None | **Dual-LLM mandatory cross-review** |
+| Knowledge accumulation | Personal notes | None | Lost between sessions | **Structured KB across sessions** |
+| WQ BRAIN integration | -- | -- | -- | **Operator-aligned + direct submission** |
+| Anti-overfit | -- | -- | -- | **4 statistical tests + walk-forward** |
+| MCP / AI Agent | -- | -- | -- | **8 tools, skill-loop orchestration** |
+| Live trading | Yes | Limited | -- | -- |
+| Intraday data | Yes | Yes | -- | Daily only |
 
 ---
 
 ## Quick Start
 
+### Option 1: Agent Mode (Recommended)
+
 ```bash
-# Clone & one-click setup (no Docker, no API keys needed)
 git clone https://github.com/Miasyster/QuantGPT.git && cd QuantGPT
 make setup   # creates venv, installs deps, generates .env
-make run     # starts server at http://localhost:8002
+make run     # starts server at http://localhost:8003
 ```
 
-Open `http://localhost:8002` and enter a factor expression:
-
-```
-rank(close / ts_mean(close, 20))
-```
-
-**Zero config by default**: SQLite database, baostock + akshare free data, no LLM required for expression mode. See [full Quick Start guide](docs/QUICKSTART.md) for details.
-
-<details>
-<summary><b>Optional: Enable natural language mode</b></summary>
-
-```bash
-# Edit .env, add your DeepSeek API key (~$0.001 per query)
-DEEPSEEK_API_KEY=sk-your-key-here
-```
-
-Then you can type: *"找一个基于价量背离的短期反转因子"*
-
-</details>
-
-<details>
-<summary><b>Optional: PostgreSQL (for production)</b></summary>
-
-```bash
-pip install "quantgpt[postgresql]"
-# Edit .env:
-DATABASE_URL=postgresql+asyncpg://quantgpt:password@localhost:5432/quantgpt
-alembic upgrade head
-```
-
-</details>
-
-<details>
-<summary><b>MCP Configuration (Claude Code / Claude Desktop)</b></summary>
+Add MCP configuration to Claude Code or Claude Desktop:
 
 ```json
 {
@@ -442,22 +380,38 @@ alembic upgrade head
 }
 ```
 
-Then in Claude: *"帮我在中证500上测试一个低波动率因子"*
+Then let the Agent work: *"在沪深300上挖掘高 fitness 的因子，目标 WQ BRAIN 可提交"*
+
+### Option 2: Expression Mode (No LLM Required)
+
+```bash
+# Direct expression backtest via API
+curl -X POST http://localhost:8003/api/v1/auto_backtest \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"expression": "rank(close / ts_mean(close, 20))", "universe": "hs300"}'
+```
+
+**Zero config by default**: SQLite database, baostock + akshare free data. See [full Quick Start guide](docs/QUICKSTART.md) for details.
+
+<details>
+<summary><b>Optional: DeepSeek API (for factor generation & cross-review)</b></summary>
+
+```bash
+# Edit .env, add your DeepSeek API key (~$0.001 per query)
+DEEPSEEK_API_KEY=sk-your-key-here
+```
 
 </details>
 
 <details>
-<summary><b>REST API Quick Example</b></summary>
+<summary><b>Optional: PostgreSQL (for production)</b></summary>
 
 ```bash
-# Submit backtest
-curl -X POST http://localhost:8002/api/v1/auto_backtest \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"prompt": "20日动量因子", "universe": "hs300"}'
-
-# Stream results (SSE)
-curl "http://localhost:8002/api/v1/tasks/{task_id}/stream?token=<token>"
+pip install "quantgpt[postgresql]"
+# Edit .env:
+DATABASE_URL=postgresql+asyncpg://quantgpt:password@localhost:5432/quantgpt
+alembic upgrade head
 ```
 
 </details>
@@ -493,50 +447,38 @@ quantgpt/
 ├── quantgpt/                    # Backend (Python)
 │   ├── expression_parser.py     # Factor expression parser (50+ ops, WQ compatible)
 │   ├── backtest.py              # Rank-based group backtest engine
-│   ├── market_data.py           # rqdatac → baostock → Parquet cache
+│   ├── market_data.py           # baostock/akshare → Parquet cache
 │   ├── api_server.py            # FastAPI REST API + SSE
-│   ├── mcp_server.py            # FastMCP server (8 tools)
+│   ├── mcp_server.py            # FastMCP server (8 tools — Agent's toolkit)
 │   ├── iteration.py             # 3-phase evolutionary iteration
 │   ├── mutation_engine.py       # 8 directed mutation strategies
+│   ├── crossover_engine.py      # High-score factor crossover
+│   ├── meta_evolution.py        # Adaptive strategy selector
+│   ├── trajectory_analyzer.py   # Trajectory quality metrics
 │   ├── anti_overfit.py          # 4 statistical anti-overfit tests
 │   ├── rolling_validator.py     # Walk-forward validation
 │   ├── wq_simulate.py           # WQ BRAIN dollar-neutral simulator
+│   ├── wq_brain_client.py       # WQ BRAIN API integration
 │   ├── neutralize.py            # Industry & cap neutralization
 │   ├── paper_engine.py          # Paper trading engine
 │   ├── daily_summary.py         # LLM-powered daily market report
-│   └── routes/                  # 10 API route modules
+│   └── routes/                  # API route modules
 ├── frontend/                    # React 18 + TypeScript + Tailwind CSS 4
-│   └── src/components/          # 40+ components
+│   └── src/components/          # Monitoring dashboard
+├── scripts/
+│   └── factor_miner.py          # Batch factor evaluation toolkit
 ├── tests/                       # 74 tests (parser + backtest + WQ simulate)
 ├── example_factor/              # BRAIN validation screenshots
-└── deploy/                      # Production deploy scripts
+└── docs/                        # Architecture, API, MCP, Mining guides
 ```
-
----
-
-## Competitive Landscape
-
-| Capability | JoinQuant | Backtrader | vnpy | **QuantGPT** |
-|:-----------|:------:|:------:|:------:|:------:|
-| Input method | Write Python | Write Python | Write Python | **Natural language** |
-| Factor backtesting | Manual | Manual | N/A | **One-click** |
-| AI factor generation | -- | -- | -- | **LLM-driven** |
-| Autonomous factor mining | -- | -- | -- | **6-phase research loop** |
-| Dual-LLM cross-review | -- | -- | -- | **Mandatory** |
-| Knowledge accumulation | -- | -- | -- | **Structured KB** |
-| Anti-overfit detection | -- | -- | -- | **4 statistical tests** |
-| WQ BRAIN compatible | -- | -- | -- | **Operator-aligned** |
-| MCP / AI Agent | -- | -- | -- | **8 tools** |
-| Live trading | Yes | Limited | Yes | -- |
-| Intraday data | Yes | Yes | Yes | Daily only |
 
 ---
 
 ## Limitations
 
 - **Daily frequency only** — no intraday backtesting
-- **Monolithic architecture** — in-memory task queue, single-instance
-- **Strategy backtesting requires JoinQuant account** (optional feature)
+- **A-share market only** — China mainland equities
+- **Agent quality depends on LLM** — better models produce better factors
 
 ---
 

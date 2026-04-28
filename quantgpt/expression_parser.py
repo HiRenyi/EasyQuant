@@ -129,6 +129,7 @@ _WQ_OPERATORS = {
     'decay_linear', 'product', 'ts_av_diff',
     'ts_corr', 'ts_cov',
     'where', 'trade_when',
+    'indneutralize',
 }
 
 _LOCAL_ONLY_OPERATORS = {
@@ -140,9 +141,93 @@ _LOCAL_ONLY_OPERATORS = {
 _WQ_COLUMNS = {'open', 'high', 'low', 'close', 'volume', 'market_cap'}
 _WQ_SPECIAL_VARS = {'vwap', 'returns', 'cap'}
 
+_WQ_FUNDAMENTAL_FIELDS = {
+    'earnings', 'ebit', 'ebitda', 'sales', 'revenue', 'equity', 'debt',
+    'assets', 'liabilities', 'capex', 'cash_flow', 'book_value',
+    'dividends', 'net_income', 'operating_income', 'free_cash_flow',
+    'total_debt', 'cash_and_equivalents', 'accounts_receivable',
+    'inventory', 'goodwill', 'intangibles', 'shares_outstanding',
+    'enterprise_value', 'net_debt',
+}
+
+_WQ_ANALYST_FIELDS = {
+    'est_eps', 'est_revenue', 'est_ebitda', 'est_growth',
+    'price_target', 'recommendation',
+    'fam_score', 'fam_growth', 'fam_value', 'fam_quality', 'fam_sentiment',
+    'fam_roe_rank', 'fam_growth_rank', 'fam_value_rank',
+}
+
+_WQ_MDF_FIELDS = {
+    'mdf_oey', 'mdf_gry', 'mdf_pbk', 'mdf_eg3', 'mdf_sg3',
+    'mdf_ep', 'mdf_bp', 'mdf_sp', 'mdf_cfp', 'mdf_dp',
+    'mdf_ey', 'mdf_roic', 'mdf_quality', 'mdf_leverage',
+}
+
+_WQ_NEWS_SENTIMENT_FIELDS = {
+    'snt_buzz', 'snt_buzz_ret', 'snt_bullish', 'snt_bearish',
+    'snt_sentiment', 'snt_volume', 'snt_score',
+}
+
+_WQ_OPTIONS_FIELDS = {
+    'pcr_oi', 'pcr_oi_all', 'pcr_vol', 'pcr_vol_all',
+    'implied_volatility', 'implied_volatility_call', 'implied_volatility_put',
+    'implied_volatility_slope', 'implied_volatility_skew',
+    'option_volume', 'open_interest',
+}
+
+_WQ_RELATIONSHIP_FIELDS = {
+    'rel_num_cust', 'rel_num_supp', 'rel_ret_cust', 'rel_ret_supp',
+    'rel_momentum', 'rel_volume',
+    'short_interest', 'short_sale_cost', 'short_ratio',
+    'insider_buy', 'insider_sell', 'institutional_ownership',
+}
+
+_WQ_EXTENDED_FIELDS = (
+    _WQ_FUNDAMENTAL_FIELDS | _WQ_ANALYST_FIELDS | _WQ_MDF_FIELDS |
+    _WQ_NEWS_SENTIMENT_FIELDS | _WQ_OPTIONS_FIELDS | _WQ_RELATIONSHIP_FIELDS
+)
+
+_WQ_NEWS_PREFIXES = ('nws12_', 'nws24_', 'nws_', 'snt_')
+_WQ_GROUP_PREFIXES = ('indclass.', 'ind.', 'sector.', 'subindustry.')
+
 _LOCAL_ONLY_COLUMNS = {
     'amount', 'pct_change', 'float_market_cap', 'turnover_rate', 'shares',
 }
+
+_WQ_REMOTE_ONLY_OPS = {
+    'vector_neut': (2, 2, 'vector_neut(alpha, risk_factor)'),
+    'humpdecay': (2, 3, 'humpdecay(x, p) or humpdecay(x, p, relative)'),
+    'days_from_last_change': (1, 1, 'days_from_last_change(x)'),
+    'last_diff_value': (1, 2, 'last_diff_value(x) or last_diff_value(x, default)'),
+    'group_neutralize': (2, 2, 'group_neutralize(x, group)'),
+    'group_mean': (2, 2, 'group_mean(x, group)'),
+    'group_vector_neut': (2, 2, 'group_vector_neut(x, group)'),
+    'ts_regression': (4, 5, 'ts_regression(y, x, d, lag, rettype)'),
+    'ts_decay_exp_window': (2, 3, 'ts_decay_exp_window(x, d, factor)'),
+    'ts_ir': (2, 2, 'ts_ir(x, d)'),
+    'ts_skewness': (2, 2, 'ts_skewness(x, d)'),
+    'ts_kurtosis': (2, 2, 'ts_kurtosis(x, d)'),
+    'ts_backfill': (2, 2, 'ts_backfill(x, d)'),
+    'normalize': (1, 1, 'normalize(x)'),
+    'quantile': (1, 3, 'quantile(x) or quantile(x, driver, n)'),
+    'pasteurize': (1, 1, 'pasteurize(x)'),
+    'bucket': (2, 3, 'bucket(x, n) or bucket(x, range, n)'),
+    'vec_avg': (1, None, 'vec_avg(x, ...)'),
+    'vec_sum': (1, None, 'vec_sum(x, ...)'),
+    'vec_max': (1, None, 'vec_max(x, ...)'),
+    'vec_min': (1, None, 'vec_min(x, ...)'),
+    'vec_count': (1, None, 'vec_count(x, ...)'),
+    'vec_range': (1, None, 'vec_range(x, ...)'),
+    'vec_stddev': (1, None, 'vec_stddev(x, ...)'),
+    'vec_skewness': (1, None, 'vec_skewness(x, ...)'),
+    'vec_kurtosis': (1, None, 'vec_kurtosis(x, ...)'),
+    'vec_ir': (1, None, 'vec_ir(x, ...)'),
+    'vec_norm': (1, None, 'vec_norm(x, ...)'),
+    'vec_percentage': (2, None, 'vec_percentage(x, x1, ...)'),
+    'vec_choose': (2, None, 'vec_choose(n, x1, ...)'),
+}
+
+_WQ_OPERATORS = _WQ_OPERATORS | set(_WQ_REMOTE_ONLY_OPS.keys())
 
 _WQ_REPLACEMENTS = {
     'tanh': 'sign_power(x, 0.5) 或 x / (1 + abs(x))',
@@ -419,6 +504,21 @@ class ExpressionParser:
             hint_msg = f"，替代方案：{hint}" if hint else ""
             raise ValueError(f"WQ 模式下不支持算子 '{func_name}'{hint_msg}")
 
+        if func_name in _WQ_REMOTE_ONLY_OPS:
+            if self.mode != "wq":
+                raise ValueError(f"算子 '{func_name}' 仅在 WQ 模式下可用，不支持本地计算")
+            min_args, max_args, usage = _WQ_REMOTE_ONLY_OPS[func_name]
+            parts = self._split_top_level(args_str)
+            if len(parts) < min_args:
+                raise ValueError(f"{func_name} 至少需要 {min_args} 个参数: {usage}")
+            if max_args is not None and len(parts) > max_args:
+                raise ValueError(f"{func_name} 最多 {max_args} 个参数: {usage}")
+            for p in parts:
+                self._sub_parse(p.strip())
+            def _wq_remote_stub(df, _name=func_name):
+                raise RuntimeError(f"算子 '{_name}' 仅支持 WQ BRAIN 远程执行，不可本地计算")
+            return _wq_remote_stub
+
         # Cross-sectional ops: rank() and zscore() group by trade_date
         if func_name in self._CROSS_SECTIONAL_OPS:
             inner = self._sub_parse(args_str)
@@ -562,6 +662,14 @@ class ExpressionParser:
                 return _group_zscore
 
         if func_name in self._NEUTRALIZE_OPS:
+            if self.mode == "wq":
+                parts = self._split_top_level(args_str)
+                if len(parts) != 2:
+                    raise ValueError("indneutralize requires 2 arguments: (expression, industry)")
+                self._sub_parse(parts[0].strip())
+                def _wq_indneut_stub(df):
+                    raise RuntimeError("indneutralize 仅支持 WQ BRAIN 远程执行")
+                return _wq_indneut_stub
             raise ValueError("indneutralize is not supported (requires industry classification data)")
 
         # ATR needs high/low/close columns, not a single series
@@ -744,10 +852,18 @@ class ExpressionParser:
                 hint = _WQ_REPLACEMENTS.get(col_name, "")
                 hint_msg = f"，替代方案：{hint}" if hint else ""
                 raise ValueError(f"WQ 模式下不支持列 '{col_name}'{hint_msg}")
+            is_wq_news = any(col_name.startswith(p) for p in _WQ_NEWS_PREFIXES)
+            is_wq_group = any(col_name.startswith(p) for p in _WQ_GROUP_PREFIXES)
+            if col_name in _WQ_COLUMNS or col_name in _WQ_EXTENDED_FIELDS or is_wq_news or is_wq_group:
+                def _wq_field_stub(df, _c=col_name):
+                    if _c in df.columns:
+                        return df[_c]
+                    raise RuntimeError(f"WQ 字段 '{_c}' 无本地数据，请通过 WQ BRAIN 远程执行")
+                return _wq_field_stub
             if col_name in ALL_FUNDAMENTAL_NAMES:
-                raise ValueError(f"WQ 模式下不支持基本面列 '{col_name}'，BRAIN 仅支持价量数据")
-            if col_name not in _WQ_COLUMNS:
-                raise ValueError(f"WQ 模式下不支持列 '{col_name}'，可用列：{sorted(_WQ_COLUMNS)}")
+                pass  # fall through to local fundamental column
+            else:
+                raise ValueError(f"WQ 模式下不支持列 '{col_name}'，可用列：价量 + WQ 扩展字段（基本面/MDF/新闻/期权/关系）")
 
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")
@@ -876,3 +992,40 @@ def parse_expression(expression: str, mode: str = "local") -> Callable[[pd.DataF
     """
     parser = ExpressionParser(mode=mode)
     return parser.parse(expression)
+
+
+_ALIAS_NORMALIZE = {
+    'delta': 'ts_delta', 'delay': 'ts_shift', 'stddev': 'ts_std',
+    'covariance': 'ts_cov', 'correlation': 'ts_corr',
+    'ts_decay_linear': 'decay_linear', 'ts_product': 'product',
+    'ts_delay': 'ts_shift', 'ts_covariance': 'ts_cov',
+    'ts_arg_max': 'ts_argmax', 'ts_arg_min': 'ts_argmin',
+    'indneutralize': 'indneutralize', 'IndNeutralize': 'indneutralize',
+}
+
+
+def normalize_expression(expression: str) -> str:
+    """Canonicalize an expression for similarity comparison."""
+    expr = re.sub(r'\s+', '', expression.lower())
+    for alias, canonical in _ALIAS_NORMALIZE.items():
+        expr = re.sub(rf'\b{re.escape(alias)}\b', canonical, expr)
+    return expr
+
+
+_OP_PATTERN = re.compile(r'([a-z_][a-z0-9_]*)\s*\(')
+_FIELD_PATTERN = re.compile(r'\b([a-z_][a-z0-9_]*)\b')
+
+
+def extract_components(expression: str) -> dict:
+    """Extract operator names and field names from an expression."""
+    expr_lower = expression.lower()
+    operators = set(_OP_PATTERN.findall(expr_lower))
+    all_words = set(_FIELD_PATTERN.findall(expr_lower))
+    all_ops = _WQ_OPERATORS | _LOCAL_ONLY_OPERATORS | {'if', 'else', 'and', 'or'}
+    fields = all_words - operators - all_ops - {'true', 'false'}
+    try:
+        fields = {w for w in fields if not float(w) and False}
+    except ValueError:
+        pass
+    fields = {w for w in fields if not w.replace('.', '').isdigit()}
+    return {"operators": operators, "fields": fields}

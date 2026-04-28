@@ -15,6 +15,7 @@ interface Stats {
 }
 
 type StatusFilter = "all" | "completed" | "failed" | "running";
+type RatingFilter = "all" | "A" | "B" | "C" | "D";
 
 export default function ResearchDashboard() {
   const { isDark } = useColorMode();
@@ -22,6 +23,7 @@ export default function ResearchDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const pageSize = 20;
 
@@ -36,13 +38,14 @@ export default function ResearchDashboard() {
     try {
       let url = `/api/v1/tasks?page=${page}&page_size=${pageSize}`;
       if (statusFilter !== "all") url += `&status=${statusFilter}`;
+      if (ratingFilter !== "all") url += `&rating=${ratingFilter}`;
       const res = await authFetch(url);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
       }
     } catch { /* ignore */ }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, ratingFilter]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
   useEffect(() => { loadTasks(); }, [loadTasks]);
@@ -56,6 +59,11 @@ export default function ResearchDashboard() {
 
   const handleFilterChange = (f: StatusFilter) => {
     setStatusFilter(f);
+    setPage(1);
+  };
+
+  const handleRatingFilter = (r: RatingFilter) => {
+    setRatingFilter(r);
     setPage(1);
   };
 
@@ -135,18 +143,31 @@ export default function ResearchDashboard() {
             <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{stats.success_rate}%</p>
           </div>
           {Object.keys(stats.rating_distribution).length > 0 && (
-            <div className={`${cardClass} col-span-2 md:col-span-4`}>
-              <p className={`text-xs font-medium mb-2 ${textSecondary}`}>评分分布</p>
+            <div className={`${cardClass} col-span-2 md:col-span-5`}>
+              <p className={`text-xs font-medium mb-2 ${textSecondary}`}>评分分布（点击筛选）</p>
               <div className="flex gap-3 flex-wrap">
                 {["A", "B", "C", "D"].map((r) => {
                   const count = stats.rating_distribution[r] || 0;
                   if (!count) return null;
+                  const isActive = ratingFilter === r;
                   return (
-                    <span key={r} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border ${ratingColor(r)}`}>
+                    <button
+                      key={r}
+                      onClick={() => handleRatingFilter(isActive ? "all" : r as RatingFilter)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border transition-all cursor-pointer ${ratingColor(r)} ${isActive ? "ring-2 ring-offset-1 ring-blue-500 scale-105" : "hover:scale-105"}`}
+                    >
                       {r} <span className="font-bold">{count}</span>
-                    </span>
+                    </button>
                   );
                 })}
+                {ratingFilter !== "all" && (
+                  <button
+                    onClick={() => handleRatingFilter("all")}
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}
+                  >
+                    清除筛选
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -154,7 +175,7 @@ export default function ResearchDashboard() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {(["all", "completed", "running", "failed"] as StatusFilter[]).map((f) => (
           <button
             key={f}
@@ -166,6 +187,26 @@ export default function ResearchDashboard() {
             }`}
           >
             {f === "all" ? "全部" : f === "completed" ? "已完成" : f === "running" ? "进行中" : "失败"}
+          </button>
+        ))}
+
+        <span className={`mx-1 ${textSecondary}`}>|</span>
+
+        {(["all", "A", "B", "C", "D"] as RatingFilter[]).map((r) => (
+          <button
+            key={`r-${r}`}
+            onClick={() => handleRatingFilter(r)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              ratingFilter === r
+                ? r === "all"
+                  ? isDark ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-blue-50 text-blue-700 border border-blue-200"
+                  : `border ${ratingColor(r)} ring-1 ring-blue-500`
+                : r === "all"
+                  ? isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+                  : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            {r === "all" ? "全部评级" : `${r} 级`}
           </button>
         ))}
       </div>

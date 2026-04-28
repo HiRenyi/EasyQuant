@@ -140,6 +140,15 @@ def persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_filen
         async with factory() as session:
             try:
                 session_id = task_data.get("session_id")
+                real_created = task_data.get("created_at")
+                real_completed = task_data.get("completed_at")
+                ts_created = None
+                ts_completed = None
+                if isinstance(real_created, (int, float)):
+                    ts_created = datetime.fromtimestamp(real_created, tz=timezone.utc)
+                if isinstance(real_completed, (int, float)):
+                    ts_completed = datetime.fromtimestamp(real_completed, tz=timezone.utc)
+
                 task_record = TaskModel(
                     id=task_id,
                     user_id=user_id,
@@ -151,6 +160,10 @@ def persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_filen
                     result=task_data.get("result"),
                     error=task_data.get("error"),
                 )
+                if ts_created:
+                    task_record.created_at = ts_created
+                if ts_completed:
+                    task_record.updated_at = ts_completed
                 await session.merge(task_record)
 
                 if report_filename:
