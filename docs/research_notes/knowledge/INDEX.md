@@ -21,3 +21,4 @@
 | [multiplicative_weak](failures/multiplicative_weak.md) | multiplicative | rank(A)*rank(B) 乘法组合 Sharpe 一般 <0.8，不如比值 |
 | [pure_volume_weak](failures/pure_volume_weak.md) | volume | 纯量信号（无价格成分）IC 接近零 |
 | [temporal_instability_lowvol_volume](failures/temporal_instability_lowvol_volume.md) | overfitting, low-vol, dead-end | 低波因子族整体证伪：子区间/跨市场/样本外全线失效 [Agent+DS 共识] |
+| [vwap_deviation_unstable](failures/vwap_deviation_unstable.md) | vwap, unstable, dead-end | VWAP偏离因子族整体证伪：44个表达式三重验证全部失败 [Agent+DS 共识] |

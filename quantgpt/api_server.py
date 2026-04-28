@@ -205,6 +205,7 @@ from .routes.iteration_routes import router as iteration_router
 from .routes.paper import router as paper_router
 from .routes.sessions import router as sessions_router
 from .routes.strategy_backtest import router as strategy_backtest_router
+from .routes.wq_brain import router as wq_brain_router
 
 app.include_router(auth_router)
 app.include_router(sessions_router)
@@ -218,6 +219,7 @@ app.include_router(strategy_backtest_router)
 app.include_router(backtest_tasks_router)
 app.include_router(iteration_router)
 app.include_router(feedback_router)
+app.include_router(wq_brain_router)
 
 
 # ---- robots.txt ----

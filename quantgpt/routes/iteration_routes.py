@@ -178,6 +178,9 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
         task["status"] = "failed"
         task["error"] = f"迭代过程中发生错误: {str(e)}"
     finally:
+        if "completed_at" not in task:
+            import time as _time
+            task["completed_at"] = _time.time()
         if not task.get("is_guest"):
             try:
                 persist_task_to_db(task_id, user_id, task)

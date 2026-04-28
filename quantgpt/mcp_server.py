@@ -535,6 +535,103 @@ async def run_rolling_validation(
                          _result_str, _error_msg, time.monotonic() - _start)
 
 
+@mcp.tool()
+async def wq_brain_submit(
+    expression: str,
+    region: str = "USA",
+    universe: str = "TOP3000",
+    delay: int = 1,
+    decay: int = 0,
+    neutralization: str = "SUBINDUSTRY",
+    truncation: float = 0.08,
+    auto_submit: bool = False,
+) -> str:
+    """提交因子表达式到 WorldQuant BRAIN 平台进行真实模拟。
+
+    与 run_backtest（本地 A 股回测）不同，此工具调用 WQ BRAIN 真实 API，
+    在美股 TOP3000 等市场上评估因子。返回样本内/样本外指标和提交资格。
+
+    需要在 .env 中配置 WQ_BRAIN_EMAIL 和 WQ_BRAIN_PASSWORD。
+
+    Args:
+        expression: FASTEXPR 表达式 (如 "rank(close/open)")
+        region: 市场区域 (USA, CHN 等)
+        universe: WQ Universe (TOP3000, TOP500 等)
+        delay: 信号延迟 (0 或 1)
+        decay: Alpha 衰减 (0-20)
+        neutralization: 中性化 (SUBINDUSTRY, INDUSTRY, SECTOR, MARKET, NONE)
+        truncation: 权重截断 (0-0.5)
+        auto_submit: 如果检查全部通过，自动提交到 WQ 审核
+
+    Returns:
+        JSON with IS/OOS metrics, alpha_id, checks, submittable status.
+    """
+    from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+
+    _start = time.monotonic()
+    _error_msg = None
+    _result_str = None
+    try:
+        if not _wq_configured():
+            _result_str = json.dumps({"error": "WQ BRAIN 未配置 — 请设置 WQ_BRAIN_EMAIL 和 WQ_BRAIN_PASSWORD"})
+            return _result_str
+
+        client = WQBrainClient()
+
+        authenticated = await asyncio.to_thread(client.authenticate)
+        if not authenticated:
+            _result_str = json.dumps({"error": "WQ BRAIN 认证失败"})
+            return _result_str
+
+        result = await asyncio.to_thread(
+            client.simulate,
+            expression, region=region, universe=universe,
+            delay=delay, decay=decay, neutralization=neutralization,
+            truncation=truncation,
+        )
+
+        if not result.get("ok"):
+            _result_str = json.dumps({"error": result.get("error", "Simulation failed")})
+            return _result_str
+
+        alpha_id = result.get("alpha_id")
+        checks = {}
+        submittable = False
+        if alpha_id:
+            checks = await asyncio.to_thread(client.check_alpha, alpha_id)
+            submittable = client.is_submittable(checks)
+
+        submitted = False
+        if auto_submit and submittable and alpha_id:
+            submit_result = await asyncio.to_thread(client.submit_alpha, alpha_id)
+            submitted = submit_result.get("ok", False)
+
+        await asyncio.to_thread(client.close)
+
+        output = {
+            "expression": expression,
+            "alpha_id": alpha_id,
+            "is_metrics": result.get("is", {}),
+            "oos_metrics": result.get("oos", {}),
+            "checks": checks,
+            "submittable": submittable,
+            "submitted": submitted,
+            "simulation_id": result.get("simulation_id"),
+        }
+        _result_str = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        return _result_str
+
+    except Exception as e:
+        logger.error(f"WQ BRAIN submit failed: {traceback.format_exc()}")
+        _error_msg = str(e)
+        _result_str = json.dumps({"error": str(e)})
+        return _result_str
+    finally:
+        track_mcp_result("mcp_wq_brain", expression,
+                         {"region": region, "universe": universe, "delay": delay},
+                         _result_str, _error_msg, time.monotonic() - _start)
+
+
 # Operator documentation fallback
 _OPERATORS_DOC = """
 因子表达式操作符:

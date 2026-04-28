@@ -108,6 +108,13 @@ def _extract_summary(result_str: str, task_type: str) -> dict | None:
             "score": data.get("score", data.get("composite_score")),
             "recommendation": data.get("recommendation"),
         }
+    elif task_type == "mcp_wq_brain":
+        return {
+            "alpha_id": data.get("alpha_id"),
+            "is_metrics": data.get("is_metrics"),
+            "submittable": data.get("submittable"),
+            "submitted": data.get("submitted"),
+        }
     return None
 
 

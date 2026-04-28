@@ -110,6 +110,19 @@ def sanitize_task_response(task_dict: dict) -> dict:
     ca = task_dict.get("created_at")
     if isinstance(ca, (int, float)):
         task_dict["created_at"] = datetime.fromtimestamp(ca, tz=timezone.utc).isoformat()
+    co = task_dict.get("completed_at")
+    if isinstance(co, (int, float)):
+        task_dict["completed_at"] = datetime.fromtimestamp(co, tz=timezone.utc).isoformat()
+    if "duration_seconds" not in task_dict:
+        _ca = task_dict.get("created_at")
+        _co = task_dict.get("completed_at")
+        if _ca and _co:
+            try:
+                t0 = datetime.fromisoformat(str(_ca)).timestamp() if isinstance(_ca, str) else float(_ca)
+                t1 = datetime.fromisoformat(str(_co)).timestamp() if isinstance(_co, str) else float(_co)
+                task_dict["duration_seconds"] = round(t1 - t0, 1)
+            except Exception:
+                pass
     return task_dict
 
 

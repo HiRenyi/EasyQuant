@@ -362,6 +362,8 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
         task["status"] = "failed"
         task["error"] = "回测过程中发生内部错误，请稍后重试"
     finally:
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
         if not task.get("is_guest"):
             try:
                 persist_task_to_db(task_id, user_id, task, report_filename)
@@ -539,6 +541,9 @@ async def list_tasks(
     merged = list(memory_tasks)
     for dt in db_tasks:
         if dt.id not in memory_ids:
+            dur = None
+            if dt.status in ("completed", "failed", "cancelled", "iteration_completed") and dt.created_at and dt.updated_at:
+                dur = round((dt.updated_at - dt.created_at).total_seconds(), 1)
             merged.append({
                 "task_id": dt.id,
                 "status": dt.status,
@@ -549,6 +554,8 @@ async def list_tasks(
                 "result": dt.result,
                 "error": dt.error,
                 "created_at": dt.created_at.isoformat() if dt.created_at else None,
+                "completed_at": dt.updated_at.isoformat() if dt.status in ("completed", "failed", "cancelled", "iteration_completed") and dt.updated_at else None,
+                "duration_seconds": dur,
             })
 
     def _sort_key(t: dict) -> float:

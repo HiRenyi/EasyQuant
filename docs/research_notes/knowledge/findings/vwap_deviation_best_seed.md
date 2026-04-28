@@ -30,3 +30,7 @@
 - 作为新方向探索的基准种子和交叉组合素材
 - 已保存到因子库作为 example_factor
 - 提升 Fitness 的方向：降 Turnover、增 Returns、组合其他信号
+
+## CN A股本地回测警告
+
+VWAP 偏离因子族在 CN hs300 本地 WQ 模拟中三重稳���性验证全部失败（详见 failures/vwap_deviation_unstable.md）。WQ BRAIN USA 结果(Sharpe=1.47)与 CN 本地表现(wq_sharpe=0.52)存在巨大差异，可能因市场微观结构不同。该因子仅在 WQ BRAIN USA 市场有参考价值。
