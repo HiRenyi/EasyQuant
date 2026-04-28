@@ -234,9 +234,9 @@ def _run_is_tests(
     return {
         "sharpe": {
             "value": round(sharpe, 4),
-            "threshold": 1.625,
-            "label": "Sharpe ≥ 1.625",
-            "pass": sharpe >= 1.625,
+            "threshold": 1.25,
+            "label": "Sharpe ≥ 1.25",
+            "pass": sharpe >= 1.25,
         },
         "fitness": {
             "value": round(fitness, 4),

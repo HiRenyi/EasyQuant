@@ -1,37 +1,45 @@
 # QuantGPT MCP 配置指南
 
-QuantGPT 提供标准 MCP (Model Context Protocol) 接口，支持 8 个因子研究工具。可通过 Claude Code、Claude Desktop 等 MCP 客户端直接调用。
+QuantGPT 提供标准 MCP (Model Context Protocol) 接口，支持 10 个因子研究工具。可通过 Claude Code、Claude Desktop 等 MCP 客户端直接调用。
 
 ## 快速开始（推荐）
 
 ### Claude Code
 
-在项目目录下添加 `.mcp.json`：
+在项目根目录添加 `.mcp.json`（stdio 模式，已验证可用）：
 
 ```json
 {
   "mcpServers": {
     "quantgpt": {
       "type": "stdio",
-      "command": "python3",
+      "command": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
       "args": ["-m", "quantgpt"],
-      "env": {
-        "PYTHONPATH": "/path/to/quantgpt",
-        "RQDATAC_USERNAME": "your_username",
-        "RQDATAC_PASSWORD": "your_password"
-      }
+      "cwd": "/absolute/path/to/quantgpt"
+    },
+    "deepseek": {
+      "type": "stdio",
+      "command": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+      "args": ["scripts/mcp_deepseek.py"],
+      "cwd": "/absolute/path/to/quantgpt"
     }
   }
 }
 ```
 
-> 注意：`command` 建议使用 Python 绝对路径，如 `/usr/bin/python3`。
+**关键要点：**
 
-验证连接：
+1. **必须用 stdio 模式** — Claude Code 对 `streamable-http` / `sse` 类型支持不稳定，stdio 最可靠
+2. **command 必须用 Python 绝对路径** — 如 `/Library/Frameworks/Python.framework/Versions/3.12/bin/python3`，不要用 `python3`（Claude Code 的子进程环境可能找不到）
+3. **cwd 必须用绝对路径** — 指向项目根目录，确保 `python3 -m quantgpt` 能找到包
+4. **deepseek MCP 需要 `.env` 中配置 `DEEPSEEK_API_KEY`** — 脚本会自动从 `.env` 读取
+
+配置完成后**重启 Claude Code**（退出后重新进入项目目录），验证连接：
 
 ```bash
-claude mcp list
-# quantgpt: connected
+# 在 Claude Code 中输入
+/mcp
+# 应显示 quantgpt: connected, deepseek: connected
 ```
 
 ### Claude Desktop
@@ -42,19 +50,15 @@ claude mcp list
 {
   "mcpServers": {
     "quantgpt": {
-      "command": "python3",
+      "command": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
       "args": ["-m", "quantgpt"],
-      "env": {
-        "PYTHONPATH": "/path/to/quantgpt",
-        "RQDATAC_USERNAME": "your_username",
-        "RQDATAC_PASSWORD": "your_password"
-      }
+      "cwd": "/absolute/path/to/quantgpt"
     }
   }
 }
 ```
 
-### 从 GitHub 安装（一键配置）
+### 从 GitHub 安装
 
 ```bash
 # 克隆项目
@@ -64,17 +68,25 @@ cd QuantGPT
 # 安装依赖
 pip install -e .
 
-# 配置数据源（在 .env 中设置米筐账号）
+# 配置（在 .env 中设置 DeepSeek API Key，米筐账号可选）
 cp .env.example .env
-# 编辑 .env，填入 RQDATAC_USERNAME 和 RQDATAC_PASSWORD
+# 编辑 .env
 
-# 添加到 Claude Code
-claude mcp add quantgpt -s project \
-  -e PYTHONPATH=$(pwd) \
-  -e RQDATAC_USERNAME=your_username \
-  -e RQDATAC_PASSWORD=your_password \
-  -- python3 -m quantgpt
+# .mcp.json 已包含在仓库中，重启 Claude Code 即自动连接
 ```
+
+### 常见问题
+
+**Q: MCP 连不上？**
+
+1. 确认 `command` 是绝对路径，运行 `which python3` 获取
+2. 确认 `cwd` 指向项目根目录（包含 `quantgpt/` 子目录的那层）
+3. 确认 `pip install -e .` 已执行（quantgpt 包已安装）
+4. 修改 `.mcp.json` 后必须重启 Claude Code
+
+**Q: HTTP 模式（streamable-http）能用吗？**
+
+MCP 同时挂载在 HTTP 服务上（`/mcp/` 和 `/mcp-sse/`），但需要先启动 HTTP 服务（`bash restart.sh`），且 `mcp_server.py` 的 `allowed_hosts` 必须包含带端口的 host（如 `localhost:8003`）。stdio 模式无此限制，推荐优先使用。
 
 ---
 
@@ -90,6 +102,8 @@ claude mcp add quantgpt -s project \
 | `diagnose_factor` | 诊断因子问题，推荐改进策略 |
 | `run_anti_overfit` | 反过拟合检测 (4 项测试) |
 | `run_rolling_validation` | 滚动验证 (Walk-Forward) |
+| `wq_brain_submit` | 提交因子到 WorldQuant BRAIN |
+| `ask_deepseek` | 调用 DeepSeek LLM 进行研究评审（独立 MCP） |
 
 ### 通用参数
 
@@ -162,21 +176,29 @@ rank(ts_delta(roe, 60))
 
 ## 数据源
 
-- **米筐 (rqdatac)**：主数据源，提供行情、因子、股票池数据
-- **baostock**：备用数据源
-- 首次使用会自动下载并缓存数据到 `data/` 目录，后续直接读取
+- **akshare / baostock**：免费数据源，回测流程默认使用，自动缓存到 `data/stocks/*.parquet`
+- **rqdatac（米筐）**：仅手动触发（admin 端点 / prewarm 脚本），需在 `.env` 中配置 `RQDATAC_USERNAME` 和 `RQDATAC_PASSWORD`
+- 首次使用会自动下载并缓存数据，后续直接读取
 
 ---
 
-## 远程部署（可选）
+## HTTP 服务模式（可选）
 
-QuantGPT 也支持作为远程 HTTP MCP 服务运行：
+启动 HTTP 服务后，MCP 自动挂载到两个端点：
 
 ```bash
-# 启动 HTTP 服务（MCP 端点自动挂载到 /mcp）
-python -m quantgpt --transport http --port 8002
+bash restart.sh   # 启动 HTTP 服务（端口 8003）
 ```
 
-远程 MCP 端点：`http://localhost:8002/mcp`
+| 端点 | 协议 | 说明 |
+|------|------|------|
+| `/mcp/` | streamable-http | 推荐（需 `Accept: application/json, text/event-stream`） |
+| `/mcp-sse/` | SSE | 兼容旧客户端 |
 
-> 注意：当前 Claude Code 对远程 MCP (type: "http") 的支持尚不稳定，建议优先使用 stdio 模式。
+`mcp_server.py` 中的 `allowed_hosts` 需包含带端口的 host：
+
+```python
+allowed_hosts=["localhost", "localhost:8003", "127.0.0.1", "127.0.0.1:8003"]
+```
+
+> stdio 模式（`.mcp.json` 配置）不依赖 HTTP 服务运行，是 Claude Code 的推荐方式。

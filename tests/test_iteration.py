@@ -15,6 +15,12 @@ class TestComputeFactorScore:
             "monotonicity_score": 0.7,
             "spread": 0.05,
             "wq_fitness": 0.0,
+            "wq_brain": {
+                "wq_sharpe": 0.5,
+                "wq_fitness": 0.3,
+                "wq_turnover": 0.15,
+                "wq_is_tests": {},
+            },
         }
         d.update(overrides)
         return d
@@ -31,6 +37,7 @@ class TestComputeFactorScore:
         assert "component_scores" in result
         assert set(result["component_scores"].keys()) == {
             "ic_mean", "ic_ir", "stability", "anti_overfit", "group_backtest",
+            "wq_alignment",
         }
 
     def test_score_in_range(self):
@@ -41,6 +48,7 @@ class TestComputeFactorScore:
         summary = self._base_summary(
             ic_mean=0.08, ic_ir=1.5, ic_win_rate=0.75,
             long_short_sharpe=2.0, monotonicity_score=1.0, spread=0.10,
+            wq_brain={"wq_sharpe": 1.8, "wq_fitness": 1.5, "wq_turnover": 0.3, "wq_is_tests": {}},
         )
         result = compute_factor_score(summary, self._base_report(), anti_overfit_score=90)
         assert result["score"] >= 80

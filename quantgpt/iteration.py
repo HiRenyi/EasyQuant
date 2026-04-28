@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_overfit_score: float | None = None) -> dict:
     """Compute a composite 0-100 score for a factor backtest result.
 
-    5-component scoring: IC Mean 25%, IC IR 25%, Stability 20%, Anti-Overfit 15%, Group Backtest 15%
+    6-component scoring aligned with WQ BRAIN evaluation:
+      IC Mean 15%, IC IR 15%, Stability 15%, Anti-Overfit 15%,
+      Group BT 15%, WQ Alignment 25%.
     """
     def _clamp(v, lo, hi):
         return max(lo, min(hi, v))
@@ -58,8 +60,19 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
     top_positive_sub = 100.0 if spread > 0 else 0.0
     group_bt_score = ls_sharpe_gb * 0.4 + mono_sub * 0.4 + top_positive_sub * 0.2
 
-    score = (ic_mean_score * 0.25 + ic_ir_score * 0.25 + stability_score * 0.20
-             + ao_score * 0.15 + group_bt_score * 0.15)
+    # WQ Alignment: Sharpe (40%) + Fitness (40%) + Turnover compliance (20%)
+    wq_brain = backtest_summary.get("wq_brain", {}) if isinstance(backtest_summary.get("wq_brain"), dict) else {}
+    wq_sharpe_raw = wq_brain.get("wq_sharpe", 0.0) if wq_brain else backtest_summary.get("wq_sharpe", 0.0)
+    wq_fitness_raw = wq_brain.get("wq_fitness", 0.0) if wq_brain else backtest_summary.get("wq_fitness", 0.0)
+    wq_turnover_raw = wq_brain.get("wq_turnover", 0.0) if wq_brain else backtest_summary.get("turnover", 0.0)
+
+    wq_sharpe_sub = min(max(wq_sharpe_raw, 0) / 1.25, 1.0) * 100
+    wq_fitness_sub = min(max(wq_fitness_raw, 0) / 1.0, 1.0) * 100
+    wq_turnover_ok = 100.0 if 0.01 <= wq_turnover_raw <= 0.70 else 0.0
+    wq_alignment_score = wq_sharpe_sub * 0.4 + wq_fitness_sub * 0.4 + wq_turnover_ok * 0.2
+
+    score = (ic_mean_score * 0.15 + ic_ir_score * 0.15 + stability_score * 0.15
+             + ao_score * 0.15 + group_bt_score * 0.15 + wq_alignment_score * 0.25)
     score = round(_clamp(score, 0, 100), 1)
 
     grade = "A" if score >= 80 else "B" if score >= 60 else "C" if score >= 40 else "D"
@@ -75,8 +88,9 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
             capped = True
             cap_reason = "negative_cagr" if cagr < 0 else "negative_sharpe"
 
-    # WorldQuant Fitness (informational, not part of composite score)
-    wq_fitness = backtest_summary.get("wq_fitness", 0.0)
+    wq_is_tests = wq_brain.get("wq_is_tests", {})
+    wq_pass_count = sum(1 for t in wq_is_tests.values() if isinstance(t, dict) and t.get("pass"))
+    wq_total_tests = len(wq_is_tests) if wq_is_tests else 0
 
     return {
         "score": score, "grade": grade,
@@ -84,8 +98,11 @@ def compute_factor_score(backtest_summary: dict, report_metrics: dict, anti_over
             "ic_mean": round(ic_mean_score, 1), "ic_ir": round(ic_ir_score, 1),
             "stability": round(stability_score, 1), "anti_overfit": round(ao_score, 1),
             "group_backtest": round(group_bt_score, 1),
+            "wq_alignment": round(wq_alignment_score, 1),
         },
-        "wq_fitness": round(wq_fitness, 4),
+        "wq_fitness": round(wq_fitness_raw, 4),
+        "wq_pass_count": wq_pass_count,
+        "wq_total_tests": wq_total_tests,
         "capped": capped, "cap_reason": cap_reason,
     }
 
