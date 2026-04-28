@@ -66,19 +66,25 @@ from .routes.strategy_backtest import router as strategy_backtest_router
 logger = logging.getLogger(__name__)
 
 def _sanitize_task_response(task_dict: dict) -> dict:
-    """Pass through task dict (obfuscation layer removed)."""
-    return task_dict if isinstance(task_dict, dict) else task_dict
+    """Normalize task dict for API response."""
+    if not isinstance(task_dict, dict):
+        return task_dict
+    ca = task_dict.get("created_at")
+    if isinstance(ca, (int, float)):
+        from datetime import datetime, timezone
+        task_dict["created_at"] = datetime.fromtimestamp(ca, tz=timezone.utc).isoformat()
+    return task_dict
 
 
 # ---- Configuration ----
 
-MAX_ACTIVE_TASKS = int(os.environ.get("QUANTGPT_MAX_ACTIVE_TASKS", "5"))
-MAX_TOTAL_TASKS = int(os.environ.get("QUANTGPT_MAX_TOTAL_TASKS", "200"))
+MAX_ACTIVE_TASKS = int(os.environ.get("QUANTGPT_MAX_ACTIVE_TASKS", "100"))
+MAX_TOTAL_TASKS = int(os.environ.get("QUANTGPT_MAX_TOTAL_TASKS", "10000"))
 TASK_TTL_SECONDS = int(os.environ.get("QUANTGPT_TASK_TTL", "3600"))
 TASK_TIMEOUT_SECONDS = int(os.environ.get("QUANTGPT_TASK_TIMEOUT", "600"))
 SSE_TIMEOUT_SECONDS = int(os.environ.get("QUANTGPT_SSE_TIMEOUT", "300"))
-MAX_SSE_CONNECTIONS = int(os.environ.get("QUANTGPT_MAX_SSE", "50"))
-RATE_LIMIT_PER_MINUTE = int(os.environ.get("QUANTGPT_RATE_LIMIT", "10"))
+MAX_SSE_CONNECTIONS = int(os.environ.get("QUANTGPT_MAX_SSE", "1000"))
+RATE_LIMIT_PER_MINUTE = int(os.environ.get("QUANTGPT_RATE_LIMIT", "50"))
 MAX_PROMPT_LENGTH = int(os.environ.get("QUANTGPT_MAX_PROMPT_LEN", "500"))
 MAX_REPORT_FILES = int(os.environ.get("QUANTGPT_MAX_REPORTS", "200"))
 MAX_DATE_RANGE_YEARS = 10
@@ -1193,9 +1199,23 @@ async def task_stats(
     from sqlalchemy import func
     user_id = user.id
 
-    total = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id))).scalar() or 0
+    db_total = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id))).scalar() or 0
     completed = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id, TaskModel.status == "completed"))).scalar() or 0
     failed = (await db.execute(select(func.count()).select_from(TaskModel).where(TaskModel.user_id == user_id, TaskModel.status == "failed"))).scalar() or 0
+
+    # Count in-memory active tasks (pending/running, not yet persisted to DB)
+    uid_str = str(user_id)
+    with _tasks_lock:
+        memory_ids = {t["task_id"] for t in _tasks.values() if t.get("user_id") == uid_str}
+    running = len(memory_ids)
+    # DB may already have some of these IDs (completed ones); count only net new
+    if memory_ids:
+        db_overlap = (await db.execute(
+            select(func.count()).select_from(TaskModel).where(TaskModel.id.in_(memory_ids))
+        )).scalar() or 0
+    else:
+        db_overlap = 0
+    total = db_total + running - db_overlap
 
     # Rating distribution from completed tasks
     rating_dist: dict[str, int] = {}
@@ -1212,6 +1232,7 @@ async def task_stats(
         "total": total,
         "completed": completed,
         "failed": failed,
+        "running": running - db_overlap,
         "success_rate": round(completed / total * 100, 1) if total else 0,
         "rating_distribution": rating_dist,
     }
@@ -1240,9 +1261,14 @@ async def list_tasks(
                     continue
                 if task_type is not None and t.get("task_type") != task_type:
                     continue
-                if status is not None and t.get("status") != status:
-                    continue
-                safe = {k: v for k, v in t.items() if k not in ("created_at", "user_id")}
+                if status is not None:
+                    t_status = t.get("status", "")
+                    if status == "running":
+                        if t_status in ("completed", "failed"):
+                            continue
+                    elif t_status != status:
+                        continue
+                safe = {k: v for k, v in t.items() if k not in ("user_id",)}
                 memory_tasks.append(safe)
 
     # DB persisted tasks
@@ -1257,7 +1283,7 @@ async def list_tasks(
     result = await db.execute(query)
     db_tasks = result.scalars().all()
 
-    # Merge: memory tasks override DB tasks with same ID
+    # Merge: memory tasks override DB tasks with same ID, then paginate
     memory_ids = {t["task_id"] for t in memory_tasks}
     merged = list(memory_tasks)
     for dt in db_tasks:
@@ -1271,8 +1297,10 @@ async def list_tasks(
                 "expression": dt.expression,
                 "result": dt.result,
                 "error": dt.error,
+                "created_at": dt.created_at.isoformat() if dt.created_at else None,
             })
 
+    merged = merged[offset:offset + page_size]
     return {"tasks": [_sanitize_task_response(t) for t in merged], "page": page, "page_size": page_size}
 
 
@@ -1530,7 +1558,7 @@ def _run_iteration_task(task_id: str, parent_task_id: str, user_id: str, n_candi
             market_df=market_df,
             user_id=user_id,
             n_candidates=n_candidates,
-            max_concurrent=3,
+            max_concurrent=50,
             on_progress=on_progress,
             task_id=task_id,
             direction=direction,

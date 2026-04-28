@@ -326,7 +326,7 @@ def generate_iteration_candidates(
     market_df: pd.DataFrame,
     user_id: str,
     n_candidates: int = 5,
-    max_concurrent: int = 3,
+    max_concurrent: int = 50,
     on_progress: Optional[Callable[[int, dict], None]] = None,
     task_id: str = "",
     direction: str | None = None,

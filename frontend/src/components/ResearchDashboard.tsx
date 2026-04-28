@@ -9,11 +9,12 @@ interface Stats {
   total: number;
   completed: number;
   failed: number;
+  running: number;
   success_rate: number;
   rating_distribution: Record<string, number>;
 }
 
-type StatusFilter = "all" | "completed" | "failed";
+type StatusFilter = "all" | "completed" | "failed" | "running";
 
 export default function ResearchDashboard() {
   const { isDark } = useColorMode();
@@ -22,7 +23,7 @@ export default function ResearchDashboard() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const pageSize = 15;
+  const pageSize = 20;
 
   const loadStats = useCallback(async () => {
     try {
@@ -76,6 +77,14 @@ export default function ResearchDashboard() {
     return <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-500"><Loader2 className="h-3 w-3 animate-spin" />进行中</span>;
   };
 
+  const formatTime = (task: Task) => {
+    const ca = (task as unknown as Record<string, unknown>).created_at as string | undefined;
+    if (!ca) return "—";
+    try {
+      const d = new Date(ca);
+      return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    } catch { return "—"; }
+  };
   const getExpression = (task: Task) => task.expression || task.result?.params?.expression || (task.params as unknown as Record<string, unknown>)?.expression as string || "—";
   const getPrompt = (task: Task) => (task.params as unknown as Record<string, unknown>)?.prompt as string || task.result?.llm?.prompt || "—";
   const getRating = (task: Task) => task.result?.interpretation?.rating || (task.result?.backtest_summary as unknown as Record<string, unknown>)?.wq_rating as string || "";
@@ -88,7 +97,7 @@ export default function ResearchDashboard() {
     <div className="space-y-6">
       {/* Stats cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className={cardClass}>
             <p className={`text-xs font-medium ${textSecondary}`}>总任务</p>
             <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{stats.total}</p>
@@ -96,6 +105,10 @@ export default function ResearchDashboard() {
           <div className={cardClass}>
             <p className={`text-xs font-medium ${textSecondary}`}>已完成</p>
             <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.completed}</p>
+          </div>
+          <div className={cardClass}>
+            <p className={`text-xs font-medium ${textSecondary}`}>进行中</p>
+            <p className="text-2xl font-bold mt-1 text-blue-500">{stats.running}</p>
           </div>
           <div className={cardClass}>
             <p className={`text-xs font-medium ${textSecondary}`}>失败</p>
@@ -126,7 +139,7 @@ export default function ResearchDashboard() {
 
       {/* Filters */}
       <div className="flex items-center gap-2">
-        {(["all", "completed", "failed"] as StatusFilter[]).map((f) => (
+        {(["all", "completed", "running", "failed"] as StatusFilter[]).map((f) => (
           <button
             key={f}
             onClick={() => handleFilterChange(f)}
@@ -136,7 +149,7 @@ export default function ResearchDashboard() {
                 : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
             }`}
           >
-            {f === "all" ? "全部" : f === "completed" ? "已完成" : "失败"}
+            {f === "all" ? "全部" : f === "completed" ? "已完成" : f === "running" ? "进行中" : "失败"}
           </button>
         ))}
       </div>
@@ -155,12 +168,13 @@ export default function ResearchDashboard() {
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>IC</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>Turnover</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>状态</th>
+                <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>时间</th>
                 <th className={`text-center px-4 py-3 font-medium ${textSecondary}`}>报告</th>
               </tr>
             </thead>
             <tbody>
               {tasks.length === 0 && (
-                <tr><td colSpan={9} className={`text-center py-12 ${textSecondary}`}>暂无任务</td></tr>
+                <tr><td colSpan={10} className={`text-center py-12 ${textSecondary}`}>暂无任务</td></tr>
               )}
               {tasks.map((task) => {
                 const rating = getRating(task);
@@ -186,6 +200,7 @@ export default function ResearchDashboard() {
                     <td className={`px-4 py-3 text-center font-mono text-xs ${textPrimary}`}>{ic != null ? (ic as number).toFixed(4) : "—"}</td>
                     <td className={`px-4 py-3 text-center font-mono text-xs ${textPrimary}`}>{turnover != null ? (turnover as number).toFixed(3) : "—"}</td>
                     <td className="px-4 py-3 text-center">{statusBadge(task.status)}</td>
+                    <td className={`px-4 py-3 text-center text-xs ${textSecondary}`}>{formatTime(task)}</td>
                     <td className="px-4 py-3 text-center">
                       {task.result?.report_url && (
                         <a
