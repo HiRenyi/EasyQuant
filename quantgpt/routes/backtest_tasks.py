@@ -81,6 +81,7 @@ class AutoBacktestRequest(BaseModel):
     session_id: str | None = Field(None, description="关联会话 ID")
     neutralize_industry: bool = Field(True, description="行业中性化")
     neutralize_cap: bool = Field(True, description="市值中性化")
+    universe_date: str | None = Field(None, description="股票池基准日期，用于子区间验证时固定股票池。为空时使用 start_date")
 
     @field_validator("prompt")
     @classmethod
@@ -94,7 +95,7 @@ class AutoBacktestRequest(BaseModel):
 
     _validate_universe = field_validator("universe")(_validate_univ_fn)
     _validate_benchmark = field_validator("benchmark")(_validate_bench_fn)
-    _validate_dates = field_validator("start_date", "end_date")(_validate_date_fn)
+    _validate_dates = field_validator("start_date", "end_date", "universe_date")(_validate_date_fn)
 
 
 def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
@@ -194,7 +195,8 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         check_cancelled(task_id)
         task["status"] = "fetching_data"
-        stock_codes = get_universe(req.universe, date=req.start_date)
+        universe_resolve_date = req.universe_date or req.start_date
+        stock_codes = get_universe(req.universe, date=universe_resolve_date)
         fetcher = MarketDataFetcher()
         market_df = fetcher.fetch_stocks(stock_codes, req.start_date, req.end_date)
         if market_df is None or len(market_df) == 0:
@@ -339,6 +341,7 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
             "params": {
                 "expression": expression,
                 "universe": req.universe,
+                "universe_date": universe_resolve_date,
                 "start_date": req.start_date,
                 "end_date": req.end_date,
                 "n_groups": req.n_groups,
@@ -533,7 +536,7 @@ async def list_tasks(
         query = query.where(TaskModel.task_type == task_type)
     if status is not None:
         query = query.where(TaskModel.status == status)
-    query = query.order_by(desc(TaskModel.created_at)).offset(offset).limit(page_size)
+    query = query.order_by(desc(TaskModel.created_at))
     result = await db.execute(query)
     db_tasks = result.scalars().all()
 
@@ -570,8 +573,9 @@ async def list_tasks(
         return 0
 
     merged.sort(key=_sort_key, reverse=True)
+    total = len(merged)
     merged = merged[offset:offset + page_size]
-    return {"tasks": [sanitize_task_response(t) for t in merged], "page": page, "page_size": page_size}
+    return {"tasks": [sanitize_task_response(t) for t in merged], "page": page, "page_size": page_size, "total": total}
 
 
 @router.get("/api/v1/tasks/{task_id}")

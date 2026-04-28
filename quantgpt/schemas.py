@@ -19,8 +19,10 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Usage:  _validate_date = field_validator("start_date", "end_date")(validate_date_format)
 #         _validate_universe = field_validator("universe")(validate_universe_value)
 
-def validate_date_format(cls, v: str) -> str:  # noqa: N805 (Pydantic convention)
+def validate_date_format(cls, v: str | None) -> str | None:  # noqa: N805 (Pydantic convention)
     """Ensure date matches YYYY-MM-DD and is a real calendar date."""
+    if v is None:
+        return v
     if not _DATE_RE.match(v):
         raise ValueError("日期格式必须为 YYYY-MM-DD")
     try:
