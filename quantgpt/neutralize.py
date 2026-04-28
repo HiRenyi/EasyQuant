@@ -1,7 +1,9 @@
-"""Factor neutralization — industry and market-cap neutralization.
+"""Factor neutralization — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
 
-Removes systematic exposures from factor values before backtesting,
-so that the factor captures alpha rather than beta/style tilts.
+Removes systematic exposures (industry, market-cap) from factor values
+before backtesting, so that the factor captures alpha rather than beta/style tilts.
 """
 
 import logging

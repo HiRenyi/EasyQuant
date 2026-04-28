@@ -1,3 +1,7 @@
+// QuantGPT Rust Engine
+// Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+// https://github.com/Miasyster/QuantGPT
+
 mod expression;
 mod operators;
 mod backtest;

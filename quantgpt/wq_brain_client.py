@@ -152,7 +152,11 @@ class WQBrainClient:
                 time.sleep(_POLL_INTERVAL)
                 continue
 
-            data = r.json()
+            try:
+                data = r.json()
+            except Exception:
+                time.sleep(_POLL_INTERVAL)
+                continue
             status = data.get("status", "").upper()
             progress = data.get("progress", 0)
 
@@ -193,12 +197,22 @@ class WQBrainClient:
 
     def _fetch_alpha(self, alpha_id: str) -> dict:
         r = self._get_session().get(f"{API_BASE}/alphas/{alpha_id}")
-        return r.json() if r.status_code == 200 else {}
+        if r.status_code == 200:
+            try:
+                return r.json()
+            except Exception:
+                logger.warning(f"Empty/invalid JSON from /alphas/{alpha_id}")
+                return {}
+        return {}
 
     def check_alpha(self, alpha_id: str) -> dict:
         r = self._get_session().get(f"{API_BASE}/alphas/{alpha_id}/check")
         if r.status_code == 200:
-            return r.json()
+            try:
+                return r.json()
+            except Exception:
+                logger.warning(f"Empty/invalid JSON from /alphas/{alpha_id}/check")
+                return {}
         return {"error": f"HTTP {r.status_code}: {r.text[:300]}"}
 
     def submit_alpha(self, alpha_id: str) -> dict:

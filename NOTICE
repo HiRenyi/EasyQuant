@@ -1,0 +1,22 @@
+QuantGPT — AI-Powered Quantitative Factor Research Platform
+Copyright (c) 2026 Miasyster
+Licensed under the MIT License (see LICENSE file)
+
+Repository: https://github.com/Miasyster/QuantGPT
+Initial commit: 2026-03-20 (git SHA: 3538047)
+
+This project is the original source of the following core modules:
+  - expression_parser.py   Factor expression DSL parser (40+ operators)
+  - backtest.py             Quantile-group backtest engine
+  - market_data.py          A-share market data fetcher with Parquet caching
+  - report.py               HTML report generation and metrics extraction
+  - neutralize.py           Industry and market-cap factor neutralization
+  - anti_overfit.py         Statistical overfit detection (4 tests)
+  - rolling_validator.py    Walk-forward rolling validation
+  - iteration.py            Factor iteration and optimization
+  - composite.py            Multi-factor combination engine
+  - rust_bridge.py          Python-Rust interop bridge
+  - engine/                 Rust native backtest engine (PyO3/maturin)
+
+Any derivative works based on these modules should retain this notice
+and comply with the MIT License terms.

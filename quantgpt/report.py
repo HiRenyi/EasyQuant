@@ -1,4 +1,7 @@
-"""QuantStats HTML report generation + metrics extraction."""
+"""Report generation + metrics extraction — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
+"""
 
 import logging
 

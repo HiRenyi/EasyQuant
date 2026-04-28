@@ -1,4 +1,9 @@
-"""Market data fetcher with baostock + akshare (free) + Parquet caching. rqdatac optional."""
+"""Market data fetcher — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
+
+baostock + akshare (free) + Parquet caching. rqdatac optional.
+"""
 
 import logging
 import os

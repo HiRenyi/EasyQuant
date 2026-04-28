@@ -1,4 +1,6 @@
-"""Composite (multi-factor) combination engine.
+"""Composite (multi-factor) combination engine — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
 
 Combines multiple factor expressions into a single composite factor value,
 then delegates to the standard run_factor_backtest for group backtest.

@@ -1,4 +1,8 @@
-"""Walk-forward rolling validation for factor backtesting.
+"""Walk-forward rolling validation — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
+
+Walk-forward rolling validation for factor backtesting.
 
 Splits the time series into overlapping train/valid/test windows,
 evaluates factor IC/IR in each segment, and produces a composite

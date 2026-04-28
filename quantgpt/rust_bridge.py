@@ -1,4 +1,6 @@
-"""Bridge between Python backtest flow and Rust quantgpt_engine.
+"""Rust engine bridge — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
 
 When quantgpt_engine is installed, the Rust engine handles:
   - Expression evaluation (factor computation)

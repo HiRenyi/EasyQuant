@@ -1,4 +1,8 @@
-"""Factor iteration optimization — scoring, prompt building, candidate generation.
+"""Factor iteration optimization — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
+
+Scoring, prompt building, candidate generation.
 
 Refactored with QuantaAlpha three-phase evolution architecture:
   Phase 1: TrajectoryAnalyzer — trajectory quality metrics

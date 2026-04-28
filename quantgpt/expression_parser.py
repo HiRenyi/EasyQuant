@@ -1,5 +1,6 @@
-"""
-Factor Expression Parser
+"""Factor Expression Parser — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
 
 Parses simple factor expressions and returns callables
 that operate on DataFrames.

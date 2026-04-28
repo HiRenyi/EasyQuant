@@ -43,38 +43,47 @@ QuantGPT is the factor research engine extracted from a production multi-factor 
 | 单轮迭代（8 候选因子） | **~15 分钟** |
 | 自然语言 → 完整报告 | **< 2 分钟** |
 | 表达式算子标准 | **WorldQuant BRAIN 对齐** |
-| 最佳因子 BRAIN 验证 | **Sharpe 1.73, IS 6/7 PASS** |
+| BRAIN 正式提交 | **Fitness 1.07, IS 全部 PASS, 已提交** |
+| WQ BRAIN 集成 | **内置 API — 一键模拟 + 自动提交** |
 
-所有因子表达式采用 WorldQuant BRAIN 算子标准，挖掘出的因子可直接复制到 BRAIN 平台验证。这意味着 QuantGPT 不仅是一个本地回测工具，而是一个与国际顶级量化平台对标的、**可量产 alpha 信号的自动化研究引擎**。
+所有因子表达式采用 WorldQuant BRAIN 算子标准。QuantGPT 已内置 WQ BRAIN API 集成，**从因子设计到 BRAIN 正式提交全程自动化**，无需手动登录平台。首个因子已通过全部 IS 检测并正式提交（alpha_id: `78aAQjoL`）。
 
 ---
 
-## Validated Results
+## Validated Results — First Factor Officially Submitted to BRAIN
 
-仅经过简单的 3 轮迭代、24 个候选表达式，产出以下 A 级因子并在 **WorldQuant BRAIN（美股 TOP3000）** 上完成独立验证：
+经过系统化参数优化（9 个变体网格搜索），首个因子已**通过 WQ BRAIN 全部 IS 检测并正式提交**：
 
-| Factor | Expression | A-Share Sharpe | US Sharpe | BRAIN IS Tests |
-|:-------|:-----------|:--------------:|:---------:|:--------------:|
-| Price-Volume Divergence (5d) | `-1 * rank(ts_corr(close, volume, 5))` | 1.42 | **1.73** | **6/7 PASS** |
-| Price-Volume Divergence (10d) | `-1 * rank(ts_corr(close, volume, 10))` | 0.66 | 0.91 | 4/7 PASS |
-| Dual Divergence Composite | `rank(-1*ts_corr(close,volume,5))*rank(-1*ts_corr(high,volume,10))` | 0.87 | **1.20** | **6/7 PASS** |
+| Factor | Expression | WQ Sharpe | WQ Fitness | IS Tests | Status |
+|:-------|:-----------|:---------:|:----------:|:--------:|:------:|
+| **VWAP Decay Reversal (10d)** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **ALL PASS** | **Submitted** |
+| Price-Volume Divergence (5d) | `-1 * rank(ts_corr(close, volume, 5))` | 1.73 | 0.60 | 6/7 PASS | Validated |
+| Dual Divergence Composite | `rank(-1*ts_corr(close,volume,5))*rank(-1*ts_corr(high,volume,10))` | 1.20 | 0.41 | 6/7 PASS | Validated |
 
-> 三个因子在 A 股和美股两个完全独立的市场、完全独立的回测引擎上均表现有效。Factor 1 已逼近 BRAIN 正式提交水平（A 级门槛：Sharpe ≥ 1.625, IS ≥ 6/7 PASS）。
+> **VWAP Decay Reversal** 是 QuantGPT 首个正式提交 BRAIN 的因子（alpha_id: `78aAQjoL`）。突破关键：将中性化从 SUBINDUSTRY 切到 MARKET，Fitness 从 0.88 → 1.07，Returns 从 14.51% → 18.63%。全程通过 QuantGPT 内置 WQ BRAIN API 完成，无需手动登录平台。
 
 <p align="center">
-  <img src="example_factor/2-1.png" width="49%" alt="WQ BRAIN PnL — Factor 1" />
-  <img src="example_factor/2-2.png" width="49%" alt="WQ BRAIN IS Testing — Factor 1" />
+  <img src="example_factor/4-1.png" width="49%" alt="WQ BRAIN PnL — VWAP Decay Reversal (Submitted)" />
+  <img src="example_factor/4-2.png" width="49%" alt="WQ BRAIN IS Summary — VWAP Decay Reversal (Submitted)" />
 </p>
 <p align="center">
-  <sub>WorldQuant BRAIN 独立验证：Factor 1 PnL 曲线（Sharpe 1.73）+ IS Testing Summary（6/7 PASS）</sub>
+  <sub>VWAP Decay Reversal — 已正式提交：Sharpe 1.69, Fitness 1.07, IS 全部 PASS，逐年 Sharpe 全正（2019: 2.35, 2020: 3.43, 2021: 1.95, 2022: 0.83, 2023: 1.26）</sub>
 </p>
 
 <p align="center">
-  <img src="example_factor/3-1.png" width="49%" alt="WQ BRAIN PnL — Factor 3" />
-  <img src="example_factor/3-2.png" width="49%" alt="WQ BRAIN IS Testing — Factor 3" />
+  <img src="example_factor/2-1.png" width="49%" alt="WQ BRAIN PnL — Price-Volume Divergence" />
+  <img src="example_factor/2-2.png" width="49%" alt="WQ BRAIN IS Testing — Price-Volume Divergence" />
 </p>
 <p align="center">
-  <sub>Factor 3 Dual Divergence Composite：Sharpe 1.20，6/7 PASS</sub>
+  <sub>Price-Volume Divergence：Sharpe 1.73，IS 6/7 PASS</sub>
+</p>
+
+<p align="center">
+  <img src="example_factor/3-1.png" width="49%" alt="WQ BRAIN PnL — Dual Divergence Composite" />
+  <img src="example_factor/3-2.png" width="49%" alt="WQ BRAIN IS Testing — Dual Divergence Composite" />
+</p>
+<p align="center">
+  <sub>Dual Divergence Composite：Sharpe 1.20，IS 6/7 PASS</sub>
 </p>
 
 ---
@@ -274,6 +283,7 @@ results = batch_evaluate(
 | Statistical Tests | `anti_overfit.py` | IC 稳定性 + 子样本压力测试（牛/熊/震荡）+ 安慰剂检验 + 半衰期估计 |
 | Walk-Forward | `rolling_validator.py` | 滚动 train/valid/test 窗口，评估样本外 IC 衰减 |
 | WQ Simulation | `wq_simulate.py` | Dollar-neutral 多空模拟，对齐 BRAIN 的 Sharpe/Turnover/Fitness 计算 |
+| **WQ BRAIN API** | `wq_brain_client.py` | **直连 BRAIN 平台 — 真实模拟 + IS 检测 + 一键正式提交** |
 
 ### 3. Evolutionary Factor Iteration
 
@@ -456,17 +466,17 @@ curl "http://localhost:8002/api/v1/tasks/{task_id}/stream?token=<token>"
 <summary><b>Expression Examples</b></summary>
 
 ```python
+# VWAP decay reversal — BRAIN submitted, Fitness 1.07, IS ALL PASS
+-1 * rank(ts_decay_linear(close / vwap, 10))
+
+# Price-volume divergence — BRAIN Sharpe 1.73
+-1 * rank(ts_corr(close, volume, 5))
+
 # 20-day momentum
 rank(close / ts_mean(close, 20))
 
-# Price-volume divergence (BRAIN validated, Sharpe 1.73)
--1 * rank(ts_corr(close, volume, 5))
-
 # Low volatility
 rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))
-
-# RSI oversold signal
-where(rsi(close, 14) < 30, 1, 0)
 
 # Decay-weighted correlation
 decay_linear(rank(ts_corr(vwap, volume, 10)), 5)
@@ -532,6 +542,10 @@ quantgpt/
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — Copyright (c) 2026 Miasyster
+
+This repository is the **original source** of the QuantGPT factor research engine.
+Derivative works should retain the copyright notice and comply with the MIT License terms.
+See [NOTICE](NOTICE) for details.
 
 <sub>*Past factor performance does not guarantee future returns. This project does not constitute investment advice.*</sub>

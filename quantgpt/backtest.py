@@ -1,4 +1,6 @@
-"""Factor group backtest engine (long-only, A-share).
+"""Factor group backtest engine (long-only, A-share) — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
 
 Splits stocks into quantile groups by factor value on rebalance dates,
 holds each group for holding_period days, computes daily equal-weighted

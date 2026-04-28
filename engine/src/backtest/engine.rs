@@ -1,3 +1,7 @@
+// QuantGPT Backtest Engine (Rust)
+// Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+// https://github.com/Miasyster/QuantGPT
+
 use std::collections::{HashMap, HashSet};
 use super::grouping::assign_groups;
 use super::metrics;

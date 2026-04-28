@@ -1,3 +1,7 @@
+// QuantGPT Expression Parser (Rust)
+// Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+// https://github.com/Miasyster/QuantGPT
+
 use super::ast::Expr;
 use std::collections::HashMap;
 

@@ -1,4 +1,8 @@
-"""Anti-overfit detection for factor backtesting.
+"""Anti-overfit detection — QuantGPT
+Copyright (c) 2026 Miasyster. Licensed under the MIT License.
+https://github.com/Miasyster/QuantGPT
+
+Anti-overfit detection for factor backtesting.
 
 Provides 4 statistical tests to assess whether a factor's performance
 is robust or likely overfitted:
