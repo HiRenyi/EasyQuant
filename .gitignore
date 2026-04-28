@@ -16,8 +16,8 @@ data/
 reports/
 feedback/
 
-# Deploy (secrets)
-deploy/.env.*
+# Deploy (removed — local project only)
+deploy/
 
 # Alembic config (contains DB URL)
 alembic.ini
@@ -41,11 +41,12 @@ marketing/
 # Claude Code
 .claude/
 
-# Research notes (runtime artifacts, not source code)
+# Research notes & weekly reports (runtime artifacts, not source code)
 docs/research_notes/archive/
 docs/research_notes/knowledge/
 docs/research_notes/auto_run_log.md
 docs/research_notes/reports/
+docs/factor_research/
 
 # IDE
 .vscode/

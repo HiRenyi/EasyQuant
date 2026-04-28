@@ -29,7 +29,7 @@
 
 ```bash
 # HTTP 服务 (含前端)
-DEEPSEEK_API_KEY=sk-xxx python -m quantgpt --transport http --port 8002
+bash restart.sh   # 默认端口 8003
 
 # MCP 服务 (stdio)
 python -m quantgpt

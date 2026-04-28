@@ -6,7 +6,7 @@ Repository: https://github.com/Miasyster/QuantGPT
 Initial commit: 2026-03-20 (git SHA: 3538047)
 
 This project is the original source of the following core modules:
-  - expression_parser.py   Factor expression DSL parser (40+ operators)
+  - expression_parser.py   Factor expression DSL parser (50+ operators, WQ BRAIN aligned)
   - backtest.py             Quantile-group backtest engine
   - market_data.py          A-share market data fetcher with Parquet caching
   - report.py               HTML report generation and metrics extraction

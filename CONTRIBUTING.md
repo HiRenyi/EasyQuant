@@ -5,7 +5,7 @@
 ## Getting Started
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/quantgpt.git
+git clone https://github.com/Miasyster/QuantGPT.git
 cd quantgpt
 make setup      # creates venv, installs deps, copies .env
 make test       # run tests
