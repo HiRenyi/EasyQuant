@@ -99,8 +99,13 @@ def list_universes() -> str:
 
 
 @mcp.tool()
-def validate_expression(expression: str) -> str:
-    """验证因子表达式语法是否正确。返回 OK 或错误信息。"""
+def validate_expression(expression: str, mode: str = "local") -> str:
+    """验证因子表达式语法是否正确。返回 OK 或错误信息。
+
+    Args:
+        expression: 因子表达式
+        mode: "local"（本地回测验证，默认）或 "wq"（WQ BRAIN 提交验证，放宽字段/算子限制）
+    """
 
     depth = 0
     for i, ch in enumerate(expression):
@@ -114,7 +119,9 @@ def validate_expression(expression: str) -> str:
         return f"ERROR: 括号不平衡：缺少 {depth} 个右括号 ')'"
 
     try:
-        func = parse_expression(expression)
+        func = parse_expression(expression, mode=mode)
+        if mode == "wq":
+            return "OK: expression is valid for WQ BRAIN submission"
         func(_VALIDATION_DUMMY)
         return "OK: expression is valid"
     except Exception as e:

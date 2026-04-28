@@ -500,9 +500,22 @@ class ExpressionParser:
         func_name = self._OPERATOR_ALIASES.get(func_name, func_name)
 
         if self.mode == "wq" and func_name not in _WQ_OPERATORS:
-            hint = _WQ_REPLACEMENTS.get(func_name, "")
-            hint_msg = f"，替代方案：{hint}" if hint else ""
-            raise ValueError(f"WQ 模式下不支持算子 '{func_name}'{hint_msg}")
+            if func_name in _LOCAL_ONLY_OPERATORS:
+                hint = _WQ_REPLACEMENTS.get(func_name, "")
+                hint_msg = f"，替代方案：{hint}" if hint else ""
+                raise ValueError(f"WQ 模式下不支持算子 '{func_name}'{hint_msg}")
+            logger.warning(f"WQ 模式：未知算子 '{func_name}'，将作为远程算子透传给 WQ BRAIN")
+            parts = self._split_top_level(args_str)
+            for p in parts:
+                p_stripped = p.strip()
+                if p_stripped and not p_stripped.replace('.', '', 1).lstrip('-').isdigit():
+                    try:
+                        self._sub_parse(p_stripped)
+                    except ValueError:
+                        pass
+            def _wq_unknown_op_stub(df, _name=func_name):
+                raise RuntimeError(f"算子 '{_name}' 仅支持 WQ BRAIN 远程执行，不可本地计算")
+            return _wq_unknown_op_stub
 
         if func_name in _WQ_REMOTE_ONLY_OPS:
             if self.mode != "wq":
@@ -863,7 +876,12 @@ class ExpressionParser:
             if col_name in ALL_FUNDAMENTAL_NAMES:
                 pass  # fall through to local fundamental column
             else:
-                raise ValueError(f"WQ 模式下不支持列 '{col_name}'，可用列：价量 + WQ 扩展字段（基本面/MDF/新闻/期权/关系）")
+                logger.warning(f"WQ 模式：未知字段 '{col_name}'，将透传给 WQ BRAIN 校验")
+                def _wq_unknown_field_stub(df, _c=col_name):
+                    if _c in df.columns:
+                        return df[_c]
+                    raise RuntimeError(f"WQ 字段 '{_c}' 无本地数据，请通过 WQ BRAIN 远程执行")
+                return _wq_unknown_field_stub
 
         if col_name not in _ALLOWED_COLUMNS:
             raise ValueError(f"Unknown column or variable: {col_name!r}")

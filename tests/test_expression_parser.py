@@ -423,6 +423,36 @@ class TestWQMode:
         fn = parse_expression("group_neutralize(close, IndClass.industry)", mode="wq")
         assert callable(fn)
 
+    def test_wq_unknown_operator_passthrough(self):
+        fn = parse_expression("winsorize(close, 0.05)", mode="wq")
+        assert callable(fn)
+        with pytest.raises(RuntimeError, match="仅支持 WQ BRAIN 远程执行"):
+            fn(pd.DataFrame({"close": [1, 2, 3]}))
+
+    def test_wq_unknown_field_passthrough(self):
+        fn = parse_expression("rank(sharadar_sf1_roe)", mode="wq")
+        assert callable(fn)
+        with pytest.raises(RuntimeError, match="WQ 字段.*无本地数据"):
+            fn(pd.DataFrame({"close": [1, 2, 3]}))
+
+    def test_wq_unknown_nested(self):
+        fn = parse_expression("ts_regression(close, sharadar_sf1_roe, 20, 1)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_unknown_multi_level(self):
+        fn = parse_expression("winsorize(rank(some_brain_data / close), 0.05)", mode="wq")
+        assert callable(fn)
+
+    def test_wq_still_rejects_local_only_operators(self):
+        with pytest.raises(ValueError, match="WQ 模式下不支持算子"):
+            parse_expression("sigmoid(close)", mode="wq")
+        with pytest.raises(ValueError, match="WQ 模式下不支持算子"):
+            parse_expression("rsi(close, 14)", mode="wq")
+
+    def test_wq_still_rejects_local_only_columns(self):
+        with pytest.raises(ValueError, match="WQ 模式下不支持列"):
+            parse_expression("rank(pct_change)", mode="wq")
+
 
 class TestNormalizeExpression:
     def test_whitespace_removed(self):
