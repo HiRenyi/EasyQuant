@@ -41,7 +41,9 @@ marketing/
 # Claude Code
 .claude/
 
-# Research notes (runtime)
+# Research notes (runtime artifacts, not source code)
+docs/research_notes/archive/
+docs/research_notes/knowledge/
 docs/research_notes/auto_run_log.md
 docs/research_notes/reports/
 
