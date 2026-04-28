@@ -160,14 +160,14 @@ export default function LoginPage() {
             AI 时代量化研究新范式
           </p>
           <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-            不写代码，直接验证你的策略和因子想法。<br />从自然语言到专业回测报告，一键完成。
+            Agent 自治因子挖矿 · 批量回测 · WQ BRAIN 自动提交。<br />从假设到可提交因子，全程 Agent 驱动。
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-3">
             {[
-              { icon: Terminal, color: "text-orange-500", bg: "bg-orange-50", title: "策略一键回测", desc: "自然语言描述交易策略，AI 生成代码并自动执行回测" },
+              { icon: Terminal, color: "text-orange-500", bg: "bg-orange-50", title: "Agent 自治研究", desc: "LLM Agent 通过 MCP 工具自主挖矿、评估、迭代因子" },
               { icon: FlaskConical, color: "text-emerald-500", bg: "bg-emerald-50", title: "因子研究引擎", desc: "50+ 算子，IC/IR/Sharpe 等 20+ 指标，行业/市值中性化" },
-              { icon: Sparkles, color: "text-blue-500", bg: "bg-blue-50", title: "零代码体验", desc: "用中文描述你的想法，AI 自动完成从表达式到回测全流程" },
+              { icon: Sparkles, color: "text-blue-500", bg: "bg-blue-50", title: "WQ BRAIN 对齐", desc: "算子标准对齐 BRAIN，一键模拟 + IS 检测 + 正式提交" },
               { icon: ShieldCheck, color: "text-purple-500", bg: "bg-purple-50", title: "抗过拟合验证", desc: "IC 稳定性、子样本压力、安慰剂检验、Walk-Forward" },
             ].map((f, i) => (
               <div key={i} className="rounded-xl border border-gray-100 bg-white/60 p-3">

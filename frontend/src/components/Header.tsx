@@ -11,7 +11,7 @@ const CHANGELOG = [
     version: "v2.5.0",
     date: "2026-03-27",
     items: [
-      "新增策略一键回测：用自然语言描述交易策略，自动生成代码并执行回测",
+      "新增策略一键回测：描述交易策略，自动生成代码并执行回测",
       "支持净值曲线、交易明细、每日持仓等完整策略回测报告",
       "新增策略代码安全保护，API 传输加密防爬取",
       "新增因子进化引擎：交叉、变异、元进化多路径自动搜索",
@@ -191,7 +191,7 @@ const CHANGELOG = [
     version: "v1.0.0",
     date: "2026-03-01",
     items: [
-      "上线自然语言因子回测",
+      "上线因子回测引擎",
       "支持沪深300 / 中证500 / 小样本股票池",
       "QuantStats HTML 报告生成",
       "MCP 工具集成",
@@ -313,7 +313,7 @@ agent.register_tool(backtest_tool)`;
                 <p className={`text-sm ${isDark ? "text-amber-300" : "text-blue-800"}`}>
                   <span className="font-medium">什么是 MCP？</span>{" "}
                   MCP (Model Context Protocol) 让 Claude 直接调用 QuantGPT 的回测工具。
-                  配置后，你可以在 Claude Code 终端中用自然语言执行因子回测。
+                  配置后，Claude 可以直接调用回测、评分、诊断等研究工具。
                 </p>
               </div>
 
@@ -359,7 +359,7 @@ agent.register_tool(backtest_tool)`;
                   </div>
                 </div>
                 <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"} mt-2`}>
-                  验证连接后，直接用自然语言对话即可：「帮我测试一个低波动率因子，在沪深300上回测」
+                  验证连接后，Agent 可自主调用工具进行因子研究：回测、评分、诊断、反过拟合检测
                 </p>
               </div>
             </>
@@ -530,7 +530,7 @@ export default function Header() {
                   {APP_VERSION}
                 </button>
               </div>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>用自然语言描述策略或因子，AI 一键回测</p>
+              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>Agent 驱动的 LLM 量化研究引擎</p>
             </div>
           </div>
           {isGuest ? (

@@ -125,7 +125,7 @@ export default function StrategyBacktest({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
-            placeholder="用自然语言描述你的交易策略..."
+            placeholder="描述你的交易策略..."
             rows={3}
             disabled={isLoading}
             className={`w-full px-4 py-3 resize-none focus:outline-none text-sm ${isDark ? "bg-gray-900 text-gray-100 placeholder-gray-500" : "bg-white text-gray-900 placeholder-gray-400"}`}

@@ -39,7 +39,7 @@ export default function BacktestForm({ onSubmit, isLoading }: Props) {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="描述你想测试的因子策略，例如：帮我测试一个20日动量因子"
+          placeholder="输入因子表达式，例如：rank(close / ts_mean(close, 20))"
           rows={3}
           className={`w-full px-4 pt-4 pb-2 text-sm resize-none focus:outline-none ${
             isDark

@@ -42,6 +42,7 @@ marketing/
 .claude/
 
 # Research notes & weekly reports (runtime artifacts, not source code)
+research_notes/
 docs/research_notes/archive/
 docs/research_notes/knowledge/
 docs/research_notes/auto_run_log.md
