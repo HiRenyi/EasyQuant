@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 postgresql = ["asyncpg>=0.29"]
 jq = ["playwright>=1.40"]
+celery = ["celery[redis]>=5.3"]
 dev = ["ruff>=0.4", "pyright>=1.1", "pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [build-system]

@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .backtest import run_factor_backtest, api_context
+from .task_executor import get_executor, _run_backtest_in_process
 from .expression_parser import parse_expression
 from .mutation_engine import MutationEngine
 from .meta_evolution import EvolutionStrategy, select_strategy
@@ -185,8 +186,11 @@ def _evaluate_candidate(
     """Run backtest + anti-overfit + report + score for a single expression."""
     n_groups = params.get("n_groups", 5)
     holding_period = params.get("holding_period", 5)
-    with api_context():
-        result = run_factor_backtest(market_df, expression, n_groups, holding_period)
+    executor = get_executor()
+    future = executor.submit_cpu_work(
+        _run_backtest_in_process, market_df, expression, n_groups, holding_period,
+    )
+    result = future.result(timeout=300)
 
     # Fast anti-overfit (IC stability + half-life only)
     anti_overfit_result = None

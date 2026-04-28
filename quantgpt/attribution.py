@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .backtest import run_factor_backtest, api_context
+from .task_executor import get_executor, _run_backtest_in_process
 from .expression_parser import parse_expression
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,11 @@ def compute_factor_attribution(
         expr = sf["expression"]
         label = sf.get("label", f"Factor_{i+1}")
         try:
-            with api_context():
-                result = run_factor_backtest(market_df, expr, n_groups, holding_period)
+            executor = get_executor()
+            future = executor.submit_cpu_work(
+                _run_backtest_in_process, market_df, expr, n_groups, holding_period,
+            )
+            result = future.result(timeout=300)
             factor_results.append({
                 "expression": expr,
                 "label": label,
@@ -87,8 +91,11 @@ def compute_factor_attribution(
     composite_result = None
     if composite_expression:
         try:
-            with api_context():
-                result = run_factor_backtest(market_df, composite_expression, n_groups, holding_period)
+            executor = get_executor()
+            future = executor.submit_cpu_work(
+                _run_backtest_in_process, market_df, composite_expression, n_groups, holding_period,
+            )
+            result = future.result(timeout=300)
             composite_result = {
                 "expression": composite_expression,
                 "sharpe": result.get("long_short_sharpe", 0),
@@ -142,7 +149,7 @@ def _compute_marginal_contributions(
     combined = sum(factor_values[l] for l in labels) / len(labels)
 
     # Forward returns for IC calculation
-    fwd = market_df.groupby("code")["close"].pct_change(holding_period).shift(-holding_period)
+    fwd = market_df.groupby(stock_col)["close"].pct_change(holding_period).shift(-holding_period)
 
     full_ic = _rank_ic(combined, fwd, market_df["trade_date"])
 

@@ -51,3 +51,5 @@ docs/research_notes/reports/
 *.swp
 *.swo
 .DS_Store
+engine/target/
+engine/Cargo.lock

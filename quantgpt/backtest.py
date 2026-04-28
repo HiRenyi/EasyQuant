@@ -94,11 +94,12 @@ def run_factor_backtest(
     if precomputed_factor is not None:
         market_df["factor_value"] = precomputed_factor.values if hasattr(precomputed_factor, 'values') else precomputed_factor
     elif expression is not None:
-        factor_func = parse_expression(expression)
-        # Apply factor to full DataFrame (sorted by stock_code, trade_date).
-        # Time-series ops internally groupby stock_code; cross-sectional ops
-        # (rank, zscore) groupby trade_date. This ensures correct behaviour.
-        market_df["factor_value"] = _safe_apply_factor(market_df, factor_func)
+        from .rust_bridge import RUST_ENABLED, eval_factor_expression
+        if RUST_ENABLED:
+            market_df["factor_value"] = eval_factor_expression(market_df, expression)
+        else:
+            factor_func = parse_expression(expression)
+            market_df["factor_value"] = _safe_apply_factor(market_df, factor_func)
     else:
         raise ValueError("必须提供 expression 或 precomputed_factor")
 

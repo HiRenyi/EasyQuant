@@ -1,5 +1,6 @@
 """Admin panel routes: login, overview, users, tasks, feedbacks."""
 
+import hmac
 import os
 import logging
 import uuid as uuid_mod
@@ -29,7 +30,7 @@ async def admin_login(req: AdminLoginRequest):
     expected = os.environ.get("QUANTGPT_ADMIN_PASSWORD", "")
     if not expected:
         raise HTTPException(status_code=503, detail="管理员密码未配置")
-    if req.password != expected:
+    if not hmac.compare_digest(req.password, expected):
         raise HTTPException(status_code=401, detail="密码错误")
     token = create_admin_token()
     return {"token": token}

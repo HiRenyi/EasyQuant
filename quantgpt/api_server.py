@@ -48,6 +48,7 @@ from .expression_parser import parse_expression
 from .expression_parser import __doc__ as _expr_module_doc
 from .market_data import MarketDataFetcher, get_universe, fetch_benchmark_returns
 from .backtest import run_factor_backtest, api_context
+from .task_executor import get_executor, _run_backtest_in_process
 from .report import generate_report
 from .iteration import compute_factor_score, generate_iteration_candidates
 from .db import get_db, init_db, close_db
@@ -223,6 +224,8 @@ async def lifespan(app: FastAPI):
         pass
 
     scheduler.shutdown(wait=False)
+    from .task_executor import shutdown_executor
+    shutdown_executor()
     await close_db()
     _main_loop = None
     logger.info("Database connection closed")
@@ -942,14 +945,23 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
                     else:
                         logger.warning(f"[{task_id}] no dividend data fetched")
 
-        # 4. Run backtest
+        # 4. Run backtest (offloaded to process pool to bypass GIL)
         _check_cancelled(task_id)
         task["status"] = "backtesting"
-        with api_context():
-            result = run_factor_backtest(market_df, expression, req.n_groups, req.holding_period,
-                                         neutralize_industry=req.neutralize_industry,
-                                         neutralize_cap=req.neutralize_cap,
-                                         trading_days_per_year=252)
+        executor = get_executor()
+        future = executor.submit_cpu_work(
+            _run_backtest_in_process,
+            market_df, expression, req.n_groups, req.holding_period,
+            neutralize_industry=req.neutralize_industry,
+            neutralize_cap=req.neutralize_cap,
+            trading_days_per_year=252,
+        )
+        while True:
+            try:
+                result = future.result(timeout=2)
+                break
+            except TimeoutError:
+                _check_cancelled(task_id)
 
         # 4a. Anti-overfit analysis
         _check_cancelled(task_id)
@@ -1283,7 +1295,7 @@ async def list_tasks(
     result = await db.execute(query)
     db_tasks = result.scalars().all()
 
-    # Merge: memory tasks override DB tasks with same ID, then paginate
+    # Merge: memory tasks override DB tasks with same ID, sort by time, then paginate
     memory_ids = {t["task_id"] for t in memory_tasks}
     merged = list(memory_tasks)
     for dt in db_tasks:
@@ -1300,6 +1312,19 @@ async def list_tasks(
                 "created_at": dt.created_at.isoformat() if dt.created_at else None,
             })
 
+    def _sort_key(t: dict) -> float:
+        ca = t.get("created_at")
+        if isinstance(ca, (int, float)):
+            return ca
+        if isinstance(ca, str):
+            try:
+                from datetime import datetime
+                return datetime.fromisoformat(ca).timestamp()
+            except Exception:
+                return 0
+        return 0
+
+    merged.sort(key=_sort_key, reverse=True)
     merged = merged[offset:offset + page_size]
     return {"tasks": [_sanitize_task_response(t) for t in merged], "page": page, "page_size": page_size}
 
