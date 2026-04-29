@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { authFetch } from "../api/client";
 import { getReportUrl } from "../api/client";
@@ -16,6 +16,49 @@ interface Stats {
 
 type StatusFilter = "all" | "completed" | "failed" | "running";
 type RatingFilter = "all" | "A" | "B" | "C" | "D";
+
+const IconTasks = () => (
+  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="14" height="14" rx="2" /><path d="M7 7h6M7 10h6M7 13h4" />
+  </svg>
+);
+const IconCheck = () => (
+  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="10" cy="10" r="7" /><path d="M7 10l2 2 4-4" />
+  </svg>
+);
+const IconPulse = () => (
+  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 10h4l2-5 3 10 2-5h5" />
+  </svg>
+);
+const IconAlert = () => (
+  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 3l7 12H3L10 3z" /><path d="M10 9v2M10 13v.5" />
+  </svg>
+);
+const IconPercent = () => (
+  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7" cy="7" r="2" /><circle cx="13" cy="13" r="2" /><path d="M15 5L5 15" />
+  </svg>
+);
+const IconBrain = () => (
+  <svg className="w-4 h-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 2C7.5 2 5 4 5 7c0 1.5.5 2.5 1 3.5S5 13 5 14c0 2 2 4 5 4s5-2 5-4c0-1-.5-2.5 0-3.5S15 8.5 15 7c0-3-2.5-5-5-5z" />
+    <path d="M10 2v16M7 5c1 1 2 1 3 0M7 9c1 1 2 1 3 0M7 13c1 1 2 1 3 0M13 5c-1 1-2 1-3 0M13 9c-1 1-2 1-3 0M13 13c-1 1-2 1-3 0" />
+  </svg>
+);
+const IconSpinner = () => (
+  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="8" cy="8" r="6" strokeOpacity="0.25" /><path d="M14 8a6 6 0 00-6-6" />
+  </svg>
+);
+const IconSuccessDot = () => (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" /><path d="M4.5 7l2 2 3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+const IconFailDot = () => (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" /><path d="M5 5l4 4M9 5l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+);
 
 export default function ResearchDashboard() {
   const { isDark } = useColorMode();
@@ -57,41 +100,48 @@ export default function ResearchDashboard() {
     return () => clearInterval(id);
   }, [hasActiveTasks, loadStats, loadTasks]);
 
-  const handleFilterChange = (f: StatusFilter) => {
-    setStatusFilter(f);
-    setPage(1);
-  };
+  const handleFilterChange = (f: StatusFilter) => { setStatusFilter(f); setPage(1); };
+  const handleRatingFilter = (r: RatingFilter) => { setRatingFilter(r); setPage(1); };
 
-  const handleRatingFilter = (r: RatingFilter) => {
-    setRatingFilter(r);
-    setPage(1);
-  };
-
-  const cardClass = `rounded-xl border p-4 ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"}`;
+  const surface = isDark ? "bg-[#0d1117]" : "bg-white";
+  const surfaceAlt = isDark ? "bg-[#161b22]" : "bg-gray-50/80";
+  const border = isDark ? "border-[#21262d]" : "border-gray-200";
   const textPrimary = isDark ? "text-gray-100" : "text-gray-900";
   const textSecondary = isDark ? "text-gray-400" : "text-gray-500";
   const textMuted = isDark ? "text-gray-500" : "text-gray-400";
+  const hoverRow = isDark ? "hover:bg-[#1c2128]" : "hover:bg-slate-50";
 
   const ratingColor = (rating: string) => {
-    if (rating === "A") return "bg-emerald-50 text-emerald-600 border-emerald-200";
-    if (rating === "B") return "bg-blue-50 text-blue-600 border-blue-200";
-    if (rating === "C") return "bg-yellow-50 text-yellow-600 border-yellow-200";
+    if (rating === "A") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (rating === "B") return "bg-sky-50 text-sky-700 border-sky-200";
+    if (rating === "C") return "bg-amber-50 text-amber-700 border-amber-200";
     if (rating === "D") return "bg-orange-50 text-orange-600 border-orange-200";
     return "bg-gray-50 text-gray-500 border-gray-200";
   };
-
   const ratingColorDark = (rating: string) => {
-    if (rating === "A") return "bg-emerald-900/30 text-emerald-400 border-emerald-800";
-    if (rating === "B") return "bg-blue-900/30 text-blue-400 border-blue-800";
-    if (rating === "C") return "bg-yellow-900/30 text-yellow-400 border-yellow-800";
-    if (rating === "D") return "bg-orange-900/30 text-orange-400 border-orange-800";
+    if (rating === "A") return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+    if (rating === "B") return "bg-sky-500/10 text-sky-400 border-sky-500/30";
+    if (rating === "C") return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+    if (rating === "D") return "bg-orange-500/10 text-orange-400 border-orange-500/30";
     return "bg-gray-800 text-gray-500 border-gray-700";
   };
 
-  const statusText = (status: string) => {
-    if (status === "completed") return <span className={`text-sm font-medium ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>成功</span>;
-    if (status === "failed") return <span className={`text-sm font-medium ${isDark ? "text-red-400" : "text-red-500"}`}>失败</span>;
-    return <span className={`inline-flex items-center gap-1 text-sm font-medium ${isDark ? "text-blue-400" : "text-blue-500"}`}><Loader2 className="h-3.5 w-3.5 animate-spin" />运行中</span>;
+  const statusBadge = (status: string) => {
+    if (status === "completed") return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-sm font-medium border ${isDark ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+        <IconSuccessDot />成功
+      </span>
+    );
+    if (status === "failed") return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-sm font-medium border ${isDark ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-red-50 text-red-600 border-red-200"}`}>
+        <IconFailDot />失败
+      </span>
+    );
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-sm font-medium border ${isDark ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-blue-50 text-blue-600 border-blue-200"}`}>
+        <IconSpinner />运行中
+      </span>
+    );
   };
 
   const formatTime = (task: Task) => {
@@ -119,7 +169,7 @@ export default function ResearchDashboard() {
       const ca = r.created_at as string | undefined;
       if (ca) {
         const elapsed = (Date.now() - new Date(ca).getTime()) / 1000;
-        if (elapsed > 0 && elapsed < 3600) return `${elapsed.toFixed(0)}s…`;
+        if (elapsed > 0 && elapsed < 3600) return `${elapsed.toFixed(0)}s...`;
       }
     }
     return "—";
@@ -128,38 +178,35 @@ export default function ResearchDashboard() {
   const getPrompt = (task: Task) => (task.params as unknown as Record<string, unknown>)?.prompt as string || task.result?.llm?.prompt || "—";
   const getRating = (task: Task) => task.result?.interpretation?.rating || (task.result?.backtest_summary as unknown as Record<string, unknown>)?.wq_rating as string || "";
 
-  const thClass = `text-left px-6 py-4 text-sm font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`;
-  const thCenter = `text-center px-5 py-4 text-sm font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`;
+  const thClass = `text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`;
+  const thCenter = `text-center px-5 py-3.5 text-xs font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`;
+
+  const statCards = stats ? [
+    { label: "Total Tasks", value: stats.total, icon: <IconTasks />, accent: isDark ? "text-gray-100" : "text-gray-900" },
+    { label: "Completed", value: stats.completed, icon: <IconCheck />, accent: "text-emerald-500" },
+    { label: "Running", value: stats.running, icon: <IconPulse />, accent: "text-blue-500" },
+    { label: "Failed", value: stats.failed, icon: <IconAlert />, accent: "text-red-500" },
+    { label: "Success Rate", value: `${stats.success_rate}%`, icon: <IconPercent />, accent: isDark ? "text-gray-100" : "text-gray-900" },
+  ] : [];
 
   return (
-    <div className="space-y-6">
-      {/* Stats cards */}
+    <div className="space-y-5">
+      {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className={cardClass}>
-            <p className={`text-xs font-medium ${textSecondary}`}>总任务</p>
-            <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{stats.total}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={`text-xs font-medium ${textSecondary}`}>已完成</p>
-            <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.completed}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={`text-xs font-medium ${textSecondary}`}>进行中</p>
-            <p className="text-2xl font-bold mt-1 text-blue-500">{stats.running}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={`text-xs font-medium ${textSecondary}`}>失败</p>
-            <p className="text-2xl font-bold mt-1 text-red-500">{stats.failed}</p>
-          </div>
-          <div className={cardClass}>
-            <p className={`text-xs font-medium ${textSecondary}`}>成功率</p>
-            <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{stats.success_rate}%</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {statCards.map(({ label, value, icon, accent }) => (
+            <div key={label} className={`rounded-lg border ${border} ${surface} p-4 flex items-start gap-3`}>
+              <div className={`mt-0.5 ${textMuted}`}>{icon}</div>
+              <div>
+                <p className={`text-xs font-medium uppercase tracking-wider ${textMuted}`}>{label}</p>
+                <p className={`text-2xl font-bold tabular-nums mt-0.5 ${accent}`}>{value}</p>
+              </div>
+            </div>
+          ))}
           {Object.keys(stats.rating_distribution).length > 0 && (
-            <div className={`${cardClass} col-span-2 md:col-span-5`}>
-              <p className={`text-xs font-medium mb-2 ${textSecondary}`}>评分分布（点击筛选）</p>
-              <div className="flex gap-3 flex-wrap">
+            <div className={`col-span-2 md:col-span-5 rounded-lg border ${border} ${surface} p-4`}>
+              <p className={`text-xs font-medium uppercase tracking-wider mb-3 ${textMuted}`}>Rating Distribution</p>
+              <div className="flex gap-2.5 flex-wrap">
                 {["A", "B", "C", "D"].map((r) => {
                   const count = stats.rating_distribution[r] || 0;
                   if (!count) return null;
@@ -168,18 +215,18 @@ export default function ResearchDashboard() {
                     <button
                       key={r}
                       onClick={() => handleRatingFilter(isActive ? "all" : r as RatingFilter)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border transition-all cursor-pointer ${isDark ? ratingColorDark(r) : ratingColor(r)} ${isActive ? "ring-2 ring-offset-1 ring-blue-500 scale-105" : "hover:scale-105"}`}
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all cursor-pointer ${isDark ? ratingColorDark(r) : ratingColor(r)} ${isActive ? "ring-2 ring-offset-1 ring-blue-500 shadow-sm" : "hover:shadow-sm"}`}
                     >
-                      {r} <span className="font-bold">{count}</span>
+                      {r} <span className="font-mono">{count}</span>
                     </button>
                   );
                 })}
                 {ratingFilter !== "all" && (
                   <button
                     onClick={() => handleRatingFilter("all")}
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}
                   >
-                    清除筛选
+                    Reset
                   </button>
                 )}
               </div>
@@ -189,60 +236,63 @@ export default function ResearchDashboard() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className={`flex items-center gap-1.5 flex-wrap rounded-lg border ${border} ${surface} px-3 py-2`}>
         {(["all", "completed", "running", "failed"] as StatusFilter[]).map((f) => (
           <button
             key={f}
             onClick={() => handleFilterChange(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
               statusFilter === f
-                ? isDark ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-blue-50 text-blue-700 border border-blue-200"
-                : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+                ? isDark ? "bg-blue-500/15 text-blue-400" : "bg-blue-50 text-blue-700"
+                : isDark ? "text-gray-400 hover:text-gray-200 hover:bg-[#1c2128]" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
             }`}
           >
-            {f === "all" ? "全部" : f === "completed" ? "已完成" : f === "running" ? "进行中" : "失败"}
+            {f === "all" ? "ALL" : f === "completed" ? "COMPLETED" : f === "running" ? "RUNNING" : "FAILED"}
           </button>
         ))}
 
-        <span className={`mx-1 ${textSecondary}`}>|</span>
+        <div className={`w-px h-5 mx-1.5 ${isDark ? "bg-[#21262d]" : "bg-gray-200"}`} />
 
         {(["all", "A", "B", "C", "D"] as RatingFilter[]).map((r) => (
           <button
             key={`r-${r}`}
             onClick={() => handleRatingFilter(r)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
               ratingFilter === r
                 ? r === "all"
-                  ? isDark ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "bg-blue-50 text-blue-700 border border-blue-200"
+                  ? isDark ? "bg-blue-500/15 text-blue-400" : "bg-blue-50 text-blue-700"
                   : `border ${isDark ? ratingColorDark(r) : ratingColor(r)} ring-1 ring-blue-500`
-                : r === "all"
-                  ? isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
-                  : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+                : isDark ? "text-gray-400 hover:text-gray-200 hover:bg-[#1c2128]" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
             }`}
           >
-            {r === "all" ? "全部评级" : `${r} 级`}
+            {r === "all" ? "ALL RATINGS" : `GRADE ${r}`}
           </button>
         ))}
       </div>
 
-      {/* Task table */}
-      <div className={`rounded-xl border overflow-hidden ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"}`}>
+      {/* Table */}
+      <div className={`rounded-lg border overflow-hidden ${border} ${surface}`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className={isDark ? "bg-gray-800/60 border-b border-gray-700" : "bg-gray-50/80 border-b border-gray-200"}>
-              <tr>
-                <th className={thClass}>任务ID</th>
+          <table className="w-full">
+            <thead>
+              <tr className={`${surfaceAlt} border-b ${border}`}>
+                <th className={thClass}>Task ID</th>
                 <th className={thClass}>Prompt</th>
-                <th className={thClass}>表达式</th>
-                <th className={thCenter}>评级</th>
-                <th className={thCenter}>状态</th>
-                <th className={thCenter}>耗时</th>
-                <th className={thCenter}>时间</th>
+                <th className={thClass}>Expression</th>
+                <th className={thCenter}>Grade</th>
+                <th className={thCenter}>Status</th>
+                <th className={thCenter}>Duration</th>
+                <th className={thCenter}>Timestamp</th>
               </tr>
             </thead>
-            <tbody className={isDark ? "divide-y divide-gray-800" : "divide-y divide-gray-100"}>
+            <tbody className={isDark ? "divide-y divide-[#21262d]" : "divide-y divide-gray-100"}>
               {tasks.length === 0 && (
-                <tr><td colSpan={7} className={`text-center py-16 ${textSecondary}`}>暂无任务</td></tr>
+                <tr><td colSpan={7} className={`text-center py-20 ${textMuted}`}>
+                  <div className="flex flex-col items-center gap-2">
+                    <IconBrain />
+                    <span className="text-sm">No research tasks yet</span>
+                  </div>
+                </td></tr>
               )}
               {tasks.map((task) => {
                 const rating = getRating(task);
@@ -251,21 +301,21 @@ export default function ResearchDashboard() {
                   <tr
                     key={task.task_id}
                     onClick={() => setSelectedTask(task)}
-                    className={`cursor-pointer transition-colors ${isDark ? "hover:bg-gray-800/40" : "hover:bg-gray-50/70"}`}
+                    className={`cursor-pointer transition-colors ${hoverRow}`}
                   >
-                    <td className={`px-6 py-5 font-mono text-sm ${textMuted} whitespace-nowrap`}>{task.task_id}</td>
-                    <td className={`px-6 py-5 max-w-[360px] truncate text-sm ${textPrimary}`}>{getPrompt(task)}</td>
-                    <td className={`px-6 py-5 max-w-[380px] truncate font-mono text-sm ${textSecondary}`}>{expression}</td>
-                    <td className="px-5 py-5 text-center">
+                    <td className={`px-6 py-4 font-mono text-sm ${textMuted} whitespace-nowrap`}>{task.task_id}</td>
+                    <td className={`px-6 py-4 max-w-[360px] truncate text-sm ${textPrimary}`}>{getPrompt(task)}</td>
+                    <td className={`px-6 py-4 max-w-[380px] truncate font-mono text-sm ${textSecondary}`}>{expression}</td>
+                    <td className="px-5 py-4 text-center">
                       {rating ? (
-                        <span className={`inline-block px-2.5 py-0.5 rounded-md text-sm font-bold border ${isDark ? ratingColorDark(rating) : ratingColor(rating)}`}>{rating}</span>
+                        <span className={`inline-block px-2.5 py-0.5 rounded-md text-xs font-bold border ${isDark ? ratingColorDark(rating) : ratingColor(rating)}`}>{rating}</span>
                       ) : (
                         <span className={textMuted}>-</span>
                       )}
                     </td>
-                    <td className="px-5 py-5 text-center whitespace-nowrap">{statusText(task.status)}</td>
-                    <td className={`px-5 py-5 text-center font-mono text-sm ${textMuted} whitespace-nowrap`}>{formatDuration(task)}</td>
-                    <td className={`px-5 py-5 text-center text-sm ${textMuted} whitespace-nowrap`}>{formatTime(task)}</td>
+                    <td className="px-5 py-4 text-center whitespace-nowrap">{statusBadge(task.status)}</td>
+                    <td className={`px-5 py-4 text-center font-mono text-sm tabular-nums ${textMuted} whitespace-nowrap`}>{formatDuration(task)}</td>
+                    <td className={`px-5 py-4 text-center font-mono text-sm tabular-nums ${textMuted} whitespace-nowrap`}>{formatTime(task)}</td>
                   </tr>
                 );
               })}
@@ -275,19 +325,19 @@ export default function ResearchDashboard() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-center gap-3">
+      <div className="flex items-center justify-center gap-4">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page === 1}
-          className={`p-1.5 rounded-lg transition-colors ${page === 1 ? "opacity-30 cursor-not-allowed" : isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-600"}`}
+          className={`p-1.5 rounded-md transition-colors ${page === 1 ? "opacity-30 cursor-not-allowed" : isDark ? "hover:bg-[#1c2128] text-gray-400" : "hover:bg-gray-100 text-gray-600"}`}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className={`text-sm ${textSecondary}`}>第 {page} 页</span>
+        <span className={`text-xs font-mono uppercase tracking-wider ${textMuted}`}>Page {page}</span>
         <button
           onClick={() => setPage((p) => p + 1)}
           disabled={tasks.length < pageSize}
-          className={`p-1.5 rounded-lg transition-colors ${tasks.length < pageSize ? "opacity-30 cursor-not-allowed" : isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-600"}`}
+          className={`p-1.5 rounded-md transition-colors ${tasks.length < pageSize ? "opacity-30 cursor-not-allowed" : isDark ? "hover:bg-[#1c2128] text-gray-400" : "hover:bg-gray-100 text-gray-600"}`}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -295,47 +345,51 @@ export default function ResearchDashboard() {
 
       {/* Detail modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedTask(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedTask(null)}>
           <div
-            className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl border p-6 shadow-xl ${isDark ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}`}
+            className={`w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl border shadow-2xl ${border} ${surface} p-6`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${textPrimary}`}>任务详情</h3>
-              <button onClick={() => setSelectedTask(null)} className={`text-sm ${textSecondary} hover:${textPrimary}`}>关闭</button>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-1.5 rounded-md ${isDark ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                  <IconBrain />
+                </div>
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>Task Detail</h3>
+                <span className={`font-mono text-xs ${textMuted}`}>{selectedTask.task_id}</span>
+              </div>
+              <button onClick={() => setSelectedTask(null)} className={`p-1.5 rounded-md transition-colors ${isDark ? "text-gray-400 hover:bg-[#1c2128]" : "text-gray-400 hover:bg-gray-100"}`}>
+                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+              </button>
             </div>
 
-            <div className="space-y-4">
-              {/* Prompt */}
+            <div className="space-y-5">
               <div>
-                <p className={`text-xs font-medium mb-1 ${textSecondary}`}>描述</p>
-                <p className={`text-sm ${textPrimary}`}>{getPrompt(selectedTask)}</p>
+                <p className={`text-xs font-medium uppercase tracking-wider mb-1.5 ${textMuted}`}>Prompt</p>
+                <p className={`text-sm leading-relaxed ${textPrimary}`}>{getPrompt(selectedTask)}</p>
               </div>
 
-              {/* Expression */}
               <div>
-                <p className={`text-xs font-medium mb-1 ${textSecondary}`}>表达式</p>
-                <p className={`text-sm font-mono p-2 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-50"} ${textPrimary}`}>{getExpression(selectedTask)}</p>
+                <p className={`text-xs font-medium uppercase tracking-wider mb-1.5 ${textMuted}`}>Expression</p>
+                <div className={`font-mono text-sm p-3 rounded-lg border ${border} ${surfaceAlt} ${textPrimary}`}>{getExpression(selectedTask)}</div>
               </div>
 
-              {/* Status + Error */}
               <div className="flex items-center gap-3">
-                {statusText(selectedTask.status)}
+                {statusBadge(selectedTask.status)}
                 {getRating(selectedTask) && (
-                  <span className={`px-2 py-0.5 rounded text-sm font-bold border ${isDark ? ratingColorDark(getRating(selectedTask)) : ratingColor(getRating(selectedTask))}`}>{getRating(selectedTask)}</span>
+                  <span className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${isDark ? ratingColorDark(getRating(selectedTask)) : ratingColor(getRating(selectedTask))}`}>{getRating(selectedTask)}</span>
                 )}
               </div>
               {selectedTask.error && (
-                <div className={`text-sm p-3 rounded-lg ${isDark ? "bg-red-900/30 text-red-400" : "bg-red-50 text-red-600"}`}>
+                <div className={`text-sm p-3 rounded-lg border ${isDark ? "bg-red-500/10 text-red-400 border-red-500/20" : "bg-red-50 text-red-600 border-red-200"}`}>
                   {typeof selectedTask.error === "string" ? selectedTask.error : JSON.stringify(selectedTask.error)}
                 </div>
               )}
 
-              {/* Metrics */}
               {selectedTask.result?.backtest_summary && (
                 <div>
-                  <p className={`text-xs font-medium mb-2 ${textSecondary}`}>核心指标</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <p className={`text-xs font-medium uppercase tracking-wider mb-2.5 ${textMuted}`}>Key Metrics</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     {[
                       { label: "L/S Sharpe", value: selectedTask.result.backtest_summary.long_short_sharpe?.toFixed(2) },
                       { label: "L/S Annual", value: selectedTask.result.backtest_summary.long_short_annual != null ? `${(selectedTask.result.backtest_summary.long_short_annual * 100).toFixed(1)}%` : undefined },
@@ -346,72 +400,71 @@ export default function ResearchDashboard() {
                       { label: "Monotonicity", value: selectedTask.result.backtest_summary.monotonicity_score?.toFixed(2) },
                       { label: "Spread", value: selectedTask.result.backtest_summary.spread?.toFixed(2) },
                     ].map(({ label, value }) => value != null ? (
-                      <div key={label} className={`p-2 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
-                        <p className={`text-xs ${textSecondary}`}>{label}</p>
-                        <p className={`text-sm font-mono font-semibold ${textPrimary}`}>{value}</p>
+                      <div key={label} className={`p-2.5 rounded-lg border ${border} ${surfaceAlt}`}>
+                        <p className={`text-xs ${textMuted}`}>{label}</p>
+                        <p className={`text-sm font-mono font-semibold tabular-nums mt-0.5 ${textPrimary}`}>{value}</p>
                       </div>
                     ) : null)}
                   </div>
                 </div>
               )}
 
-              {/* WQ Brain */}
               {selectedTask.result?.wq_brain && (
                 <div>
-                  <p className={`text-xs font-medium mb-2 ${textSecondary}`}>WQ BRAIN 模拟</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <p className={`text-xs font-medium uppercase tracking-wider mb-2.5 ${textMuted}`}>WQ BRAIN Simulation</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     {[
                       { label: "WQ Sharpe", value: selectedTask.result.wq_brain.wq_sharpe.toFixed(2) },
                       { label: "WQ Fitness", value: selectedTask.result.wq_brain.wq_fitness.toFixed(3) },
                       { label: "WQ Returns", value: `${(selectedTask.result.wq_brain.wq_returns * 100).toFixed(1)}%` },
                       { label: "WQ Rating", value: selectedTask.result.wq_brain.wq_rating },
                     ].map(({ label, value }) => (
-                      <div key={label} className={`p-2 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
-                        <p className={`text-xs ${textSecondary}`}>{label}</p>
-                        <p className={`text-sm font-mono font-semibold ${textPrimary}`}>{value}</p>
+                      <div key={label} className={`p-2.5 rounded-lg border ${border} ${surfaceAlt}`}>
+                        <p className={`text-xs ${textMuted}`}>{label}</p>
+                        <p className={`text-sm font-mono font-semibold tabular-nums mt-0.5 ${textPrimary}`}>{value}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Interpretation */}
               {selectedTask.result?.interpretation && (
                 <div>
-                  <p className={`text-xs font-medium mb-2 ${textSecondary}`}>AI 分析</p>
-                  <div className={`p-3 rounded-lg space-y-2 text-sm ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
+                  <div className={`flex items-center gap-1.5 mb-2.5 ${textMuted}`}>
+                    <IconBrain />
+                    <p className="text-xs font-medium uppercase tracking-wider">AI Analysis</p>
+                  </div>
+                  <div className={`p-3.5 rounded-lg border space-y-2.5 text-sm ${border} ${surfaceAlt}`}>
                     {selectedTask.result.interpretation.conclusion && (
-                      <p className={textPrimary}><span className={`font-medium ${textSecondary}`}>结论：</span>{selectedTask.result.interpretation.conclusion}</p>
+                      <p className={textPrimary}><span className={`font-semibold ${textSecondary}`}>Conclusion: </span>{selectedTask.result.interpretation.conclusion}</p>
                     )}
                     {selectedTask.result.interpretation.logic && (
-                      <p className={textPrimary}><span className={`font-medium ${textSecondary}`}>逻辑：</span>{selectedTask.result.interpretation.logic}</p>
+                      <p className={textPrimary}><span className={`font-semibold ${textSecondary}`}>Logic: </span>{selectedTask.result.interpretation.logic}</p>
                     )}
                     {selectedTask.result.interpretation.guidance && (
-                      <p className={textPrimary}><span className={`font-medium ${textSecondary}`}>建议：</span>{selectedTask.result.interpretation.guidance}</p>
+                      <p className={textPrimary}><span className={`font-semibold ${textSecondary}`}>Guidance: </span>{selectedTask.result.interpretation.guidance}</p>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Report link */}
               {selectedTask.result?.report_url && (
                 <a
                   href={getReportUrl(selectedTask.result.report_url)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors shadow-sm"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  查看完整报告
+                  View Full Report
                 </a>
               )}
 
-              {/* Params */}
               {selectedTask.result?.params && (
                 <div>
-                  <p className={`text-xs font-medium mb-1 ${textSecondary}`}>回测参数</p>
-                  <p className={`text-xs font-mono ${textSecondary}`}>
-                    {selectedTask.result.params.universe} · {selectedTask.result.params.start_date} ~ {selectedTask.result.params.end_date} · {selectedTask.result.params.n_groups}组 · 持仓{selectedTask.result.params.holding_period}天 · {selectedTask.result.params.stock_count}只
+                  <p className={`text-xs font-medium uppercase tracking-wider mb-1.5 ${textMuted}`}>Parameters</p>
+                  <p className={`text-xs font-mono tabular-nums ${textSecondary}`}>
+                    {selectedTask.result.params.universe} · {selectedTask.result.params.start_date} ~ {selectedTask.result.params.end_date} · {selectedTask.result.params.n_groups}G · {selectedTask.result.params.holding_period}D hold · {selectedTask.result.params.stock_count} stocks
                   </p>
                 </div>
               )}
