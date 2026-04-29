@@ -21,7 +21,7 @@ from ..task_store import (
     tasks_lock,
     MAX_ACTIVE_TASKS,
 )
-from ..wq_brain_client import SUBMIT_THRESHOLDS, WQBrainClient, is_configured
+from ..wq_brain_client import SUBMIT_THRESHOLDS, WQBrainClient, configured_accounts, get_client, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ class WQBrainSubmitRequest(BaseModel):
     neutralization: str = Field("SUBINDUSTRY", description="Neutralization method")
     truncation: float = Field(0.08, ge=0, le=0.5, description="Weight truncation")
     auto_submit: bool = Field(False, description="Auto-submit if checks pass")
+    account: str = Field("primary", description="WQ account: 'primary' or 'alt'")
     session_id: str | None = Field(None, description="Session ID")
 
 
@@ -67,12 +68,13 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
         return
 
     try:
-        client = WQBrainClient()
+        account = req.account if req.account in ("primary", "alt") else "primary"
+        client = get_client(account)
 
         task["status"] = "authenticating"
         if not client.authenticate():
             task["status"] = "failed"
-            task["error"] = "WQ BRAIN 认证失败，请检查 WQ_BRAIN_EMAIL/WQ_BRAIN_PASSWORD 配置"
+            task["error"] = f"WQ BRAIN 认证失败 (account={account})，请检查凭证配置"
             return
 
         task["status"] = "simulating"
@@ -97,16 +99,17 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
             task["error"] = result.get("error", "WQ BRAIN simulation failed")
             return
 
-        task["status"] = "checking"
         alpha_id = result.get("alpha_id")
-        checks = {}
-        submittable = False
-        if alpha_id:
-            checks = client.check_alpha(alpha_id)
-            submittable = client.is_submittable(checks)
+
+        is_data = result.get("is", {})
+        sharpe = _safe_float(is_data.get("sharpe"))
+        fitness = _safe_float(is_data.get("fitness"))
+        returns_val = _safe_float(is_data.get("returns"))
+        turnover = _safe_float(is_data.get("turnover"))
+        rating = _fitness_to_grade(fitness)
 
         submitted = False
-        if req.auto_submit and submittable and alpha_id:
+        if req.auto_submit and alpha_id and account == "primary" and rating == "A":
             task["status"] = "submitting"
             submit_result = client.submit_alpha(alpha_id)
             submitted = submit_result.get("ok", False)
@@ -126,15 +129,7 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
 
         client.close()
 
-        is_data = result.get("is", {})
         oos_data = result.get("oos", {})
-
-        sharpe = _safe_float(is_data.get("sharpe"))
-        fitness = _safe_float(is_data.get("fitness"))
-        returns_val = _safe_float(is_data.get("returns"))
-        turnover = _safe_float(is_data.get("turnover"))
-
-        rating = _fitness_to_grade(fitness)
 
         task["status"] = "completed"
         task["expression"] = req.expression
@@ -144,8 +139,6 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
             "is_metrics": is_data,
             "oos_metrics": oos_data,
             "settings": result.get("settings", {}),
-            "checks": checks,
-            "submittable": submittable,
             "submitted": submitted,
             "simulation_id": result.get("simulation_id"),
             "backtest_summary": {
@@ -161,13 +154,12 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
                 "wq_returns": returns_val,
                 "wq_turnover": turnover,
                 "wq_rating": rating,
-                "submittable": submittable,
             },
             "interpretation": {
                 "rating": rating,
             },
         }
-        logger.info(f"[{task_id}] WQ BRAIN completed: alpha_id={alpha_id} submittable={submittable}")
+        logger.info(f"[{task_id}] WQ BRAIN completed: alpha_id={alpha_id} rating={rating} submitted={submitted}")
 
     except Exception as e:
         logger.error(f"[{task_id}] WQ BRAIN task error: {e}")
@@ -184,8 +176,10 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
 
 @router.get("/status")
 async def wq_brain_status():
+    accounts = configured_accounts()
     return {
-        "configured": is_configured(),
+        "configured": len(accounts) > 0,
+        "accounts": accounts,
         "thresholds": SUBMIT_THRESHOLDS,
     }
 
@@ -196,8 +190,8 @@ async def wq_brain_submit(
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    if not is_configured():
-        raise HTTPException(status_code=503, detail="WQ BRAIN 未配置 — 请设置 WQ_BRAIN_EMAIL 和 WQ_BRAIN_PASSWORD")
+    if not is_configured(req.account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={req.account}) — 请设置对应的环境变量")
 
     client_ip = request.client.host if request.client else "unknown"
     if not check_rate_limit(client_ip):
@@ -227,23 +221,6 @@ async def wq_brain_submit(
     thread.start()
 
     return {"task_id": task_id, "status": "pending"}
-
-
-@router.post("/pre-check")
-async def wq_brain_pre_check(
-    request: Request,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    body = await request.json()
-    expression = body.get("expression", "")
-    threshold = body.get("threshold", 0.85)
-    if not expression:
-        raise HTTPException(status_code=400, detail="expression is required")
-
-    from ..alpha_tracker import check_self_correlation
-    result = await check_self_correlation(str(user.id), expression, threshold=threshold, session=session)
-    return result
 
 
 @router.get("/submitted-alphas")
@@ -299,7 +276,7 @@ async def submit_alpha_from_task(
     user: User = Depends(get_current_user),
 ):
     if not is_configured():
-        raise HTTPException(status_code=503, detail="WQ BRAIN 未配置")
+        raise HTTPException(status_code=503, detail="WQ BRAIN 未配置 — 无可用账号")
 
     task = tasks.get(task_id)
     if not task:
@@ -314,9 +291,12 @@ async def submit_alpha_from_task(
     if not alpha_id:
         raise HTTPException(status_code=400, detail="任务无关联的 alpha_id")
 
-    client = WQBrainClient()
+    account = task.get("params", {}).get("account", "primary")
+    if account != "primary":
+        raise HTTPException(status_code=403, detail="Alpha 提交仅允许 primary 账号，禁止从 alt 账号提交")
+    client = get_client(account)
     if not client.authenticate():
-        raise HTTPException(status_code=502, detail="WQ BRAIN 认证失败")
+        raise HTTPException(status_code=502, detail=f"WQ BRAIN 认证失败 (account={account})")
 
     submit_result = client.submit_alpha(alpha_id)
     client.close()

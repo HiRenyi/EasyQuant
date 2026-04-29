@@ -19,7 +19,7 @@ from ..task_store import (
     tasks_lock,
     MAX_ACTIVE_TASKS,
 )
-from ..wq_brain_client import WQBrainClient, is_configured
+from ..wq_brain_client import WQBrainClient, get_client, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class WQBrainBatchRequest(BaseModel):
     decay: int = Field(0, ge=0, le=20, description="Alpha decay (shared)")
     truncation: float = Field(0.08, ge=0, le=0.5, description="Weight truncation (shared)")
     auto_submit: bool = Field(False, description="Auto-submit if all IS checks pass")
+    account: str = Field("primary", description="WQ account: 'primary' or 'alt'")
     session_id: str | None = Field(None, description="Session ID")
 
 
@@ -63,11 +64,12 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
     task["sub_results"] = {}
 
     try:
-        client = WQBrainClient()
+        account = req.account if req.account in ("primary", "alt") else "primary"
+        client = get_client(account)
         task["status"] = "authenticating"
         if not client.authenticate():
             task["status"] = "failed"
-            task["error"] = "WQ BRAIN 认证失败"
+            task["error"] = f"WQ BRAIN 认证失败 (account={account})"
             return
 
         task["status"] = "running"
@@ -102,14 +104,14 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
                 alpha_id = result.get("alpha_id")
                 is_data = result.get("is", {})
 
-                checks = {}
-                submittable = False
-                if alpha_id:
-                    checks = client.check_alpha(alpha_id)
-                    submittable = client.is_submittable(checks)
+                sharpe = _safe_float(is_data.get("sharpe"))
+                fitness = _safe_float(is_data.get("fitness"))
+                returns_val = _safe_float(is_data.get("returns"))
+                turnover = _safe_float(is_data.get("turnover"))
+                rating = "A" if (fitness or 0) >= 1.0 else ("B" if (fitness or 0) >= 0.5 else "C")
 
                 submitted = False
-                if req.auto_submit and submittable and alpha_id:
+                if req.auto_submit and alpha_id and rating == "A":
                     submit_result = client.submit_alpha(alpha_id)
                     submitted = submit_result.get("ok", False)
 
@@ -126,21 +128,15 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
                     except Exception as e:
                         logger.warning(f"[{task_id}] alpha tracking failed for {key}: {e}")
 
-                sharpe = _safe_float(is_data.get("sharpe"))
-                fitness = _safe_float(is_data.get("fitness"))
-                returns_val = _safe_float(is_data.get("returns"))
-                turnover = _safe_float(is_data.get("turnover"))
-
                 sub["status"] = "completed"
                 sub["alpha_id"] = alpha_id
                 sub["sharpe"] = sharpe
                 sub["fitness"] = fitness
                 sub["returns"] = returns_val
                 sub["turnover"] = turnover
-                sub["submittable"] = submittable
                 sub["submitted"] = submitted
 
-                if submittable:
+                if rating == "A":
                     submittable_count += 1
                 if fitness is not None and fitness > best_fitness:
                     best_fitness = fitness

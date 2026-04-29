@@ -602,14 +602,12 @@ async def wq_brain_submit(
             return _result_str
 
         alpha_id = result.get("alpha_id")
-        checks = {}
-        submittable = False
-        if alpha_id:
-            checks = await asyncio.to_thread(client.check_alpha, alpha_id)
-            submittable = client.is_submittable(checks)
+        is_data = result.get("is", {})
+        fitness = float(is_data.get("fitness", 0) or 0)
+        rating = "A" if fitness >= 1.0 else ("B" if fitness >= 0.5 else "C")
 
         submitted = False
-        if auto_submit and submittable and alpha_id:
+        if auto_submit and alpha_id and rating == "A":
             submit_result = await asyncio.to_thread(client.submit_alpha, alpha_id)
             submitted = submit_result.get("ok", False)
 
@@ -620,8 +618,7 @@ async def wq_brain_submit(
             "alpha_id": alpha_id,
             "is_metrics": result.get("is", {}),
             "oos_metrics": result.get("oos", {}),
-            "checks": checks,
-            "submittable": submittable,
+            "rating": rating,
             "submitted": submitted,
             "simulation_id": result.get("simulation_id"),
         }
@@ -637,34 +634,6 @@ async def wq_brain_submit(
         track_mcp_result("mcp_wq_brain", expression,
                          {"region": region, "universe": universe, "delay": delay},
                          _result_str, _error_msg, time.monotonic() - _start)
-
-
-@mcp.tool()
-async def wq_brain_pre_check(
-    expression: str,
-    threshold: float = 0.85,
-) -> str:
-    """提交前自相关检查 — 检测新表达式是否与已提交的 alpha 过于相似。
-
-    WQ BRAIN 会拒绝与已提交 alpha 高度相关的新提交。此工具在提交前扫描
-    已记录的 alpha 库，找出相似表达式，避免浪费提交额度。
-
-    Args:
-        expression: 待检查的 FASTEXPR 表达式
-        threshold: 相似度阈值 (0-1, 默认 0.85)
-
-    Returns:
-        JSON with safe (bool), matches (similar alphas), total_submitted count.
-    """
-    from .alpha_tracker import check_self_correlation
-    from .mcp_tracking import MCP_USER_ID
-
-    try:
-        result = await check_self_correlation(MCP_USER_ID, expression, threshold=threshold)
-        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
-    except Exception as e:
-        logger.error(f"WQ pre-check failed: {traceback.format_exc()}")
-        return json.dumps({"error": str(e)})
 
 
 @mcp.tool()
@@ -748,12 +717,8 @@ async def wq_brain_batch_submit(
                 is_data = result.get("is", {})
                 checks = {}
                 submittable = False
-                if alpha_id:
-                    checks = await asyncio.to_thread(client.check_alpha, alpha_id)
-                    submittable = client.is_submittable(checks)
-
                 submitted = False
-                if auto_submit and submittable and alpha_id:
+                if auto_submit and alpha_id:
                     submit_result = await asyncio.to_thread(client.submit_alpha, alpha_id)
                     submitted = submit_result.get("ok", False)
 
@@ -772,10 +737,9 @@ async def wq_brain_batch_submit(
                 sub["fitness"] = fitness
                 sub["returns"] = _safe_float(is_data.get("returns"))
                 sub["turnover"] = _safe_float(is_data.get("turnover"))
-                sub["submittable"] = submittable
                 sub["submitted"] = submitted
 
-                if submittable:
+                if fitness is not None and fitness >= 1.0:
                     submittable_count += 1
                 if fitness is not None and fitness > best_fitness:
                     best_fitness = fitness

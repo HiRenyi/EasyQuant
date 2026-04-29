@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quantgpt.wq_brain_client import SUBMIT_THRESHOLDS, WQBrainClient, is_configured
+from quantgpt.wq_brain_client import SUBMIT_THRESHOLDS, WQBrainClient, configured_accounts, get_client, is_configured
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,6 +27,42 @@ class TestIsConfigured:
         with patch.dict(os.environ, {"WQ_BRAIN_EMAIL": "a@b.com", "WQ_BRAIN_PASSWORD": "pw"}, clear=False):
             assert is_configured() is True
 
+    def test_configured_specific_account(self):
+        with patch.dict(os.environ, {
+            "WQ_BRAIN_EMAIL": "a@b.com", "WQ_BRAIN_PASSWORD": "pw",
+            "WQ_BRAIN_ALT_EMAIL": "", "WQ_BRAIN_ALT_PASSWORD": "",
+        }, clear=False):
+            assert is_configured("primary") is True
+            assert is_configured("alt") is False
+
+    def test_configured_alt_account(self):
+        with patch.dict(os.environ, {
+            "WQ_BRAIN_EMAIL": "", "WQ_BRAIN_PASSWORD": "",
+            "WQ_BRAIN_ALT_EMAIL": "alt@b.com", "WQ_BRAIN_ALT_PASSWORD": "pw2",
+        }, clear=False):
+            assert is_configured("primary") is False
+            assert is_configured("alt") is True
+            assert is_configured() is True
+
+    def test_configured_accounts(self):
+        with patch.dict(os.environ, {
+            "WQ_BRAIN_EMAIL": "a@b.com", "WQ_BRAIN_PASSWORD": "pw",
+            "WQ_BRAIN_ALT_EMAIL": "alt@b.com", "WQ_BRAIN_ALT_PASSWORD": "pw2",
+        }, clear=False):
+            accts = configured_accounts()
+            assert "primary" in accts
+            assert "alt" in accts
+
+    def test_get_client_primary(self):
+        with patch.dict(os.environ, {
+            "WQ_BRAIN_EMAIL": "main@b.com", "WQ_BRAIN_PASSWORD": "pw1",
+            "WQ_BRAIN_ALT_EMAIL": "alt@b.com", "WQ_BRAIN_ALT_PASSWORD": "pw2",
+        }, clear=False):
+            c = get_client("primary")
+            assert c.email == "main@b.com"
+            c2 = get_client("alt")
+            assert c2.email == "alt@b.com"
+
 
 class TestWQBrainClient:
     def test_init_from_params(self):
@@ -44,67 +80,33 @@ class TestWQBrainClient:
         c = WQBrainClient(email="a", password="b")
         c.close()
 
-    def test_is_submittable_all_pass(self):
-        c = WQBrainClient(email="a", password="b")
-        checks = {"is": {"checks": [
-            {"name": "test1", "result": "PASS"},
-            {"name": "test2", "result": "PASS"},
-        ]}}
-        assert c.is_submittable(checks) is True
-
-    def test_is_submittable_with_fail(self):
-        c = WQBrainClient(email="a", password="b")
-        checks = {"is": {"checks": [
-            {"name": "test1", "result": "PASS"},
-            {"name": "test2", "result": "FAIL"},
-        ]}}
-        assert c.is_submittable(checks) is False
-
-    def test_is_submittable_with_pending(self):
-        c = WQBrainClient(email="a", password="b")
-        checks = {"is": {"checks": [
-            {"name": "test1", "result": "PASS"},
-            {"name": "test2", "result": "PENDING"},
-        ]}}
-        assert c.is_submittable(checks) is False
-
-    def test_is_submittable_empty(self):
-        c = WQBrainClient(email="a", password="b")
-        assert c.is_submittable({}) is False
-
-    @patch("quantgpt.wq_brain_client.httpx.Client")
-    def test_authenticate_success(self, mock_client_cls):
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
+    def test_authenticate_success(self):
+        c = WQBrainClient(email="a@b.com", password="pw")
+        mock_session = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"permissions": ["SUBMIT"]}
-        mock_client.post.return_value = mock_resp
-
-        c = WQBrainClient(email="a@b.com", password="pw")
+        mock_session.post.return_value = mock_resp
+        c._session = mock_session
         assert c.authenticate() is True
 
-    @patch("quantgpt.wq_brain_client.httpx.Client")
-    def test_authenticate_failure(self, mock_client_cls):
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
+    def test_authenticate_failure(self):
+        c = WQBrainClient(email="a@b.com", password="wrong")
+        mock_session = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 401
-        mock_client.post.return_value = mock_resp
-
-        c = WQBrainClient(email="a@b.com", password="wrong")
+        mock_session.post.return_value = mock_resp
+        c._session = mock_session
         assert c.authenticate() is False
 
-    @patch("quantgpt.wq_brain_client.httpx.Client")
-    def test_authenticate_biometric(self, mock_client_cls):
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
+    def test_authenticate_biometric(self):
+        c = WQBrainClient(email="a@b.com", password="pw")
+        mock_session = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"inquiry": "biometric_required"}
-        mock_client.post.return_value = mock_resp
-
-        c = WQBrainClient(email="a@b.com", password="pw")
+        mock_session.post.return_value = mock_resp
+        c._session = mock_session
         assert c.authenticate() is False
 
 
@@ -142,27 +144,6 @@ class TestWQBrainSubmitEndpoint:
                 data = resp.json()
                 assert "task_id" in data
                 assert data["status"] == "pending"
-
-
-class TestPreCheckEndpoint:
-    async def test_pre_check_requires_auth(self, client):
-        resp = await client.post("/api/v1/wq-brain/pre-check", json={
-            "expression": "rank(close)",
-        })
-        assert resp.status_code in (401, 403)
-
-    async def test_pre_check_requires_expression(self, client, test_user, auth_headers):
-        resp = await client.post("/api/v1/wq-brain/pre-check", json={}, headers=auth_headers)
-        assert resp.status_code == 400
-
-    async def test_pre_check_returns_safe_when_no_alphas(self, client, test_user, auth_headers):
-        resp = await client.post("/api/v1/wq-brain/pre-check", json={
-            "expression": "rank(close)",
-        }, headers=auth_headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["safe"] is True
-        assert data["total_submitted"] == 0
 
 
 class TestSubmittedAlphasEndpoint:

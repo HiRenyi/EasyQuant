@@ -10,7 +10,9 @@ import os
 import time
 from typing import Callable
 
-import httpx
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +31,51 @@ _CONCURRENT_BACKOFF = 30
 _MAX_RETRIES = 5
 
 
-def is_configured() -> bool:
-    return bool(os.environ.get("WQ_BRAIN_EMAIL") and os.environ.get("WQ_BRAIN_PASSWORD"))
+_ACCOUNT_ENV = {
+    "primary": ("WQ_BRAIN_EMAIL", "WQ_BRAIN_PASSWORD"),
+    "alt": ("WQ_BRAIN_ALT_EMAIL", "WQ_BRAIN_ALT_PASSWORD"),
+}
+
+
+def is_configured(account: str | None = None) -> bool:
+    if account:
+        env_email, env_pwd = _ACCOUNT_ENV.get(account, _ACCOUNT_ENV["primary"])
+        return bool(os.environ.get(env_email) and os.environ.get(env_pwd))
+    return any(
+        bool(os.environ.get(e) and os.environ.get(p))
+        for e, p in _ACCOUNT_ENV.values()
+    )
+
+
+def configured_accounts() -> list[str]:
+    return [
+        name for name, (e, p) in _ACCOUNT_ENV.items()
+        if os.environ.get(e) and os.environ.get(p)
+    ]
+
+
+def get_client(account: str = "primary") -> "WQBrainClient":
+    env_email, env_pwd = _ACCOUNT_ENV.get(account, _ACCOUNT_ENV["primary"])
+    return WQBrainClient(
+        email=os.environ.get(env_email, ""),
+        password=os.environ.get(env_pwd, ""),
+    )
 
 
 class WQBrainClient:
     def __init__(self, email: str | None = None, password: str | None = None):
         self.email = email or os.environ.get("WQ_BRAIN_EMAIL", "")
         self.password = password or os.environ.get("WQ_BRAIN_PASSWORD", "")
-        self._session: httpx.Client | None = None
+        self._session: requests.Session | None = None
 
-    def _get_session(self) -> httpx.Client:
+    def _get_session(self) -> requests.Session:
         if self._session is None:
-            self._session = httpx.Client(timeout=30.0)
+            self._session = requests.Session()
+            self._session.trust_env = False
+            retry = Retry(total=3, backoff_factor=1, status_forcelist=[502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retry)
+            self._session.mount("https://", adapter)
+            self._session.mount("http://", adapter)
         return self._session
 
     def close(self):
@@ -109,7 +143,15 @@ class WQBrainClient:
         }
 
         for attempt in range(_MAX_RETRIES):
-            r = s.post(f"{API_BASE}/simulations", json=payload)
+            try:
+                r = s.post(f"{API_BASE}/simulations", json=payload)
+            except (requests.ConnectionError, requests.Timeout) as e:
+                wait = _CONCURRENT_BACKOFF * (attempt + 1)
+                logger.warning(f"WQ connection error (attempt {attempt+1}/{_MAX_RETRIES}): {e}, retrying in {wait}s")
+                if progress_callback:
+                    progress_callback(0, f"连接异常，等待 {wait}s（第 {attempt+1} 次重试）")
+                time.sleep(wait)
+                continue
 
             if r.status_code in (200, 201, 202):
                 break
@@ -147,7 +189,12 @@ class WQBrainClient:
         url = location if location.startswith("http") else f"{API_BASE}{location}"
 
         for i in range(_POLL_MAX_ATTEMPTS):
-            r = s.get(url)
+            try:
+                r = s.get(url)
+            except (requests.ConnectionError, requests.Timeout):
+                logger.warning(f"WQ poll connection error (attempt {i+1}), retrying...")
+                time.sleep(_POLL_INTERVAL)
+                continue
             if r.status_code != 200:
                 time.sleep(_POLL_INTERVAL)
                 continue
@@ -205,34 +252,17 @@ class WQBrainClient:
                 return {}
         return {}
 
-    def check_alpha(self, alpha_id: str, retries: int = 3) -> dict:
-        for attempt in range(retries):
-            r = self._get_session().get(f"{API_BASE}/alphas/{alpha_id}/check")
-            if r.status_code == 200:
-                try:
-                    data = r.json()
-                    if data.get("is", {}).get("checks"):
-                        return data
-                    logger.info(f"Check {alpha_id}: empty checks (attempt {attempt+1}), retrying...")
-                except Exception:
-                    logger.warning(f"Invalid JSON from /alphas/{alpha_id}/check (attempt {attempt+1})")
-            else:
-                logger.warning(f"Check {alpha_id}: HTTP {r.status_code} (attempt {attempt+1})")
-            time.sleep(5 * (attempt + 1))
-        return {}
-
     def submit_alpha(self, alpha_id: str) -> dict:
-        r = self._get_session().post(f"{API_BASE}/alphas/{alpha_id}/submit")
-        return {
-            "status_code": r.status_code,
-            "ok": r.status_code in (200, 201),
-            "detail": r.text[:500],
-        }
+        for attempt in range(3):
+            try:
+                r = self._get_session().post(f"{API_BASE}/alphas/{alpha_id}/submit")
+                return {
+                    "status_code": r.status_code,
+                    "ok": r.status_code in (200, 201),
+                    "detail": r.text[:500],
+                }
+            except (requests.ConnectionError, requests.Timeout) as e:
+                logger.warning(f"Submit {alpha_id}: connection error (attempt {attempt+1}): {e}")
+                time.sleep(5 * (attempt + 1))
+        return {"status_code": 0, "ok": False, "detail": "connection failed after retries"}
 
-    def is_submittable(self, checks: dict) -> bool:
-        is_checks = checks.get("is", {}).get("checks", [])
-        if not is_checks:
-            return False
-        fails = [c for c in is_checks if c.get("result") == "FAIL"]
-        pending = [c for c in is_checks if c.get("result") == "PENDING"]
-        return len(fails) == 0 and len(pending) == 0
