@@ -68,6 +68,9 @@ Or enter a factor expression directly in the web UI at `http://localhost:8003`.
 # VWAP decay reversal (submitted, Fitness 1.07, Sharpe 1.69)
 -1 * rank(ts_decay_linear(close / vwap, 10))
 
+# Returns-volume momentum (submitted, Fitness 1.03, Sharpe 1.60)
+-1 * rank(ts_decay_linear(returns * volume / adv20, 5))
+
 # Volume anomaly
 rank(volume / ts_mean(volume, 10))
 

@@ -87,10 +87,10 @@ QuantGPT Agent 已产出 **3 个正式提交因子**，全部通过 WQ BRAIN IS 
 | Factor | Expression | WQ Sharpe | WQ Fitness | WQ Returns | IS Tests | Status |
 |:-------|:-----------|:---------:|:----------:|:----------:|:--------:|:------:|
 | **Debt-Momentum Composite** | `-1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)` | **1.77** | **1.26** | **20.18%** | **ALL PASS** | **Submitted** |
-| **VWAP Decay Reversal (v2)** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **18.63%** | **ALL PASS** | **Submitted** |
-| **VWAP Decay Reversal (v1)** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **18.63%** | **ALL PASS** | **Submitted** |
+| **VWAP Decay Reversal** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **18.63%** | **ALL PASS** | **Submitted** |
+| **Returns-Volume Momentum** | `-1 * rank(ts_decay_linear(returns * volume / adv20, 5))` | **1.60** | **1.03** | **24.15%** | **ALL PASS** | **Submitted** |
 
-> 3 个因子代表不同的 alpha 来源：**Debt-Momentum** 结合动量反转与基本面（债务/企业价值），Sharpe 1.77、Fitness 1.26，行业中性化；**VWAP Decay Reversal** 捕捉价格偏离 VWAP 的衰减回归，市场中性化，2 次独立提交均通过。全程 Agent 自治完成。
+> 3 个因子代表不同的 alpha 来源：**Debt-Momentum** 结合动量反转与基本面（债务/企业价值），行业中性化；**VWAP Decay Reversal** 捕捉价格偏离 VWAP 的衰减回归，市场中性化；**Returns-Volume Momentum** 捕捉收益率与相对成交量的衰减动量，市场中性化。全程 Agent 自治完成。
 
 <p align="center">
   <img src="example_factor/1-1.png" width="49%" alt="WQ BRAIN PnL — Debt-Momentum Composite (Submitted)" />
@@ -106,6 +106,14 @@ QuantGPT Agent 已产出 **3 个正式提交因子**，全部通过 WQ BRAIN IS 
 </p>
 <p align="center">
   <sub>VWAP Decay Reversal — 已正式提交：Sharpe 1.69, Fitness 1.07, Returns 18.63%, IS 全部 PASS</sub>
+</p>
+
+<p align="center">
+  <img src="example_factor/3-1.png" width="49%" alt="WQ BRAIN PnL — Returns-Volume Momentum (Submitted)" />
+  <img src="example_factor/3-2.png" width="49%" alt="WQ BRAIN IS Summary — Returns-Volume Momentum (Submitted)" />
+</p>
+<p align="center">
+  <sub>Returns-Volume Momentum — 已正式提交：Sharpe 1.60, Fitness 1.03, Returns 24.15%, IS 全部 PASS</sub>
 </p>
 
 ---
@@ -417,6 +425,9 @@ alembic upgrade head
 
 # VWAP decay reversal — BRAIN submitted, Fitness 1.07, Sharpe 1.69
 -1 * rank(ts_decay_linear(close / vwap, 10))
+
+# Returns-volume momentum — BRAIN submitted, Fitness 1.03, Sharpe 1.60
+-1 * rank(ts_decay_linear(returns * volume / adv20, 5))
 
 # 20-day momentum
 rank(close / ts_mean(close, 20))

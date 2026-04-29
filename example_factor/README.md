@@ -28,7 +28,7 @@ Agent-driven factor research engine. Factors below were discovered, optimized, a
 
 ---
 
-## Factor 2: VWAP 衰减反转 (v2) — **已正式提交 BRAIN**
+## Factor 2: VWAP 衰减反转 — **已正式提交 BRAIN**
 
 ```
 -1 * rank(ts_decay_linear(close / vwap, 10))
@@ -50,23 +50,27 @@ Agent-driven factor research engine. Factors below were discovered, optimized, a
 
 ---
 
-## Factor 3: VWAP 衰减反转 (v1) — **已正式提交 BRAIN** (alpha_id: `78aAQjoL`)
+## Factor 3: Returns-Volume Momentum — **已正式提交 BRAIN**
 
 ```
--1 * rank(ts_decay_linear(close / vwap, 10))
+-1 * rank(ts_decay_linear(returns * volume / adv20, 5))
 ```
 
 | Item | Value |
 |------|-------|
-| Sharpe | **1.69** |
-| Fitness | **1.07** (≥ 1.0 PASS) |
-| Turnover | 46.14% |
-| Returns | 18.63% |
+| Sharpe | **1.60** |
+| Fitness | **1.03** (≥ 1.0 PASS) |
+| Turnover | 57.87% |
+| Returns | 24.15% |
+| Drawdown | 11.79% |
 | Neutralization | Market |
 | IS Tests | **全部通过** |
 | Status | **Submitted** |
 
-首个 Agent 产出的正式提交因子。突破关键：Agent 自主发现将中性化从 SUBINDUSTRY 切到 MARKET，Fitness 从 0.88 → 1.07。
+捕捉收益率与相对成交量（volume/adv20）的衰减加权动量信号。Returns 24.15% 为三个因子中最高。
+
+![WQ BRAIN PnL — Returns-Volume Momentum](3-1.png)
+![WQ BRAIN IS Summary — Returns-Volume Momentum](3-2.png)
 
 ---
 
@@ -75,7 +79,7 @@ Agent-driven factor research engine. Factors below were discovered, optimized, a
 | Factor | Expression | WQ Sharpe | WQ Fitness | Returns | IS PASS | Status |
 |--------|-----------|-----------|-----------|---------|---------|--------|
 | Debt-Momentum Composite | `-1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)` | 1.77 | 1.26 | 20.18% | 7/7 | **Submitted** |
-| VWAP 衰减反转 (v2) | `-1 * rank(ts_decay_linear(close / vwap, 10))` | 1.69 | 1.07 | 18.63% | 7/7 | **Submitted** |
-| VWAP 衰减反转 (v1) | `-1 * rank(ts_decay_linear(close / vwap, 10))` | 1.69 | 1.07 | 18.63% | 7/7 | **Submitted** |
+| VWAP 衰减反转 | `-1 * rank(ts_decay_linear(close / vwap, 10))` | 1.69 | 1.07 | 18.63% | 7/7 | **Submitted** |
+| Returns-Volume Momentum | `-1 * rank(ts_decay_linear(returns * volume / adv20, 5))` | 1.60 | 1.03 | 24.15% | 7/7 | **Submitted** |
 
 ![Dashboard](dashboard.png)
