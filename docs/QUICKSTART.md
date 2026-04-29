@@ -62,10 +62,10 @@ Or enter a factor expression directly in the web UI at `http://localhost:8003`.
 ## 5. Try More Expressions
 
 ```
-# Price-volume divergence (validated WQ BRAIN factor)
--1 * rank(ts_corr(close, volume, 5))
+# Debt-momentum composite (submitted, Fitness 1.26, Sharpe 1.77)
+-1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)
 
-# VWAP decay reversal (first submitted factor, alpha_id: 78aAQjoL)
+# VWAP decay reversal (submitted, Fitness 1.07, Sharpe 1.69)
 -1 * rank(ts_decay_linear(close / vwap, 10))
 
 # Volume anomaly

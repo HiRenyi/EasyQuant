@@ -185,6 +185,18 @@ async def wq_brain_status():
     }
 
 
+@router.get("/user-info")
+async def wq_brain_user_info(account: str = "primary"):
+    if not is_configured(account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={account})")
+    client = get_client(account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail="WQ BRAIN 认证失败")
+    info = client.get_user_info()
+    client.close()
+    return info
+
+
 @router.post("/submit", status_code=202)
 async def wq_brain_submit(
     req: WQBrainSubmitRequest,
