@@ -112,6 +112,7 @@ def _run_wq_brain_task(task_id: str, req: WQBrainSubmitRequest, user_id: str):
         if req.auto_submit and alpha_id and account == "primary" and rating == "A":
             task["status"] = "submitting"
             submit_result = client.submit_alpha(alpha_id)
+            logger.info(f"[{task_id}] auto_submit({alpha_id}): {submit_result}")
             submitted = submit_result.get("ok", False)
 
         if submitted and alpha_id:
@@ -300,6 +301,7 @@ async def submit_alpha_from_task(
 
     submit_result = client.submit_alpha(alpha_id)
     client.close()
+    logger.info(f"[{task_id}] submit_alpha({alpha_id}) result: {submit_result}")
 
     if submit_result.get("ok"):
         task["result"]["submitted"] = True
@@ -326,3 +328,40 @@ async def submit_alpha_from_task(
         "submitted": submit_result.get("ok", False),
         "detail": submit_result.get("detail", ""),
     }
+
+
+@router.get("/alpha-status/{alpha_id}")
+async def check_alpha_platform_status(
+    alpha_id: str,
+    account: str = "primary",
+    user: User = Depends(get_current_user),
+):
+    """Check actual platform-side alpha status (whether it's really submitted)."""
+    if not is_configured(account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={account})")
+    client = get_client(account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail=f"WQ BRAIN 认证失败 (account={account})")
+    result = client.check_alpha_status(alpha_id)
+    client.close()
+    return result
+
+
+@router.post("/submit-by-id/{alpha_id}")
+async def submit_alpha_by_id(
+    alpha_id: str,
+    account: str = "primary",
+    user: User = Depends(get_current_user),
+):
+    """Submit alpha directly by alpha_id. Polls until platform confirms or SC fails."""
+    if account != "primary":
+        raise HTTPException(status_code=403, detail="Alpha 提交仅允许 primary 账号")
+    if not is_configured(account):
+        raise HTTPException(status_code=503, detail="WQ BRAIN 未配置")
+    client = get_client(account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail=f"WQ BRAIN 认证失败 (account={account})")
+    result = client.submit_alpha(alpha_id)
+    client.close()
+    logger.info(f"submit-by-id {alpha_id}: {result}")
+    return result
