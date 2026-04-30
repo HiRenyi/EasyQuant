@@ -273,41 +273,70 @@ class WQBrainClient:
     def submit_alpha(self, alpha_id: str) -> dict:
         s = self._get_session()
 
-        for attempt in range(3):
-            try:
-                r = s.post(f"{API_BASE}/alphas/{alpha_id}/submit")
-                body = r.text[:500]
-                logger.info(f"Submit {alpha_id}: HTTP {r.status_code}, body={body}")
-                break
-            except (requests.ConnectionError, requests.Timeout) as e:
-                logger.warning(f"Submit {alpha_id}: connection error (attempt {attempt+1}): {e}")
-                time.sleep(5 * (attempt + 1))
-        else:
-            return {"status_code": 0, "ok": False, "detail": "connection failed after retries"}
+        for submit_try in range(3):
+            r = None
+            for attempt in range(3):
+                try:
+                    r = s.post(f"{API_BASE}/alphas/{alpha_id}/submit")
+                    body = r.text[:500]
+                    logger.info(f"Submit {alpha_id}: HTTP {r.status_code}, body={body}")
+                    break
+                except (requests.ConnectionError, requests.Timeout) as e:
+                    logger.warning(f"Submit {alpha_id}: connection error (attempt {attempt+1}): {e}")
+                    time.sleep(5 * (attempt + 1))
+            else:
+                return {"status_code": 0, "ok": False, "detail": "connection failed after retries"}
 
-        if r.status_code == 403:
-            try:
-                resp = r.json()
-                checks = resp.get("is", {}).get("checks", [])
-                sc = next((c for c in checks if c.get("name") == "SELF_CORRELATION"), None)
-                if sc and sc.get("result") == "FAIL":
-                    logger.warning(f"Submit {alpha_id}: SC FAIL value={sc.get('value')} limit={sc.get('limit')}")
-                    return {
-                        "status_code": 403,
-                        "ok": False,
-                        "detail": f"SC FAIL: value={sc.get('value')} > limit={sc.get('limit')}",
-                        "sc_value": sc.get("value"),
-                        "sc_limit": sc.get("limit"),
-                        "checks": checks,
-                    }
-            except Exception:
-                pass
-            return {"status_code": 403, "ok": False, "detail": body}
+            if r.status_code == 403:
+                try:
+                    resp = r.json()
+                    checks = resp.get("is", {}).get("checks", [])
+                    sc = next((c for c in checks if c.get("name") == "SELF_CORRELATION"), None)
+                    if sc and sc.get("result") == "FAIL":
+                        logger.warning(f"Submit {alpha_id}: SC FAIL value={sc.get('value')} limit={sc.get('limit')}")
+                        return {
+                            "status_code": 403,
+                            "ok": False,
+                            "detail": f"SC FAIL: value={sc.get('value')} > limit={sc.get('limit')}",
+                            "sc_value": sc.get("value"),
+                            "sc_limit": sc.get("limit"),
+                            "checks": checks,
+                        }
+                except Exception:
+                    pass
+                return {"status_code": 403, "ok": False, "detail": body}
 
-        if r.status_code not in (200, 201, 202):
-            return {"status_code": r.status_code, "ok": False, "detail": body}
+            if r.status_code == 429:
+                wait = 30 * (submit_try + 1)
+                logger.warning(f"Submit {alpha_id}: rate limited (429), waiting {wait}s before retry")
+                time.sleep(wait)
+                continue
 
-        return self._poll_alpha_submission(alpha_id)
+            if r.status_code not in (200, 201, 202):
+                logger.warning(f"Submit {alpha_id}: unexpected HTTP {r.status_code}, waiting 15s before retry")
+                time.sleep(15)
+                continue
+
+            poll_result = self._poll_alpha_submission(alpha_id)
+
+            if poll_result.get("ok"):
+                return poll_result
+
+            if poll_result.get("platform_status") == "TIMEOUT":
+                alpha_data = self._fetch_alpha(alpha_id)
+                actual_status = (alpha_data.get("status") or "").upper()
+                if actual_status == "UNSUBMITTED":
+                    logger.warning(f"Submit {alpha_id}: platform still UNSUBMITTED after poll, retrying submit (try {submit_try+1})")
+                    time.sleep(10)
+                    continue
+                logger.info(f"Submit {alpha_id}: poll timeout but platform status={actual_status}, treating as submitted")
+                poll_result["ok"] = True
+                poll_result["detail"] = f"poll timeout but platform accepted (status={actual_status})"
+                return poll_result
+
+            return poll_result
+
+        return {"status_code": 200, "ok": False, "detail": f"submit failed after 3 outer retries, alpha still UNSUBMITTED"}
 
     def _poll_alpha_submission(self, alpha_id: str, max_polls: int = 12, interval: int = 10) -> dict:
         """Poll alpha status until platform confirms submission or SC check completes."""

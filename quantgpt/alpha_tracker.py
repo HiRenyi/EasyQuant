@@ -92,6 +92,51 @@ def record_submitted_alpha_sync(user_id: str, alpha_id: str, **kwargs):
         t.join(timeout=10)
 
 
+async def update_submitted_alpha_status(alpha_id: str, new_status: str):
+    from .db import _get_session_factory
+    from .models import SubmittedAlpha
+
+    factory = _get_session_factory()
+    async with factory() as session:
+        try:
+            result = await session.execute(
+                select(SubmittedAlpha).where(SubmittedAlpha.alpha_id == alpha_id)
+            )
+            record = result.scalar_one_or_none()
+            if record:
+                record.status = new_status
+                await session.commit()
+                logger.info(f"Updated SubmittedAlpha {alpha_id} status to {new_status}")
+            else:
+                logger.debug(f"SubmittedAlpha {alpha_id} not found in DB, skip update")
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Failed to update alpha status {alpha_id}: {e}")
+
+
+def update_submitted_alpha_status_sync(alpha_id: str, new_status: str):
+    from . import task_store
+
+    loop = task_store.main_loop
+    if loop and loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(
+            update_submitted_alpha_status(alpha_id, new_status), loop,
+        )
+        try:
+            future.result(timeout=15)
+        except Exception as e:
+            logger.error(f"Alpha status update sync error: {e}")
+    else:
+        def _run():
+            try:
+                asyncio.run(update_submitted_alpha_status(alpha_id, new_status))
+            except Exception as e:
+                logger.error(f"Alpha status update thread error: {e}")
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=10)
+
+
 def compute_similarity(expr_a: str, expr_b: str) -> dict:
     from .expression_parser import extract_components, normalize_expression
 

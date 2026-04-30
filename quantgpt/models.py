@@ -81,7 +81,7 @@ class Task(Base):
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     session_id = Column(Uuid, ForeignKey("sessions.id"), nullable=True, index=True)
     status = Column(String(30), nullable=False, default="pending")
-    task_type = Column(String(20), nullable=True, default="backtest")
+    task_type = Column(String(50), nullable=True, default="backtest")
     parent_task_id = Column(String(12), ForeignKey("tasks.id"), nullable=True)
     params = Column(JSON, nullable=True)
     expression = Column(Text, nullable=True)

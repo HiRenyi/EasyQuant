@@ -992,6 +992,65 @@ async def wq_brain_check_alphas(
     return json.dumps({"summary": summary, "alphas": results}, ensure_ascii=False, indent=2, default=str)
 
 
+@mcp.tool()
+async def wq_brain_finalize_submissions(
+    alpha_ids: list[str],
+    account: str = "primary",
+) -> str:
+    """查询已提交 alpha 的最终 SC 检查结果。
+
+    提交 alpha 后 SC 检查可能需要数小时。初次提交 SC 超时的 alpha 用此工具查询最终结果。
+    会自动更新 DB 中已解决 alpha 的状态（ACTIVE / SC_FAIL）。
+
+    Args:
+        alpha_ids: 要查询最终状态的 alpha_id 列表（最多 100 个）
+        account: WQ 账号 ('primary' 或 'alt')
+
+    Returns:
+        JSON: per-alpha final_status (ACTIVE/SC_FAIL/SC_PENDING/ERROR) + summary
+    """
+    t0 = time.time()
+    error_msg = None
+    result_data = None
+
+    try:
+        from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+        from .routes.wq_brain_batch import _finalize_alpha_statuses
+
+        if not _wq_configured(account):
+            return json.dumps({"error": f"WQ BRAIN 未配置 (account={account})"})
+        if len(alpha_ids) > 100:
+            return json.dumps({"error": f"alpha_ids 数量 {len(alpha_ids)} 超过上限 100"})
+
+        client = WQBrainClient()
+        authenticated = await asyncio.to_thread(client.authenticate)
+        if not authenticated:
+            return json.dumps({"error": "WQ BRAIN 认证失败"})
+
+        result_data = await asyncio.to_thread(
+            _finalize_alpha_statuses, client, alpha_ids, None,
+        )
+
+        await asyncio.to_thread(client.close)
+
+        return json.dumps(result_data, ensure_ascii=False, indent=2, default=str)
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"MCP wq_brain_finalize error: {e}")
+        return json.dumps({"error": f"Finalize failed: {e}"})
+    finally:
+        elapsed = time.time() - t0
+        track_mcp_result(
+            "mcp_wq_finalize",
+            expression=",".join(alpha_ids[:5]),
+            params={"alpha_ids": alpha_ids[:10], "account": account, "total": len(alpha_ids)},
+            result_str=json.dumps(result_data) if result_data else None,
+            error=error_msg,
+            elapsed=elapsed,
+        )
+
+
 # Operator documentation fallback
 _OPERATORS_DOC = """
 因子表达式操作符:

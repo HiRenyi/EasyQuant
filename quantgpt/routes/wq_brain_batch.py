@@ -1,7 +1,8 @@
-"""WQ BRAIN batch operations — param sweep, batch submit by ID, batch status check."""
+"""WQ BRAIN batch operations — param sweep, batch submit by ID, batch status check, finalize."""
 
 import itertools
 import logging
+import os
 import threading
 import time
 import uuid
@@ -30,6 +31,8 @@ VALID_UNIVERSES = {"TOP3000", "TOP1000", "TOP500", "TOP200"}
 VALID_NEUTRALIZATIONS = {"MARKET", "SUBINDUSTRY", "INDUSTRY", "SECTOR", "NONE"}
 MAX_COMBINATIONS = 36
 MAX_BATCH_SUBMIT = 50
+FINALIZE_POLL_INTERVAL = int(os.environ.get("WQ_FINALIZE_INTERVAL", "300"))
+FINALIZE_MAX_WAIT = int(os.environ.get("WQ_FINALIZE_MAX_WAIT", "7200"))
 
 
 class WQBrainBatchRequest(BaseModel):
@@ -54,6 +57,12 @@ class BatchAlphaStatusRequest(BaseModel):
     alpha_ids: list[str] = Field(..., min_length=1, max_length=100, description="Alpha IDs to check")
 
 
+class BatchFinalizeRequest(BaseModel):
+    alpha_ids: list[str] = Field(..., min_length=1, max_length=100, description="Alpha IDs to finalize")
+    account: str = Field("primary", description="WQ account")
+
+
+
 def _safe_float(val) -> float | None:
     if val is None:
         return None
@@ -61,6 +70,86 @@ def _safe_float(val) -> float | None:
         return float(val)
     except (TypeError, ValueError):
         return None
+
+
+def _classify_alpha_check(data: dict) -> dict:
+    """Classify a check_alpha_status() result into a final status."""
+    if not data.get("ok"):
+        return {
+            "final_status": "ERROR",
+            "status": None,
+            "sc_result": None,
+            "sc_value": None,
+            "sc_limit": None,
+            "fitness": None,
+            "sharpe": None,
+            "grade": None,
+            "error": data.get("error", "unknown"),
+        }
+
+    status = (data.get("status") or "").upper()
+    is_data = data.get("is", {})
+    checks = is_data.get("checks", [])
+    sc_check = next((c for c in checks if c.get("name") == "SELF_CORRELATION"), None)
+    sc_result = sc_check.get("result") if sc_check else None
+
+    if status == "ACTIVE":
+        final = "ACTIVE"
+    elif sc_result == "FAIL":
+        final = "SC_FAIL"
+    elif status == "UNSUBMITTED":
+        final = "UNSUBMITTED"
+    elif sc_result == "PENDING" or sc_result is None:
+        final = "SC_PENDING"
+    else:
+        final = "OTHER_FAIL"
+
+    return {
+        "final_status": final,
+        "status": status,
+        "sc_result": sc_result,
+        "sc_value": sc_check.get("value") if sc_check else None,
+        "sc_limit": sc_check.get("limit") if sc_check else None,
+        "fitness": _safe_float(is_data.get("fitness")),
+        "sharpe": _safe_float(is_data.get("sharpe")),
+        "grade": data.get("grade"),
+    }
+
+
+def _finalize_alpha_statuses(client, alpha_ids: list[str], user_id: str | None = None) -> dict:
+    """Query platform for real SC results and update DB for resolved alphas."""
+    results = {}
+    summary = {"total": len(alpha_ids), "resolved": 0, "active": 0, "sc_fail": 0, "sc_pending": 0, "unsubmitted": 0, "error": 0}
+
+    for alpha_id in alpha_ids:
+        data = client.check_alpha_status(alpha_id)
+        classified = _classify_alpha_check(data)
+        results[alpha_id] = classified
+
+        fs = classified["final_status"]
+        if fs == "ACTIVE":
+            summary["active"] += 1
+            summary["resolved"] += 1
+        elif fs == "SC_FAIL":
+            summary["sc_fail"] += 1
+            summary["resolved"] += 1
+        elif fs == "UNSUBMITTED":
+            summary["unsubmitted"] += 1
+        elif fs == "SC_PENDING":
+            summary["sc_pending"] += 1
+        elif fs == "ERROR":
+            summary["error"] += 1
+        else:
+            summary["resolved"] += 1
+
+        if user_id and fs in ("ACTIVE", "SC_FAIL"):
+            try:
+                from ..alpha_tracker import update_submitted_alpha_status_sync
+                update_submitted_alpha_status_sync(alpha_id, fs.lower())
+            except Exception as e:
+                logger.warning(f"Failed to update DB status for {alpha_id}: {e}")
+
+    return {"summary": summary, "alphas": results}
 
 
 def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
@@ -145,6 +234,7 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
                 sub["returns"] = returns_val
                 sub["turnover"] = turnover
                 sub["submitted"] = submitted
+                sub["rating"] = rating
 
                 if rating == "A":
                     submittable_count += 1
@@ -157,6 +247,8 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
 
         client.close()
 
+        best_rating = "A" if (best_fitness or 0) >= 1.0 else ("B" if (best_fitness or 0) >= 0.5 else ("C" if best_fitness is not None else "D"))
+
         task["status"] = "completed"
         task["result"] = {
             "expression": req.expression,
@@ -166,6 +258,17 @@ def _run_batch_task(task_id: str, req: WQBrainBatchRequest, user_id: str):
             "best_key": best_key,
             "submittable_count": submittable_count,
             "sub_results": task["sub_results"],
+            "backtest_summary": {
+                "wq_fitness": round(best_fitness, 4) if best_fitness > -999 else None,
+                "wq_rating": best_rating,
+            },
+            "wq_brain": {
+                "wq_fitness": round(best_fitness, 4) if best_fitness > -999 else None,
+                "wq_rating": best_rating,
+            },
+            "interpretation": {
+                "rating": best_rating,
+            },
         }
 
     except Exception as e:
@@ -269,6 +372,9 @@ def _run_batch_submit_by_id(task_id: str, alpha_ids: list[str], account: str, us
                 task["status"] = "cancelled"
                 break
 
+            if i > 0:
+                time.sleep(5)
+
             task["progress_message"] = f"[{i+1}/{total}] submitting {alpha_id}"
 
             result = client.submit_alpha(alpha_id)
@@ -289,15 +395,30 @@ def _run_batch_submit_by_id(task_id: str, alpha_ids: list[str], account: str, us
 
             if result.get("ok"):
                 active_count += 1
+                sub["final_status"] = "ACTIVE"
             elif "SC FAIL" in result.get("detail", ""):
                 sc_fail_count += 1
+                sub["final_status"] = "SC_FAIL"
             elif platform_status == "TIMEOUT":
                 timeout_count += 1
+                sub["final_status"] = "SC_PENDING"
+            else:
+                sub["final_status"] = "OTHER_FAIL"
 
             task["sub_results"][alpha_id] = sub
             task["completed"] = i + 1
 
+            try:
+                persist_task_to_db(task_id, user_id, task)
+            except Exception as e:
+                logger.warning(f"[{task_id}] incremental persist error: {e}")
+
         client.close()
+
+        logger.info(
+            f"[{task_id}] batch submit done: "
+            f"{active_count} ACTIVE, {sc_fail_count} SC_FAIL, {timeout_count} TIMEOUT"
+        )
 
         task["status"] = "completed"
         task["result"] = {
@@ -308,7 +429,6 @@ def _run_batch_submit_by_id(task_id: str, alpha_ids: list[str], account: str, us
             "timeout": timeout_count,
             "sub_results": task["sub_results"],
         }
-        logger.info(f"[{task_id}] batch submit done: {active_count} ACTIVE, {sc_fail_count} SC_FAIL, {timeout_count} TIMEOUT")
 
     except Exception as e:
         logger.error(f"[{task_id}] batch submit error: {e}")
@@ -422,3 +542,29 @@ async def wq_brain_batch_alpha_status(
     }
 
     return {"summary": summary, "alphas": results}
+
+
+# ---- Batch finalize (query real SC results for previously submitted alphas) ----
+
+
+@router.post("/batch-finalize")
+async def wq_brain_batch_finalize(
+    req: BatchFinalizeRequest,
+    user: User = Depends(get_current_user),
+):
+    """Query final SC check results for previously submitted alphas.
+
+    Use after batch-submit-by-id when SC checks timed out (SC PENDING).
+    Updates SubmittedAlpha DB records for resolved alphas.
+    """
+    if not is_configured(req.account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={req.account})")
+
+    client = get_client(req.account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail="WQ BRAIN 认证失败")
+
+    result = _finalize_alpha_statuses(client, req.alpha_ids, user_id=str(user.id))
+    client.close()
+
+    return result

@@ -122,6 +122,15 @@ def _extract_summary(result_str: str, task_type: str) -> dict | None:
             "best_key": data.get("best_key"),
             "submittable_count": data.get("submittable_count"),
         }
+    elif task_type == "mcp_wq_finalize":
+        summary = data.get("summary", data)
+        return {
+            "total": summary.get("total"),
+            "resolved": summary.get("resolved"),
+            "active": summary.get("active"),
+            "sc_fail": summary.get("sc_fail"),
+            "sc_pending": summary.get("sc_pending"),
+        }
     return None
 
 
