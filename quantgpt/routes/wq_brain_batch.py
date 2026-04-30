@@ -1,4 +1,4 @@
-"""WQ BRAIN batch submission — sweep expression across multiple parameter combinations."""
+"""WQ BRAIN batch operations — param sweep, batch submit by ID, batch status check."""
 
 import itertools
 import logging
@@ -19,7 +19,7 @@ from ..task_store import (
     tasks_lock,
     MAX_ACTIVE_TASKS,
 )
-from ..wq_brain_client import WQBrainClient, get_client, is_configured
+from ..wq_brain_client import get_client, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ VALID_REGIONS = {"USA", "CHN"}
 VALID_UNIVERSES = {"TOP3000", "TOP1000", "TOP500", "TOP200"}
 VALID_NEUTRALIZATIONS = {"MARKET", "SUBINDUSTRY", "INDUSTRY", "SECTOR", "NONE"}
 MAX_COMBINATIONS = 36
+MAX_BATCH_SUBMIT = 50
 
 
 class WQBrainBatchRequest(BaseModel):
@@ -42,6 +43,15 @@ class WQBrainBatchRequest(BaseModel):
     auto_submit: bool = Field(False, description="Auto-submit if all IS checks pass")
     account: str = Field("primary", description="WQ account: 'primary' or 'alt'")
     session_id: str | None = Field(None, description="Session ID")
+
+
+class BatchSubmitByIdRequest(BaseModel):
+    alpha_ids: list[str] = Field(..., min_length=1, max_length=MAX_BATCH_SUBMIT, description="Alpha IDs to submit")
+    account: str = Field("primary", description="WQ account (must be 'primary' for submission)")
+
+
+class BatchAlphaStatusRequest(BaseModel):
+    alpha_ids: list[str] = Field(..., min_length=1, max_length=100, description="Alpha IDs to check")
 
 
 def _safe_float(val) -> float | None:
@@ -226,3 +236,189 @@ async def wq_brain_batch_submit(
     thread.start()
 
     return {"task_id": task_id, "status": "pending", "total_combinations": total}
+
+
+# ---- Batch submit by alpha_id ----
+
+
+def _run_batch_submit_by_id(task_id: str, alpha_ids: list[str], account: str, user_id: str):
+    task = tasks.get(task_id)
+    if not task:
+        return
+
+    total = len(alpha_ids)
+    task["total"] = total
+    task["completed"] = 0
+    task["sub_results"] = {}
+
+    try:
+        client = get_client(account)
+        task["status"] = "authenticating"
+        if not client.authenticate():
+            task["status"] = "failed"
+            task["error"] = f"WQ BRAIN 认证失败 (account={account})"
+            return
+
+        task["status"] = "running"
+        active_count = 0
+        sc_fail_count = 0
+        timeout_count = 0
+
+        for i, alpha_id in enumerate(alpha_ids):
+            if task.get("cancelled"):
+                task["status"] = "cancelled"
+                break
+
+            task["progress_message"] = f"[{i+1}/{total}] submitting {alpha_id}"
+
+            result = client.submit_alpha(alpha_id)
+            platform_status = result.get("platform_status", "")
+            sc_value = result.get("sc_value")
+            sc_limit = result.get("sc_limit")
+
+            sub = {
+                "alpha_id": alpha_id,
+                "ok": result.get("ok", False),
+                "detail": result.get("detail", ""),
+                "platform_status": platform_status,
+                "status_code": result.get("status_code"),
+            }
+            if sc_value is not None:
+                sub["sc_value"] = sc_value
+                sub["sc_limit"] = sc_limit
+
+            if result.get("ok"):
+                active_count += 1
+            elif "SC FAIL" in result.get("detail", ""):
+                sc_fail_count += 1
+            elif platform_status == "TIMEOUT":
+                timeout_count += 1
+
+            task["sub_results"][alpha_id] = sub
+            task["completed"] = i + 1
+
+        client.close()
+
+        task["status"] = "completed"
+        task["result"] = {
+            "total": total,
+            "completed": task["completed"],
+            "active": active_count,
+            "sc_fail": sc_fail_count,
+            "timeout": timeout_count,
+            "sub_results": task["sub_results"],
+        }
+        logger.info(f"[{task_id}] batch submit done: {active_count} ACTIVE, {sc_fail_count} SC_FAIL, {timeout_count} TIMEOUT")
+
+    except Exception as e:
+        logger.error(f"[{task_id}] batch submit error: {e}")
+        task["status"] = "failed"
+        task["error"] = f"批量提交异常: {e}"
+    finally:
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
+        try:
+            persist_task_to_db(task_id, user_id, task)
+        except Exception as e:
+            logger.error(f"[{task_id}] DB persist error: {e}")
+
+
+@router.post("/batch-submit-by-id", status_code=202)
+async def wq_brain_batch_submit_by_id(
+    req: BatchSubmitByIdRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Batch submit multiple already-simulated alphas by their alpha_id.
+
+    Processes sequentially using one authenticated session.
+    Returns a task_id for progress polling via GET /tasks/{task_id}.
+    """
+    if req.account != "primary":
+        raise HTTPException(status_code=403, detail="Alpha 提交仅允许 primary 账号")
+    if not is_configured(req.account):
+        raise HTTPException(status_code=503, detail="WQ BRAIN 未配置")
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="请求过于频繁")
+
+    task_id = uuid.uuid4().hex[:12]
+    user_id = str(user.id)
+
+    with tasks_lock:
+        tasks[task_id] = {
+            "task_id": task_id,
+            "user_id": user_id,
+            "status": "pending",
+            "task_type": "wq_brain_batch_submit_by_id",
+            "cancelled": False,
+            "params": {"alpha_ids": req.alpha_ids, "account": req.account},
+            "created_at": time.time(),
+        }
+
+    thread = threading.Thread(
+        target=_run_batch_submit_by_id,
+        args=(task_id, req.alpha_ids, req.account, user_id),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"task_id": task_id, "status": "pending", "total": len(req.alpha_ids)}
+
+
+# ---- Batch alpha status check (synchronous) ----
+
+
+@router.post("/batch-alpha-status")
+async def wq_brain_batch_alpha_status(
+    req: BatchAlphaStatusRequest,
+    user: User = Depends(get_current_user),
+    account: str = "primary",
+):
+    """Check platform status of multiple alphas in one call.
+
+    Returns status, fitness, sharpe, SC check result for each alpha_id.
+    """
+    if not is_configured(account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={account})")
+
+    client = get_client(account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail="WQ BRAIN 认证失败")
+
+    results = {}
+    for alpha_id in req.alpha_ids:
+        data = client.check_alpha_status(alpha_id)
+        if not data.get("ok"):
+            results[alpha_id] = {"ok": False, "error": data.get("error", "not found")}
+            continue
+
+        is_data = data.get("is", {})
+        checks = is_data.get("checks", [])
+        sc_check = next((c for c in checks if c.get("name") == "SELF_CORRELATION"), None)
+
+        results[alpha_id] = {
+            "ok": True,
+            "status": data.get("status"),
+            "grade": data.get("grade"),
+            "sharpe": _safe_float(is_data.get("sharpe")),
+            "fitness": _safe_float(is_data.get("fitness")),
+            "returns": _safe_float(is_data.get("returns")),
+            "turnover": _safe_float(is_data.get("turnover")),
+            "sc_result": sc_check.get("result") if sc_check else None,
+            "sc_value": sc_check.get("value") if sc_check else None,
+            "dateCreated": data.get("dateCreated"),
+        }
+
+    client.close()
+
+    summary = {
+        "total": len(req.alpha_ids),
+        "active": sum(1 for r in results.values() if r.get("status") == "ACTIVE"),
+        "unsubmitted": sum(1 for r in results.values() if r.get("status") == "UNSUBMITTED"),
+        "sc_fail": sum(1 for r in results.values() if r.get("sc_result") == "FAIL"),
+        "sc_pending": sum(1 for r in results.values() if r.get("sc_result") == "PENDING"),
+    }
+
+    return {"summary": summary, "alphas": results}

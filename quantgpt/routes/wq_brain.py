@@ -197,6 +197,49 @@ async def wq_brain_user_info(account: str = "primary"):
     return info
 
 
+@router.get("/platform-alphas")
+async def list_platform_alphas(
+    account: str = "primary",
+    limit: int = 100,
+    offset: int = 0,
+    user: User = Depends(get_current_user),
+):
+    """List all alphas from WQ BRAIN platform (including simulated but not submitted)."""
+    if not is_configured(account):
+        raise HTTPException(status_code=503, detail=f"WQ BRAIN 未配置 (account={account})")
+    client = get_client(account)
+    if not client.authenticate():
+        raise HTTPException(status_code=502, detail="WQ BRAIN 认证失败")
+    s = client._get_session()
+    r = s.get(
+        f"https://api.worldquantbrain.com/users/self/alphas",
+        params={"limit": limit, "offset": offset, "order": "-dateCreated"},
+    )
+    client.close()
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:500])
+    data = r.json()
+    alphas = data if isinstance(data, list) else data.get("results", [])
+    result = []
+    for a in alphas:
+        code = a.get("regular", {})
+        expr = code.get("code", "") if isinstance(code, dict) else str(code)
+        settings = a.get("settings", {})
+        is_data = a.get("is", {})
+        result.append({
+            "alpha_id": a.get("id"),
+            "expression": expr,
+            "status": a.get("status"),
+            "dateCreated": a.get("dateCreated"),
+            "neutralization": settings.get("neutralization"),
+            "sharpe": is_data.get("sharpe"),
+            "fitness": is_data.get("fitness"),
+            "returns": is_data.get("returns"),
+            "turnover": is_data.get("turnover"),
+        })
+    return {"total": len(result), "alphas": result}
+
+
 @router.post("/submit", status_code=202)
 async def wq_brain_submit(
     req: WQBrainSubmitRequest,

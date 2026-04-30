@@ -772,6 +772,226 @@ async def wq_brain_batch_submit(
                          _result_str, _error_msg, time.monotonic() - _start)
 
 
+@mcp.tool()
+async def wq_brain_submit_by_ids(
+    alpha_ids: list[str],
+    account: str = "primary",
+) -> str:
+    """批量提交已模拟的 alpha（通过 alpha_id 直接提交，无需重新模拟）。
+
+    用于提交之前模拟过但未正式提交的 A 级 alpha。逐个处理，
+    每个 alpha 等待 SC 检查结果（最长 120s）。
+
+    Args:
+        alpha_ids: 要提交的 alpha_id 列表（最多 50 个）
+        account: WQ 账号（提交只能用 'primary'）
+
+    Returns:
+        JSON with per-alpha result (ACTIVE/SC_FAIL/TIMEOUT) and summary.
+    """
+    from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+
+    if account != "primary":
+        return json.dumps({"error": "Alpha 提交仅允许 primary 账号"})
+    if not _wq_configured(account):
+        return json.dumps({"error": "WQ BRAIN 未配置"})
+    if len(alpha_ids) > 50:
+        return json.dumps({"error": f"alpha_ids 数量 {len(alpha_ids)} 超过上限 50"})
+
+    client = WQBrainClient()
+    authenticated = await asyncio.to_thread(client.authenticate)
+    if not authenticated:
+        return json.dumps({"error": "WQ BRAIN 认证失败"})
+
+    results = {}
+    active = 0
+    sc_fail = 0
+    timeout = 0
+
+    for alpha_id in alpha_ids:
+        result = await asyncio.to_thread(client.submit_alpha, alpha_id)
+        entry = {
+            "ok": result.get("ok", False),
+            "detail": result.get("detail", ""),
+            "platform_status": result.get("platform_status", ""),
+        }
+        if result.get("sc_value") is not None:
+            entry["sc_value"] = result["sc_value"]
+            entry["sc_limit"] = result.get("sc_limit")
+
+        if result.get("ok"):
+            active += 1
+        elif "SC FAIL" in result.get("detail", ""):
+            sc_fail += 1
+        elif result.get("platform_status") == "TIMEOUT":
+            timeout += 1
+
+        results[alpha_id] = entry
+
+    await asyncio.to_thread(client.close)
+
+    output = {
+        "total": len(alpha_ids),
+        "active": active,
+        "sc_fail": sc_fail,
+        "timeout": timeout,
+        "results": results,
+    }
+    return json.dumps(output, ensure_ascii=False, indent=2, default=str)
+
+
+@mcp.tool()
+async def wq_brain_list_alphas(
+    account: str = "primary",
+    limit: int = 100,
+    offset: int = 0,
+    min_fitness: float | None = None,
+    status_filter: str | None = None,
+) -> str:
+    """列出 WQ BRAIN 平台上的所有 alpha（包括已模拟未提交的）。
+
+    可按 fitness 下限和状态过滤。返回 alpha_id、表达式、指标。
+
+    Args:
+        account: WQ 账号 ('primary' 或 'alt')
+        limit: 返回数量上限（最大 100）
+        offset: 分页偏移
+        min_fitness: 最低 fitness 过滤（如 1.0 只看 A 级）
+        status_filter: 状态过滤（如 'UNSUBMITTED' 或 'ACTIVE'）
+
+    Returns:
+        JSON with alpha list, each containing alpha_id, expression, metrics.
+    """
+    from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+
+    if not _wq_configured(account):
+        return json.dumps({"error": f"WQ BRAIN 未配置 (account={account})"})
+
+    client = WQBrainClient()
+    authenticated = await asyncio.to_thread(client.authenticate)
+    if not authenticated:
+        return json.dumps({"error": "WQ BRAIN 认证失败"})
+
+    s = client._get_session()
+    r = await asyncio.to_thread(
+        s.get,
+        "https://api.worldquantbrain.com/users/self/alphas",
+        params={"limit": min(limit, 100), "offset": offset, "order": "-dateCreated"},
+    )
+    await asyncio.to_thread(client.close)
+
+    if r.status_code != 200:
+        return json.dumps({"error": f"HTTP {r.status_code}: {r.text[:300]}"})
+
+    data = r.json()
+    raw_alphas = data if isinstance(data, list) else data.get("results", [])
+
+    alphas = []
+    for a in raw_alphas:
+        code = a.get("regular", {})
+        expr = code.get("code", "") if isinstance(code, dict) else str(code)
+        settings = a.get("settings", {})
+        is_data = a.get("is", {})
+
+        fitness = None
+        try:
+            fitness = float(is_data.get("fitness")) if is_data.get("fitness") is not None else None
+        except (TypeError, ValueError):
+            pass
+
+        alpha_status = a.get("status", "")
+
+        if min_fitness is not None and (fitness is None or fitness < min_fitness):
+            continue
+        if status_filter and alpha_status.upper() != status_filter.upper():
+            continue
+
+        alphas.append({
+            "alpha_id": a.get("id"),
+            "expression": expr,
+            "status": alpha_status,
+            "dateCreated": a.get("dateCreated"),
+            "neutralization": settings.get("neutralization"),
+            "sharpe": is_data.get("sharpe"),
+            "fitness": fitness,
+            "returns": is_data.get("returns"),
+            "turnover": is_data.get("turnover"),
+        })
+
+    return json.dumps({"total": len(alphas), "alphas": alphas}, ensure_ascii=False, indent=2, default=str)
+
+
+@mcp.tool()
+async def wq_brain_check_alphas(
+    alpha_ids: list[str],
+    account: str = "primary",
+) -> str:
+    """批量查询 alpha 在 WQ BRAIN 平台上的状态。
+
+    返回每个 alpha 的状态（ACTIVE/UNSUBMITTED）、SC 检查结果、指标。
+
+    Args:
+        alpha_ids: 要查询的 alpha_id 列表（最多 50 个）
+        account: WQ 账号 ('primary' 或 'alt')
+
+    Returns:
+        JSON with summary and per-alpha status.
+    """
+    from .wq_brain_client import WQBrainClient, is_configured as _wq_configured
+
+    if not _wq_configured(account):
+        return json.dumps({"error": f"WQ BRAIN 未配置 (account={account})"})
+    if len(alpha_ids) > 50:
+        return json.dumps({"error": f"alpha_ids 数量 {len(alpha_ids)} 超过上限 50"})
+
+    client = WQBrainClient()
+    authenticated = await asyncio.to_thread(client.authenticate)
+    if not authenticated:
+        return json.dumps({"error": "WQ BRAIN 认证失败"})
+
+    results = {}
+    for alpha_id in alpha_ids:
+        data = await asyncio.to_thread(client.check_alpha_status, alpha_id)
+        if not data.get("ok"):
+            results[alpha_id] = {"ok": False, "error": data.get("error", "not found")}
+            continue
+
+        is_data = data.get("is", {})
+        checks = is_data.get("checks", [])
+        sc_check = next((c for c in checks if c.get("name") == "SELF_CORRELATION"), None)
+
+        def _sf(val):
+            if val is None:
+                return None
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+
+        results[alpha_id] = {
+            "ok": True,
+            "status": data.get("status"),
+            "grade": data.get("grade"),
+            "sharpe": _sf(is_data.get("sharpe")),
+            "fitness": _sf(is_data.get("fitness")),
+            "returns": _sf(is_data.get("returns")),
+            "turnover": _sf(is_data.get("turnover")),
+            "sc_result": sc_check.get("result") if sc_check else None,
+            "sc_value": sc_check.get("value") if sc_check else None,
+        }
+
+    await asyncio.to_thread(client.close)
+
+    summary = {
+        "total": len(alpha_ids),
+        "active": sum(1 for r in results.values() if r.get("status") == "ACTIVE"),
+        "unsubmitted": sum(1 for r in results.values() if r.get("status") == "UNSUBMITTED"),
+        "sc_fail": sum(1 for r in results.values() if r.get("sc_result") == "FAIL"),
+        "sc_pending": sum(1 for r in results.values() if r.get("sc_result") == "PENDING"),
+    }
+    return json.dumps({"summary": summary, "alphas": results}, ensure_ascii=False, indent=2, default=str)
+
+
 # Operator documentation fallback
 _OPERATORS_DOC = """
 因子表达式操作符:
