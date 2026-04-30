@@ -177,7 +177,7 @@ _cors_list = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 
 app = FastAPI(
     title="QuantGPT API",
-    version="2.5.0",
+    version="2.8.0",
     description="QuantGPT — AI 驱动的量化策略回测平台",
     docs_url=None,
     redoc_url=None,

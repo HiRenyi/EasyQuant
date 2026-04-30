@@ -4,9 +4,38 @@ import { useAuth } from "../contexts/AuthContext";
 import { useColorMode } from "../contexts/ColorModeContext";
 import { useNavigate } from "react-router-dom";
 
-export const APP_VERSION = "v2.5.0";
+export const APP_VERSION = "v2.8.0";
 
 const CHANGELOG = [
+  {
+    version: "v2.8.0",
+    date: "2026-04-30",
+    items: [
+      "WQ BRAIN 提交修复：SC 轮询确认机制，提交状态与平台 ACTIVE 严格对齐",
+      "新增 alpha-status / submit-by-id 端点，支持单个 alpha 状态查询和直接提交",
+      "累计 8 个因子平台 ACTIVE（ts_decay_linear 3 + ts_av_diff 5）",
+    ],
+  },
+  {
+    version: "v2.7.0",
+    date: "2026-04-29",
+    items: [
+      "WQ BRAIN 自主因子挖掘：3 轮 Session、8 轮实验，产出 21 个 A 级因子",
+      "发现 ts_av_diff 第二独立算子家族，突破 SC 饱和瓶颈",
+      "新增批量提交 + 并发控制 + 连接异常自动重试",
+      "知识库沉淀：13 个确认字段、SC 饱和规则、组合策略规则",
+    ],
+  },
+  {
+    version: "v2.6.0",
+    date: "2026-04-29",
+    items: [
+      "移除 SC 本地检查，A 级因子直接提交平台判定",
+      "WQ 模式放宽校验：未知算子/字段透传 BRAIN 不再本地拦截",
+      "ResearchDashboard 金融量化风格重构",
+      "前端全面对齐 Agent-Native 定位",
+    ],
+  },
   {
     version: "v2.5.0",
     date: "2026-03-27",
