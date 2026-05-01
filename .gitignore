@@ -58,6 +58,9 @@ docs/factor_research/
 engine/target/
 engine/Cargo.lock
 
+# Database
+*.db
+
 # Coverage
 .coverage
 htmlcov/
