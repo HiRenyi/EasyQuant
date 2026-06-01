@@ -14,16 +14,16 @@
 
 | # | 策略 | 年化收益 | 最大回撤 | 夏普 | 代码 | 文档 |
 |---|------|:--------:|:--------:|:----:|------|------|
-| 1 | [首板高开-低开-弱转强混合策略](code/首板高开-低开-弱转强混合策略.py) | **158.72%** | 43.97% | **2.62** | [code](code/首板高开-低开-弱转强混合策略.py) | [docs](first-board-mixed-strategy.md) |
-| 2 | [子账户多策略分仓](code/子账户多策略分仓.py) | **81.77%** | 18.26% | **2.43** | [code](code/子账户多策略分仓.py) | [docs](sub-account-multi-strategy.md) |
-| 3 | [小市值排除3bug版](code/小市值排除3bug版.py) | **81.77%** | 18.26% | **2.43** | [code](code/小市值排除3bug版.py) | [docs](small-cap-exclude-bugs.md) |
-| 4 | [基本面01+RSI择时](code/基本面01+RSI择时.py) | **64.30%** | 14.75% | **2.41** | [code](code/基本面01+RSI择时.py) | [docs](fundamental-rsi-timing.md) |
-| 5 | [干积分-量化框架](code/干积分-量化框架.py) | **60.04%** | 23.29% | **2.33** | [code](code/干积分-量化框架.py) | [docs](earnings-points-framework.md) |
-| 6 | [稳健型ETF](code/稳健型ETF.py) | **22.16%** | **3.08%** | **2.29** | [code](code/稳健型ETF.py) | [docs](stable-etf-strategy.md) |
-| 7 | [国九小市值](code/国九小市值.py) | **74.84%** | 21.23% | **2.21** | [code](code/国九小市值.py) | [docs](guojiu-small-cap.md) |
-| 8 | [高股息价投](code/高股息价投.py) | **51.50%** | 16.65% | **2.17** | [code](code/高股息价投.py) | [docs](dividend-value-strategy.md) |
-| 9 | [四大搅屎棍](code/四大搅屎棍.py) | **58.68%** | 18.78% | **1.93** | [code](code/四大搅屎棍.py) | [docs](four-stirrers-strategy.md) |
-| 10 | [趋势筛选ETF轮动](code/趋势筛选ETF轮动.py) | **41.50%** | 12.52% | **1.83** | [code](code/趋势筛选ETF轮动.py) | [docs](trend-filter-etf-rotation.md) |
+| 1 | [首板高开-低开-弱转强混合策略](code/首板高开-低开-弱转强混合策略.py) | **158.72%** | 43.97% | **2.62** | [code](code/首板高开-低开-弱转强混合策略.py) | [docs](首板高开-低开-弱转强混合策略.md) |
+| 2 | [子账户多策略分仓](code/子账户多策略分仓.py) | **81.77%** | 18.26% | **2.43** | [code](code/子账户多策略分仓.py) | [docs](子账户多策略分仓.md) |
+| 3 | [小市值排除3bug版](code/小市值排除3bug版.py) | **81.77%** | 18.26% | **2.43** | [code](code/小市值排除3bug版.py) | [docs](小市值排除3bug版.md) |
+| 4 | [基本面01+RSI择时](code/基本面01+RSI择时.py) | **64.30%** | 14.75% | **2.41** | [code](code/基本面01+RSI择时.py) | [docs](基本面01+RSI择时.md) |
+| 5 | [干积分-量化框架](code/干积分-量化框架.py) | **60.04%** | 23.29% | **2.33** | [code](code/干积分-量化框架.py) | [docs](干积分-量化框架.md) |
+| 6 | [稳健型ETF](code/稳健型ETF.py) | **22.16%** | **3.08%** | **2.29** | [code](code/稳健型ETF.py) | [docs](稳健型ETF.md) |
+| 7 | [国九小市值](code/国九小市值.py) | **74.84%** | 21.23% | **2.21** | [code](code/国九小市值.py) | [docs](国九小市值.md) |
+| 8 | [高股息价投](code/高股息价投.py) | **51.50%** | 16.65% | **2.17** | [code](code/高股息价投.py) | [docs](高股息价投.md) |
+| 9 | [四大搅屎棍](code/四大搅屎棍.py) | **58.68%** | 18.78% | **1.93** | [code](code/四大搅屎棍.py) | [docs](四大搅屎棍.md) |
+| 10 | [趋势筛选ETF轮动](code/趋势筛选ETF轮动.py) | **41.50%** | 12.52% | **1.83** | [code](code/趋势筛选ETF轮动.py) | [docs](趋势筛选ETF轮动.md) |
 
 ## 全部策略
 
@@ -57,7 +57,7 @@ validated-strategies/
 │   ├── 首板高开-低开-弱转强混合策略.py
 │   ├── 子账户多策略分仓.py
 │   └── ...
-├── first-board-mixed-strategy.md    # 详细分析文档（Top 10）
-├── sub-account-multi-strategy.md
+├── 首板高开-低开-弱转强混合策略.md    # 详细分析文档（Top 10）
+├── 子账户多策略分仓.md
 └── ...
 ```
