@@ -1,33 +1,43 @@
 <div align="center">
 
-# QuantGPT
+# EasyQuant
 
-**Agent-Driven LLM Quant Research Engine — Autonomous Factor Mining at WorldQuant BRAIN Submission Quality**
+**Agent-Driven LLM Quant Research + JoinQuant Auto-Backtest Platform**
 
-LLM Agent 自治因子挖矿 → 批量回测 → 多维评分 → 反过拟合验证 → WQ BRAIN 自动提交 | 全程零人工干预
+Forked from [Miasyster/QuantGPT](https://github.com/Miasyster/QuantGPT) — 扩展聚宽 (JoinQuant) 自动回测、批量策略提交、策略验证与文档。感谢原作者的优秀基础。
 
-[![CI](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml/badge.svg)](https://github.com/Miasyster/quantgpt/actions/workflows/ci.yml)
+LLM Agent 自治因子挖矿 → 聚宽 Playwright 自动回测 → 批量策略提交 → 策略验证库 | 全程零人工干预
+
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React_18-TypeScript-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![Playwright](https://img.shields.io/badge/Playwright-Automation-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Quick Start](docs/QUICKSTART.md) ·
-[Architecture](docs/ARCHITECTURE.md) ·
+[Quick Start](#quick-start) ·
+[Architecture](#architecture) ·
+[Validated Strategies](validated-strategies/README.md) ·
 [API Docs](docs/API_DOC.md) ·
 [MCP Guide](docs/MCP_GUIDE.md) ·
-[Factor Mining](docs/FACTOR_MINING.md) ·
-[Contributing](CONTRIBUTING.md)
+[Factor Mining](docs/FACTOR_MINING.md)
 
 </div>
 
 ---
 
-## What Is QuantGPT
+## What Is EasyQuant
 
-QuantGPT is an **agent-driven factor research engine** — not a backtest library, not a chatbot wrapper. It gives an LLM Agent (Claude, via MCP) a complete toolkit to autonomously discover, evaluate, iterate, and submit alpha factors to WorldQuant BRAIN, with zero human intervention per research cycle.
+本项目基于 [Miasyster/QuantGPT](https://github.com/Miasyster/QuantGPT)（Agent 驱动的 LLM 量化因子研究引擎），在此基础上增加了以下扩展能力：
 
-The core architecture:
+1. **聚宽 (JoinQuant) 自动回测** — Playwright 浏览器自动化，直接在聚宽网页端运行回测，支持登录、代码注入、结果抓取
+2. **批量策略提交** — 自动按代码长度排序、逐个提交、等待完成、记录回测指标到 `回测结果.md`
+3. **策略验证库** — 28 个验证通过的策略源代码 + 指标文档，存放在 `validated-strategies/`
+4. **单任务串行执行** — 适配聚宽非 VIP 账号限制（仅支持 1 个回测任务同时进行）
+
+### 原始项目说明（来自 QuantGPT）
+
+QuantGPT 是一个 **Agent 驱动的因子研究引擎**。Agent（Claude，通过 MCP）自主发现、评估、迭代 alpha 因子表达式，最终可提交到 WorldQuant BRAIN。
+
+核心架构：
 
 ```
 LLM Agent (Claude Code / Claude Desktop)
@@ -42,89 +52,67 @@ LLM Agent (Claude Code / Claude Desktop)
     │   ├── list_operators         ← 50+ 算子文档
     │   └── list_universes         ← 股票池和基准
     │
-    ├── Evolution Engine           ← 因子进化引擎
-    │   ├── MutationEngine (8 方向突变)
-    │   ├── CrossoverEngine (高分因子交叉)
-    │   ├── MetaEvolutionSelector (自适应策略)
-    │   └── TrajectoryAnalyzer (轨迹分析)
-    │
     ├── WQ BRAIN Integration       ← WorldQuant 直连
     │   ├── Dollar-neutral 模拟
     │   ├── IS 检测对齐
-    │   ├── Fitness 评分
     │   └── 一键正式提交
     │
-    └── Knowledge Base             ← 跨会话知识积累
-        ├── rules/    (已验证规则)
-        ├── findings/ (经验发现)
-        └── failures/ (已证伪路径)
+    └── JoinQuant Integration      ← 聚宽自动回测（EasyQuant 扩展）
+        ├── JQAutomationService    ← Playwright 浏览器自动化
+        ├── StrategyBacktest API   ← 策略代码上传 → 聚宽回测 → 结果抓取
+        ├── Batch Submission       ← 批量提交脚本
+        └── Validated Strategies   ← 28 个已验证策略库
 ```
 
-### How It Differs from "AI Backtest Tools"
+### 生产记录
 
-传统工具（包括 ChatGPT + 回测库）的模式是：**人类想因子 → 工具跑回测 → 人类看结果**。Agent 是执行者，人类是决策者。
-
-QuantGPT 的模式是：**人类定义目标 → Agent 自治研究 → 人类审阅产出**。Agent 是研究者，人类是审阅者。
-
-这不是接口层的区别（自然语言 vs. 代码），而是**决策权**的区别。Agent 自主决定：探索哪个方向、生成什么表达式、评估哪些指标、何时迭代、何时放弃、何时提交。
-
-### Production Track Record
-
-| Metric | Value |
-|:-------|:------|
+| 指标 | 数值 |
+|:------|:------|
 | 累计回测任务 | **370+** |
+| 聚宽策略回测 | **55+ 个策略**（2025 年精选） |
+| WQ BRAIN 正式提交 | **3 个因子 IS 全部 PASS，已提交（最佳 Fitness 1.26）** |
 | 单轮迭代（8 候选因子） | **~15 分钟** |
-| 表达式算子标准 | **WorldQuant BRAIN 对齐** |
-| BRAIN 正式提交 | **3 个因子 IS 全部 PASS，已提交（最佳 Fitness 1.26）** |
-| WQ BRAIN 集成 | **内置 API — 一键模拟 + 自动提交** |
 
 ---
 
-## Validated Results — Factors Submitted to BRAIN
+## Validated Results — JoinQuant Strategies
 
-QuantGPT Agent 已产出 **3 个正式提交因子**，全部通过 WQ BRAIN IS 检测：
+聚宽回测已完成 **28 个验证策略**（2025-01-01 ~ 2025-12-31，初始资金 100 万），详见 [validated-strategies/README.md](validated-strategies/README.md)。
+
+| # | 策略 | 年化收益 | 最大回撤 | 夏普比率 |
+|:--|------|:--------:|:--------:|:--------:|
+| 1 | [首板高开-低开-弱转强](validated-strategies/first-board-mixed-strategy.md) | **158.72%** | 43.97% | **2.62** |
+| 2 | [子账户多策略分仓](validated-strategies/sub-account-multi-strategy.md) | **81.77%** | 18.26% | **2.43** |
+| 3 | [小市值排除3bug版](validated-strategies/small-cap-exclude-bugs.md) | **81.77%** | 18.26% | **2.43** |
+| 4 | [基本面01+RSI择时](validated-strategies/fundamental-rsi-timing.md) | **64.30%** | 14.75% | **2.41** |
+| 5 | [干积分-量化框架](validated-strategies/earnings-points-framework.md) | **60.04%** | 23.29% | **2.33** |
+| 6 | [稳健型ETF](validated-strategies/stable-etf-strategy.md) | **22.16%** | **3.08%** | **2.29** |
+| 7 | [国九小市值](validated-strategies/guojiu-small-cap.md) | **74.84%** | 21.23% | **2.21** |
+| 8 | [高股息价投](validated-strategies/dividend-value-strategy.md) | **51.50%** | 16.65% | **2.17** |
+| 9 | [四大搅屎棍](validated-strategies/four-stirrers-strategy.md) | **58.68%** | 18.78% | **1.93** |
+| 10 | [趋势筛选ETF轮动](validated-strategies/trend-filter-etf-rotation.md) | **41.50%** | 12.52% | **1.83** |
+
+完整 28 个策略列表和代码见 [validated-strategies/](validated-strategies/)。
+
+---
+
+## WQ BRAIN Factors Submitted
+
+原始 QuantGPT 项目产出的 3 个正式提交因子，全部通过 WQ BRAIN IS 检测：
 
 | Factor | Expression | WQ Sharpe | WQ Fitness | WQ Returns | IS Tests | Status |
 |:-------|:-----------|:---------:|:----------:|:----------:|:--------:|:------:|
-| **Debt-Momentum Composite** | `-1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)` | **1.77** | **1.26** | **20.18%** | **ALL PASS** | **Submitted** |
-| **VWAP Decay Reversal** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **18.63%** | **ALL PASS** | **Submitted** |
-| **Returns-Volume Momentum** | `-1 * rank(ts_decay_linear(returns * volume / adv20, 5))` | **1.60** | **1.03** | **24.15%** | **ALL PASS** | **Submitted** |
-
-> 3 个因子代表不同的 alpha 来源：**Debt-Momentum** 结合动量反转与基本面（债务/企业价值），行业中性化；**VWAP Decay Reversal** 捕捉价格偏离 VWAP 的衰减回归，市场中性化；**Returns-Volume Momentum** 捕捉收益率与相对成交量的衰减动量，市场中性化。全程 Agent 自治完成。
-
-<p align="center">
-  <img src="example_factor/1-1.png" width="49%" alt="WQ BRAIN PnL — Debt-Momentum Composite (Submitted)" />
-  <img src="example_factor/1-2.png" width="49%" alt="WQ BRAIN IS Summary — Debt-Momentum Composite (Submitted)" />
-</p>
-<p align="center">
-  <sub>Debt-Momentum Composite — 已正式提交：Sharpe 1.77, Fitness 1.26, Returns 20.18%, IS 全部 PASS</sub>
-</p>
-
-<p align="center">
-  <img src="example_factor/2-1.png" width="49%" alt="WQ BRAIN PnL — VWAP Decay Reversal (Submitted)" />
-  <img src="example_factor/2-2.png" width="49%" alt="WQ BRAIN IS Summary — VWAP Decay Reversal (Submitted)" />
-</p>
-<p align="center">
-  <sub>VWAP Decay Reversal — 已正式提交：Sharpe 1.69, Fitness 1.07, Returns 18.63%, IS 全部 PASS</sub>
-</p>
-
-<p align="center">
-  <img src="example_factor/3-1.png" width="49%" alt="WQ BRAIN PnL — Returns-Volume Momentum (Submitted)" />
-  <img src="example_factor/3-2.png" width="49%" alt="WQ BRAIN IS Summary — Returns-Volume Momentum (Submitted)" />
-</p>
-<p align="center">
-  <sub>Returns-Volume Momentum — 已正式提交：Sharpe 1.60, Fitness 1.03, Returns 24.15%, IS 全部 PASS</sub>
-</p>
+| **Debt-Momentum** | `-1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)` | **1.77** | **1.26** | **20.18%** | **ALL PASS** | **Submitted** |
+| **VWAP Decay** | `-1 * rank(ts_decay_linear(close / vwap, 10))` | **1.69** | **1.07** | **18.63%** | **ALL PASS** | **Submitted** |
+| **Returns-Volume** | `-1 * rank(ts_decay_linear(returns * volume / adv20, 5))` | **1.60** | **1.03** | **24.15%** | **ALL PASS** | **Submitted** |
 
 ---
 
-## Autonomous Factor Mining — The Core Loop
+## How It Works
 
-> **This is QuantGPT's defining capability.**
->
-> Agent 读知识库、设计假设、批量实验、分析结果、积累知识、自我迭代，每个结论经过双模型交叉验证。一个研究循环产出经过验证的、可提交 WQ BRAIN 的因子。
+### Part 1: Agent Factor Mining (from QuantGPT)
 
-### Research Cycle
+Agent 自主设计因子表达式 → 本地回测 → 评分 → 反过拟合 → 迭代优化 → WQ BRAIN 提交。
 
 ```
                     ┌─────────────────────────────┐
@@ -139,235 +127,85 @@ QuantGPT Agent 已产出 **3 个正式提交因子**，全部通过 WQ BRAIN IS 
 │  Loading │    │  1-3 candidates per idea │    │  concurrent)     │
 └──────────┘    └──────────────────────────┘    └────────┬─────────┘
                                                          │
-                               ┌─────────────────────────┘
-                               ▼
-                ┌──────────────────────────────────────────┐
-                │  Phase 3: Four-Step Analysis             │
-                │                                          │
-                │  ① Fact Collection (metrics vs baseline) │
-                │  ② Independent Judgment (Agent)          │
-                │  ③ Cross-Review (DeepSeek Reasoner)      │
-                │  ④ Consensus or Divergence Resolution    │
-                └──────────────────┬───────────────────────┘
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-          ┌─────────────────┐          ┌──────────────────┐
-          │  Phase 4: Update │          │  Phase 5: Stop?  │
-          │  Notes + Knowledge│         │  Converged /     │
-          │  Base             │◀────────│  Time / Rounds   │
-          └─────────────────┘          └──────────────────┘
-                    │                         │ no
-                    │                         └──▶ back to Phase 1
+                    ┌────────────────────────────────────┘
                     ▼
-          ┌──────────────────┐
-          │  Phase 6: Report │
-          │  A/B factors +   │
-          │  new knowledge   │
-          └──────────────────┘
+          ┌──────────────────────────────────┐
+          │  Phase 3: Analysis & Review      │
+          │  Fact Collection + Dual-LLM      │
+          └────────────────┬─────────────────┘
+                           ▼
+              ┌────────────┴────────────┐
+              │  Update KB or Stop?     │
+              └────────────┬────────────┘
+                           │
+              Converged? ──┼─ yes → Report
+                           │
+              no ──────────┴─ back to Phase 1
 ```
 
-### Key Mechanisms
+关键机制：
+- **双 LLM 交叉评审** — 每个结论经第二个模型独立验证，消除 confirmation bias
+- **持久化知识库** — `research_notes/knowledge/` 跨会话积累，避免重复实验
+- **批量并发评估** — 单次 10-20 个因子，并发回测 + 三波重试
 
-<table>
-<tr>
-<td width="50%">
+### Part 2: JoinQuant Auto-Backtest (EasyQuant Extension)
 
-**Dual-LLM Cross-Review**
-
-每个结论性判断（采用/不采用/关闭方向）必须经过第二个 LLM 独立评审。把事实数据和第一个模型的推理链一起发给 DeepSeek Reasoner，要求独立评估推理是否合理、是否有遗漏角度。
-
-共识 → 直接输出。分歧 → 呈现双方证据，采用更保守结论。
-
-这解决了单模型因子研究的核心问题：**confirmation bias**。
-
-</td>
-<td width="50%">
-
-**Persistent Knowledge Base**
+针对聚宽平台的自动化回测流程：
 
 ```
-research_notes/knowledge/
-├── rules/       ← 已验证的稳定规则（必须遵守）
-├── findings/    ← 经验发现（参考）
-└── failures/    ← 已证伪路径（禁止重复）
+用户/脚本
+    │
+    ▼
+┌──────────────────────────────────────┐
+│  submit_next.py                      │
+│  1. 读取回测结果.md，获取已处理策略    │
+│  2. 按代码长度排序（短的优先）         │
+│  3. 提取策略代码                     │
+│  4. 调用 API 提交                    │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│  strategy_backtest API               │
+│  1. AST 验证策略代码                 │
+│  2. Playwright 登录聚宽              │
+│  3. 注入代码 + 设置回测参数          │
+│  4. 点击运行 + 等待完成              │
+│  5. 抓取回测指标                     │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│  JQAutomationService                 │
+│  Playwright 浏览器自动化              │
+│  - 登录 + 会话保持                    │
+│  - 负积分检测                         │
+│  - 超时 + 重试                        │
+│  - 结果抓取                           │
+└──────────────────────────────────────┘
 ```
-
-知识库跨会话积累。第 10 次研究会话可以直接利用前 9 次的所有发现，避免重复实验，遵守已验证规则，绕开已证伪路径。
-
-这不是 chat history——是**结构化的研究资产**。
-
-</td>
-</tr>
-<tr>
-<td>
-
-**Batch Concurrent Evaluation**
-
-单次提交 10-20 个因子表达式，并发回测 + 三波重试。结果按 fitness 降序排列。hs300 fitness < 0.1 时自动跳过 csi500 验证，节省算力。
-
-```python
-from scripts.factor_miner import batch_evaluate
-results = batch_evaluate(
-    server, expressions, params,
-    max_concurrent=10
-)
-```
-
-</td>
-<td>
-
-**Research Discipline (Enforced)**
-
-不是建议，是硬性规则：
-- 每次实验只改一个变量
-- 提交前检查是否已做过（笔记 + 知识库）
-- 分析结论标注"仅为假设"
-- 失败实验同样记录原因
-- 表达式 > 4 层嵌套需额外论证
-- 简单清晰 > 复杂精巧
-
-</td>
-</tr>
-</table>
-
-> **上面 Validated Results 中的因子就是这个流程的产出。** 多轮迭代，3 个因子正式提交 WQ BRAIN（IS 全部通过）。完整方法论见 [Factor Mining Guide](docs/FACTOR_MINING.md)。
-
----
-
-## Architecture
-
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                     QuantGPT Research Engine                       │
-├─────────────┬──────────────────────────────┬───────────────────────┤
-│             │         Core Engine          │                       │
-│  Agent      │  ┌──────────────────────┐   │   Data Layer          │
-│  Interface  │  │  Expression Parser   │   │  ┌─────────────────┐  │
-│             │  │  50+ operators       │   │  │ baostock (free)  │  │
-│ MCP Tools   │  │  WQ BRAIN compatible │   │  │ akshare (free)   │  │
-│ REST API    │  └──────────┬───────────┘   │  │ PolarDB (opt)    │  │
-│ Web UI      │  ┌──────────▼───────────┐   │  │ Parquet cache    │  │
-│ (monitor)   │  │  Backtest Engine     │   │  └─────────────────┘  │
-│             │  │  Rank-based grouping │   │                       │
-│             │  │  WQ BRAIN aligned    │   │   AI Layer            │
-│             │  └──────────┬───────────┘   │  ┌─────────────────┐  │
-│             │  ┌──────────▼───────────┐   │  │ DeepSeek LLM    │  │
-│             │  │  Validation Suite    │   │  │ Factor design   │  │
-│             │  │  Anti-overfit (4x)   │   │  │ Cross-review    │  │
-│             │  │  Walk-forward        │   │  │ Mutation engine │  │
-│             │  │  WQ BRAIN simulation │   │  └─────────────────┘  │
-│             │  └──────────────────────┘   │                       │
-│             │                             │   Storage             │
-│             │  Evolution Engine           │  ┌─────────────────┐  │
-│             │  Trajectory → Meta-Evo →    │  │ SQLite (default)│  │
-│             │  Mutation / Crossover       │  │ PostgreSQL (opt)│  │
-│             │                             │  └─────────────────┘  │
-├─────────────┴──────────────────────────────┴───────────────────────┤
-│  Agent Orchestrator: Claude Code skill loop / Claude Desktop MCP   │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-### Tech Stack
-
-| Layer | Technology |
-|:------|:-----------|
-| Agent | Claude Code (skill loop) / Claude Desktop (MCP) |
-| Backend | Python 3.10+, FastAPI, uvicorn, SQLAlchemy 2.0 async |
-| Database | SQLite (default, zero-config) / PostgreSQL (optional) |
-| AI/LLM | DeepSeek (factor generation + cross-review) |
-| Market Data | baostock + akshare (free) → Parquet cache |
-| Frontend | React 18 + TypeScript + Tailwind CSS 4 (monitoring dashboard) |
-| MCP | FastMCP (stdio / SSE / streamable-http) |
-| Report | QuantStats HTML |
-
----
-
-## Key Engineering Decisions
-
-### 1. Expression Parser — The Core Differentiator
-
-自研的表达式解析器（`expression_parser.py`, 870+ lines）是整个系统的核心：
-
-- **50+ 算子**：截面（`rank`, `zscore`）、时序（`ts_corr`, `decay_linear`）、非线性（`sign_power`）、条件（`where`, `trade_when`）、技术指标（`rsi`, `macd`, `atr`）
-- **双模式**：`mode="wq"` 仅允许 WQ BRAIN 兼容算子（提交前校验），`mode="local"` 开放全部算子
-- **语义正确的截面/时序分离**：`rank()` 按 `trade_date` 分组（截面），`ts_mean()` 按 `stock_code` 分组（时序），自动处理分组逻辑
-- **安全约束**：递归深度限制、窗口上限、表达式长度限制，防止恶意输入
-
-### 2. Three-Layer Anti-Overfit System
-
-| Layer | Module | Method |
-|:------|:-------|:-------|
-| Statistical Tests | `anti_overfit.py` | IC 稳定性 + 子样本压力测试（牛/熊/震荡）+ 安慰剂检验 + 半衰期估计 |
-| Walk-Forward | `rolling_validator.py` | 滚动 train/valid/test 窗口，评估样本外 IC 衰减 |
-| WQ Simulation | `wq_simulate.py` | Dollar-neutral 多空模拟，对齐 BRAIN 的 Sharpe/Turnover/Fitness 计算 |
-| **WQ BRAIN API** | `wq_brain_client.py` | **直连 BRAIN 平台 — 真实模拟 + IS 检测 + 一键正式提交** |
-
-### 3. Evolutionary Factor Iteration
-
-受 QuantaAlpha 启发的三阶段自动搜索：
-
-```
-TrajectoryAnalyzer → MetaEvolutionSelector → Strategy Execution
- (质量指标评估)       (EXPLOIT/EXPLORE/        (MutationEngine ×8 方向
-                      RECOMBINE/SIMPLIFY)       / CrossoverEngine)
-```
-
-8 种定向突变：时间窗口变异、算子替换、复杂度调整、截面变换叠加等。5 维评分驱动迭代方向。
-
-### 4. Agent-First Access Model
-
-| Mode | Role | Use Case |
-|:-----|:-----|:---------|
-| **MCP (primary)** | Agent toolkit | Claude Code / Claude Desktop 通过 MCP 调用所有研究工具，驱动自治研究循环 |
-| **REST API** | Programmatic access | 批量回测、外部系统集成、CI/CD 因子验证 |
-| **Web UI** | Monitoring dashboard | 任务监控、报告查看、因子库管理 |
-
-<details>
-<summary><b>MCP Tools (8 个)</b></summary>
-
-| Tool | Description |
-|:-----|:------------|
-| `list_operators` | 全部算子文档 |
-| `list_universes` | 股票池和基准 |
-| `validate_expression` | 语法校验 |
-| `run_backtest` | 完整回测 |
-| `score_factor` | 评分（0–100, A/B/C/D） |
-| `diagnose_factor` | 失败模式诊断 + 改进建议 |
-| `run_anti_overfit` | 4 项反过拟合检验 |
-| `run_rolling_validation` | Walk-forward 验证 |
-
-</details>
-
----
-
-## Competitive Landscape
-
-| Capability | JoinQuant | Backtrader | ChatGPT + Backtest | **QuantGPT** |
-|:-----------|:------:|:------:|:------:|:------:|
-| Research mode | Human writes code | Human writes code | Human prompts, tool executes | **Agent autonomously researches** |
-| Factor discovery | Manual | Manual | One-shot LLM | **Multi-round evolution + knowledge base** |
-| Anti-bias | Researcher judgment | None | None | **Dual-LLM mandatory cross-review** |
-| Knowledge accumulation | Personal notes | None | Lost between sessions | **Structured KB across sessions** |
-| WQ BRAIN integration | -- | -- | -- | **Operator-aligned + direct submission** |
-| Anti-overfit | -- | -- | -- | **4 statistical tests + walk-forward** |
-| MCP / AI Agent | -- | -- | -- | **8 tools, skill-loop orchestration** |
-| Live trading | Yes | Limited | -- | -- |
-| Intraday data | Yes | Yes | -- | Daily only |
 
 ---
 
 ## Quick Start
 
-### Option 1: Agent Mode (Recommended)
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+（前端）
+- Playwright（聚宽自动化，`pip install playwright && playwright install chromium`）
+- DeepSeek API Key（可选，用于 Agent 因子挖掘）
+- 聚宽账号（免费，非 VIP 仅支持 1 个回测任务同时进行）
+
+### Option 1: Agent Mode — Factor Mining
 
 ```bash
-git clone https://github.com/Miasyster/QuantGPT.git && cd QuantGPT
-make setup   # creates venv, installs deps, generates .env
-make run     # starts server at http://localhost:8003
+git clone https://github.com/HiRenyi/EasyQuant.git && cd EasyQuant
+make setup   # 创建虚拟环境、安装依赖、生成 .env
+make run     # 启动服务 http://localhost:8003
 ```
 
-Add MCP configuration to Claude Code or Claude Desktop:
+配置 MCP（Claude Code 或 Claude Desktop）：
 
 ```json
 {
@@ -380,117 +218,130 @@ Add MCP configuration to Claude Code or Claude Desktop:
 }
 ```
 
-Then let the Agent work: *"在沪深300上挖掘高 fitness 的因子，目标 WQ BRAIN 可提交"*
+然后让 Agent 自主工作：*"在沪深300上挖掘高 fitness 的因子，目标 WQ BRAIN 可提交"*
 
-### Option 2: Expression Mode (No LLM Required)
+### Option 2: JoinQuant Auto-Backtest — Batch Strategy Submission
+
+**第一步：保存聚宽登录凭证**
 
 ```bash
-# Direct expression backtest via API
+python scripts/save_jq_login.py
+# 按提示输入聚宽账号密码，会保存到 .env
+```
+
+**第二步：启动服务**
+
+```bash
+./restart.sh
+# 或手动启动：
+PYTHONUNBUFFERED=1 python -m quantgpt
+```
+
+**第三步：批量提交策略**
+
+```bash
+# 将策略 .txt/.py 文件放到 聚宽2025年精选/ 目录
+python scripts/submit_next.py
+```
+
+脚本会自动：
+1. 读取 `回测结果.md`，跳过已处理的策略
+2. 按代码长度排序（短的优先，节省积分）
+3. 逐个提交，等待完成，记录结果
+4. 处理各种错误（验证失败、积分不足、超时等）
+
+**第四步：查看结果**
+
+```bash
+cat 回测结果.md
+# 或打开 validated-strategies/ 查看已验证策略
+```
+
+### Option 3: Direct API — Single Strategy Backtest
+
+```bash
+# 直接通过 API 提交单个聚宽策略
+curl -X POST http://localhost:8003/api/v1/strategy-backtest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyName": "我的策略",
+    "code": "from jqdata import *\n\ndef initialize(context):\n    ...",
+    "start_date": "2025-01-01",
+    "end_date": "2025-12-31"
+  }'
+
+# 查询任务状态
+curl http://localhost:8003/api/v1/tasks/<task_id>
+```
+
+### Option 4: Expression Mode — Local Factor Backtest
+
+```bash
+# 本地表达式回测（无需聚宽）
 curl -X POST http://localhost:8003/api/v1/auto_backtest \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
   -d '{"expression": "rank(close / ts_mean(close, 20))", "universe": "hs300"}'
 ```
-
-**Zero config by default**: SQLite database, baostock + akshare free data. See [full Quick Start guide](docs/QUICKSTART.md) for details.
-
-<details>
-<summary><b>Optional: DeepSeek API (for factor generation & cross-review)</b></summary>
-
-```bash
-# Edit .env, add your DeepSeek API key (~$0.001 per query)
-DEEPSEEK_API_KEY=sk-your-key-here
-```
-
-</details>
-
-<details>
-<summary><b>Optional: PostgreSQL (for production)</b></summary>
-
-```bash
-pip install "quantgpt[postgresql]"
-# Edit .env:
-DATABASE_URL=postgresql+asyncpg://quantgpt:password@localhost:5432/quantgpt
-alembic upgrade head
-```
-
-</details>
-
-<details>
-<summary><b>Expression Examples</b></summary>
-
-```python
-# Debt-momentum composite — BRAIN submitted, Fitness 1.26, Sharpe 1.77
--1 * rank(ts_av_diff(close, 10)) + rank(debt / enterprise_value)
-
-# VWAP decay reversal — BRAIN submitted, Fitness 1.07, Sharpe 1.69
--1 * rank(ts_decay_linear(close / vwap, 10))
-
-# Returns-volume momentum — BRAIN submitted, Fitness 1.03, Sharpe 1.60
--1 * rank(ts_decay_linear(returns * volume / adv20, 5))
-
-# 20-day momentum
-rank(close / ts_mean(close, 20))
-
-# Low volatility
-rank(-1 * ts_std(close/ts_shift(close,1)-1, 20))
-
-# Decay-weighted correlation
-decay_linear(rank(ts_corr(vwap, volume, 10)), 5)
-```
-
-</details>
 
 ---
 
 ## Project Structure
 
 ```
-quantgpt/
-├── quantgpt/                    # Backend (Python)
-│   ├── expression_parser.py     # Factor expression parser (50+ ops, WQ compatible)
-│   ├── backtest.py              # Rank-based group backtest engine
-│   ├── market_data.py           # baostock/akshare → Parquet cache
-│   ├── api_server.py            # FastAPI REST API + SSE
-│   ├── mcp_server.py            # FastMCP server (8 tools — Agent's toolkit)
-│   ├── iteration.py             # 3-phase evolutionary iteration
-│   ├── mutation_engine.py       # 8 directed mutation strategies
-│   ├── crossover_engine.py      # High-score factor crossover
-│   ├── meta_evolution.py        # Adaptive strategy selector
-│   ├── trajectory_analyzer.py   # Trajectory quality metrics
-│   ├── anti_overfit.py          # 4 statistical anti-overfit tests
-│   ├── rolling_validator.py     # Walk-forward validation
-│   ├── wq_simulate.py           # WQ BRAIN dollar-neutral simulator
-│   ├── wq_brain_client.py       # WQ BRAIN API integration
-│   ├── neutralize.py            # Industry & cap neutralization
-│   ├── paper_engine.py          # Paper trading engine
-│   ├── daily_summary.py         # LLM-powered daily market report
-│   └── routes/                  # API route modules
-├── frontend/                    # React 18 + TypeScript + Tailwind CSS 4
-│   └── src/components/          # Monitoring dashboard
+EasyQuant/
+├── quantgpt/                    # Backend (from QuantGPT + EasyQuant extensions)
+│   ├── expression_parser.py     # Factor expression parser (50+ ops)
+│   ├── backtest.py              # Local rank-based backtest engine
+│   ├── jq_automation.py         # ★ JoinQuant Playwright automation
+│   ├── task_store.py            # Task persistence + status management
+│   ├── strategy_code_utils.py   # Strategy code AST validation
+│   ├── llm_service.py           # LLM integration service
+│   ├── routes/
+│   │   ├── strategy_backtest.py # ★ JoinQuant strategy backtest API
+│   │   └── backtest_tasks.py    # ★ Task management
+│   └── ...                      # Original QuantGPT modules
+├── validated-strategies/        # ★ 28 validated strategies (EasyQuant)
+│   ├── README.md                # Strategy index + metrics
+│   ├── code/                    # Strategy source code (.py)
+│   └── *.md                     # Detailed analysis docs (top 10)
 ├── scripts/
-│   └── factor_miner.py          # Batch factor evaluation toolkit
-├── tests/                       # 74 tests (parser + backtest + WQ simulate)
-├── example_factor/              # BRAIN validation screenshots
-└── docs/                        # Architecture, API, MCP, Mining guides
+│   ├── factor_miner.py          # Batch factor evaluation (from QuantGPT)
+│   ├── submit_next.py           # ★ Batch strategy submission
+│   ├── save_jq_login.py         # ★ Save JoinQuant credentials
+│   └── batch_backtest.py        # ★ Batch backtest helper
+├── 聚宽2025年精选/               # ★ Strategy collection (runtime, not in git)
+├── 回测结果.md                   # ★ Backtest results log (runtime)
+├── restart.sh                   # Service restart script
+├── frontend/                    # React monitoring dashboard
+├── docs/                        # Documentation
+└── tests/                       # 74 tests
 ```
 
 ---
 
-## Limitations
+## Tech Stack
 
-- **Daily frequency only** — no intraday backtesting
-- **A-share market only** — China mainland equities
-- **Agent quality depends on LLM** — better models produce better factors
+| Layer | Technology |
+|:------|:-----------|
+| Agent | Claude Code (skill loop) / Claude Desktop (MCP) |
+| Backend | Python 3.10+, FastAPI, uvicorn, SQLAlchemy 2.0 async |
+| Database | SQLite (default) / PostgreSQL (optional) |
+| AI/LLM | DeepSeek (factor generation + cross-review) |
+| Browser Automation | Playwright (JoinQuant auto-backtest) |
+| Market Data | baostock + akshare (free) → Parquet cache |
+| Frontend | React 18 + TypeScript + Tailwind CSS 4 |
+| MCP | FastMCP (stdio / SSE / streamable-http) |
 
 ---
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Miasyster
+[MIT](LICENSE)
 
-This repository is the **original source** of the QuantGPT factor research engine.
-Derivative works should retain the copyright notice and comply with the MIT License terms.
-See [NOTICE](NOTICE) for details.
+> **Original Project:** [Miasyster/QuantGPT](https://github.com/Miasyster/QuantGPT) — Agent-Driven LLM Quant Research Engine
+>
+> This repository is a fork that extends the original project with JoinQuant backtest automation, batch strategy submission, and a validated strategy library.
+>
+> Copyright (c) 2026 Miasyster. See [NOTICE](NOTICE) for details.
 
 <sub>*Past factor performance does not guarantee future returns. This project does not constitute investment advice.*</sub>
