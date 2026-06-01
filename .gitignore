@@ -67,10 +67,14 @@ htmlcov/
 
 # Runtime artifacts (generated during execution)
 回测结果.md
-strategy-collection/
 PPT/
 优化建议/
 聚宽策略代码/
+
+# Unvalidated strategies (local collection, too large)
+strategy-collection/*
+!strategy-collection/validated/
+!strategy-collection/README.md
 
 # Virtual environment
 .venv/
