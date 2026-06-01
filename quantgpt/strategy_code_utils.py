@@ -101,6 +101,21 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
     has_initialize: bool = False
     has_handle_data: bool = False
+    has_run_scheduler: bool = False  # run_daily/run_weekly/run_monthly
+
+
+def _has_scheduler_calls(tree: ast.AST) -> bool:
+    """Check if code uses run_daily/run_weekly/run_monthly scheduling."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            # Check for run_daily(...), run_weekly(...), run_monthly(...)
+            if isinstance(func, ast.Name) and func.id in ("run_daily", "run_weekly", "run_monthly"):
+                return True
+            # Attribute access like jq.run_daily
+            if isinstance(func, ast.Attribute) and func.attr in ("run_daily", "run_weekly", "run_monthly"):
+                return True
+    return False
 
 
 def validate_strategy_code(code: str) -> ValidationResult:
@@ -123,6 +138,7 @@ def validate_strategy_code(code: str) -> ValidationResult:
         return result
 
     # 2. Check for required functions
+    result.has_scheduler = _has_scheduler_calls(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             if node.name == "initialize":
@@ -134,8 +150,12 @@ def validate_strategy_code(code: str) -> ValidationResult:
         result.errors.append("缺少 initialize(context) 函数")
         result.valid = False
     if not result.has_handle_data:
-        result.errors.append("缺少 handle_data(context, data) 函数")
-        result.valid = False
+        # Allow scheduler-based strategies (run_daily/run_weekly/run_monthly) without handle_data
+        if not result.has_scheduler:
+            result.errors.append("缺少 handle_data(context, data) 函数")
+            result.valid = False
+        else:
+            result.warnings.append("使用 run_daily/run_weekly/run_monthly 调度，未包含 handle_data 函数")
 
     # 3. Check for dangerous calls
     for node in ast.walk(tree):

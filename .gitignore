@@ -64,3 +64,12 @@ engine/Cargo.lock
 # Coverage
 .coverage
 htmlcov/
+
+# Runtime artifacts (generated during execution)
+回测结果.md
+聚宽2025年精选/
+PPT/
+优化建议/
+
+# Virtual environment
+.venv/

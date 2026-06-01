@@ -237,6 +237,9 @@ def call_deepseek(prompt: str) -> str:
         max_tokens=256,
         timeout=30,
     )
+    # Handle proxy that returns plain string instead of OpenAI object
+    if isinstance(resp, str):
+        return clean_expression(resp)
     return clean_expression(resp.choices[0].message.content)
 
 
@@ -267,6 +270,8 @@ def call_fix_expression(expression: str, error: str, prompt: str) -> str:
         max_tokens=256,
         timeout=30,
     )
+    if isinstance(resp, str):
+        return clean_expression(resp)
     return clean_expression(resp.choices[0].message.content)
 
 

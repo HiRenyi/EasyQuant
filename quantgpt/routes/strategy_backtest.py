@@ -32,7 +32,9 @@ router = APIRouter(prefix="/api/v1", tags=["strategy_backtest"])
 # ---- Request schema ----
 
 class StrategyBacktestRequest(BaseModel):
-    prompt: str = Field(..., description="自然语言策略描述", max_length=2000)
+    prompt: str = Field("", description="自然语言策略描述（提供 code 时可留空）", max_length=2000)
+    code: str = Field("", description="直接提供的策略代码（跳过 LLM 生成）", max_length=50000)
+    name: str = Field("", description="策略名称（显示在聚宽和任务列表）", max_length=100)
     start_date: str = Field("2023-01-01", description="回测起始日期 YYYY-MM-DD")
     end_date: str = Field("2025-12-31", description="回测结束日期 YYYY-MM-DD")
     initial_capital: float = Field(1_000_000.0, ge=10_000, le=100_000_000, description="初始资金")
@@ -82,12 +84,13 @@ async def strategy_backtest(
             "status": "pending",
             "task_type": "strategy_backtest",
             "params": {
+                "name": req.name.strip() or "未命名策略",
                 "prompt": req.prompt,
                 "start_date": req.start_date,
                 "end_date": req.end_date,
                 "initial_capital": req.initial_capital,
                 "benchmark": req.benchmark,
-                            },
+            },
             "created_at": time.time(),
         }
 
@@ -108,7 +111,7 @@ def _run_strategy_backtest_task(
     req: StrategyBacktestRequest,
     user_id: str,
 ):
-    """Background thread: LLM code gen → validate → Playwright automation → scrape results."""
+    """Background thread: LLM code gen (or direct code) → validate → Playwright automation → scrape results."""
     from ..task_store import persist_task_to_db as _persist_task_to_db
     from ..task_store import tasks as _tasks
 
@@ -117,9 +120,14 @@ def _run_strategy_backtest_task(
         return
 
     try:
-        # ---- Phase 1: Generate strategy code via LLM ----
-        task["status"] = "generating_code"
-        code = _call_deepseek_strategy(req.prompt)
+        # ---- Phase 1: Get strategy code (direct or LLM-generated) ----
+        if req.code.strip():
+            task["status"] = "validating_code"
+            code = req.code.strip()
+            logger.info(f"[{task_id}] Using directly provided strategy code ({len(code)} chars)")
+        else:
+            task["status"] = "generating_code"
+            code = _call_deepseek_strategy(req.prompt)
         task["strategy_code"] = code
 
         # ---- Phase 2: Validate code (AST) ----
@@ -159,6 +167,7 @@ def _run_strategy_backtest_task(
         from ..jq_automation import JQ_BACKTEST_TIMEOUT, JQBacktestConfig, get_jq_service
 
         jq_config = JQBacktestConfig(
+            name=req.name.strip() or _extract_strategy_name(code),
             start_date=req.start_date,
             end_date=req.end_date,
             initial_capital=req.initial_capital,
@@ -248,6 +257,24 @@ def _get_strategy_llm_config() -> dict:
     if not api_key:
         raise ValueError("STRATEGY_LLM_API_KEY 或 DEEPSEEK_API_KEY 未配置")
     return {"api_key": api_key, "base_url": base_url, "model": model, "provider": provider}
+
+
+def _extract_strategy_name(code: str) -> str:
+    """Extract strategy name from code comments. Falls back to first meaningful function name."""
+    for line in code.split('\n'):
+        line = line.strip()
+        # Look for comment lines with strategy description
+        for prefix in ('# 标题：', '# 策略：', '# 策略名称：', '# Title:', '# Strategy:'):
+            if line.startswith(prefix):
+                name = line[len(prefix):].strip()
+                if name:
+                    return name[:50]
+        # Look for any comment on initialize/after_code_changed line
+        if line.startswith('#') and not line.startswith('##') and len(line) > 3:
+            content = line.lstrip('#').strip()
+            if content and not content.startswith('导入') and not content.startswith('克隆'):
+                return content[:50]
+    return "未命名策略"
 
 
 def _call_deepseek_strategy(prompt: str, max_retries: int = 2) -> str:

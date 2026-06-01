@@ -100,6 +100,12 @@ SELECTORS = {
     "frequency_input": [
         '#frequency',
     ],
+    "strategy_name_input": [
+        '#strategyName',
+        'input[name="name"]',
+        'input[placeholder*="策略名称"]',
+        'input[placeholder*="名字"]',
+    ],
     "run_backtest_button": [
         '#daily-new-backtest-button',
         '#full-backtest-button',
@@ -139,6 +145,7 @@ class JQBacktestConfig:
     initial_capital: float = 1_000_000.0
     benchmark: str = "000300.XSHG"
     frequency: str = "day"  # "day" | "minute"
+    name: str = ""  # strategy name
 
 
 @dataclass
@@ -397,6 +404,11 @@ class JQAutomationService:
             # ---- Dismiss introjs overlay / tutorial popups ----
             await self._dismiss_overlays(page)
 
+            # ---- Set strategy name (MUST be done before saving code) ----
+            if config.name:
+                await self._set_strategy_name(page, config.name)
+                await page.wait_for_timeout(500)
+
             # ---- Set strategy code ----
             code_set = await self._set_strategy_code(page, strategy_code)
             if not code_set:
@@ -449,7 +461,11 @@ class JQAutomationService:
 
             # ---- Wait for completion ----
             _status("waiting_completion")
-            completed = await self._wait_for_completion(page)
+            completed, err_msg = await self._wait_for_completion(page)
+            if err_msg:
+                result.error = err_msg
+                result.screenshot_path = await _take_screenshot(page, "backtest_error")
+                return result
             if not completed:
                 result.error = f"回测超时（{JQ_BACKTEST_TIMEOUT}秒）"
                 result.screenshot_path = await _take_screenshot(page, "timeout")
@@ -709,13 +725,22 @@ class JQAutomationService:
         logger.error("Failed to set strategy code — no editor found")
         return False
 
-    async def _save_code(self, page: Page):
+    async def _save_code(self, page: Page, strategy_name: str | None = None):
         """Save code in JQ editor so the server has the latest version.
 
         JQ's "运行回测" runs whatever is saved on the server, NOT what's
         in the editor. We must explicitly save first.
         """
         saved = False
+
+        # Dismiss any "保存失败" popup first
+        try:
+            close_btn = await page.query_selector('.ant-modal-close-x, .modal-close, text="×"')
+            if close_btn and await close_btn.is_visible():
+                await close_btn.click()
+                await page.wait_for_timeout(500)
+        except Exception:
+            pass
 
         # Method 1: Click the "保 存" tab/button at the top of the editor
         # In JQ, it appears as a tab-like element with text "保 存" (note the space)
@@ -756,6 +781,41 @@ class JQAutomationService:
 
         if not saved:
             logger.warning("Failed to save code — backtest may use old version!")
+
+    async def _set_strategy_name(self, page: Page, name: str):
+        """Set strategy name by double-clicking h2.algo-title to trigger inline edit."""
+        try:
+            # Double-click the strategy title to enter edit mode
+            h2 = await page.query_selector('h2.algo-title')
+            if not h2 or not await h2.is_visible():
+                logger.warning("h2.algo-title not found or not visible")
+                return
+
+            box = await h2.bounding_box()
+            if not box:
+                logger.warning("h2.algo-title has no bounding box")
+                return
+
+            await page.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2, click_count=2)
+            await page.wait_for_timeout(800)
+
+            # After double-click, an input should appear inside or replace the h2
+            inp = await page.query_selector('h2.algo-title input, input.algo-title-input, input:focus')
+            if inp and await inp.is_visible():
+                await inp.fill("")
+                await page.wait_for_timeout(200)
+                await inp.fill(name[:50])
+                await page.wait_for_timeout(300)
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(500)
+                logger.info(f"Strategy name set to: {name[:50]} via double-click + input fill")
+            else:
+                logger.warning(f"Could not find input after double-click. Name: {name[:50]}")
+        except Exception as e:
+            logger.warning(f"Failed to set strategy name: {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to set strategy name: {e}")
 
     async def _configure_backtest_params(self, page: Page, config: JQBacktestConfig):
         """Set backtest configuration parameters via JoinQuant's form.
@@ -867,77 +927,174 @@ class JQAutomationService:
             logger.warning(f"Failed to dismiss overlays: {e}")
 
     async def _click_run_backtest(self, page: Page) -> bool:
-        """Click the '运行回测' button. Returns True on success."""
-        # Record pre-click URL to detect navigation to result page
+        """Click the '运行回测' button. Handles JQ's parallel limit popup."""
         self._pre_run_url = page.url
 
-        try:
+        # Retry loop: JQ limits concurrent backtests to 2
+        for attempt in range(3):
             await self._dismiss_overlays(page)
-            btn = await _find_element(page, SELECTORS["run_backtest_button"], timeout=10000)
-            await btn.click()
-            await page.wait_for_timeout(2000)
-            logger.info("Clicked '运行回测' button")
-            return True
-        except TimeoutError:
-            logger.error("Cannot find '运行回测' button")
-            return False
+            try:
+                btn = await _find_element(page, SELECTORS["run_backtest_button"], timeout=10000)
+                await btn.click()
+                await page.wait_for_timeout(3000)
 
-    async def _wait_for_completion(self, page: Page) -> bool:
+                # Debug: log current URL and check for any dialogs
+                current_url = page.url
+                logger.info(f"After click — URL: {current_url[:100]}")
+
+                # Check for any visible dialogs/popups
+                dialog_info = await page.evaluate("""() => {
+                    const dialogs = document.querySelectorAll('.ant-modal-body, .el-message-box__message, .modal-body, .modal, .ant-modal');
+                    const results = [];
+                    dialogs.forEach(d => {
+                        if (d.textContent.trim()) results.push(d.textContent.trim().substring(0, 200));
+                    });
+                    // Also check for common overlay classes
+                    const overlays = document.querySelectorAll('.ant-modal-mask, .el-message-box__wrapper');
+                    overlays.forEach(o => results.push('overlay: ' + o.className));
+                    return results;
+                }""")
+                if dialog_info:
+                    logger.warning(f"Dialogs detected after click: {dialog_info}")
+
+                # Check for parallel limit popup
+                popup_text = await page.evaluate("""() => {
+                    const dialogs = document.querySelectorAll('.ant-modal-body, .el-message-box__message, .modal-body');
+                    for (const d of dialogs) {
+                        if (d.textContent.includes('并行') && d.textContent.includes('最多')) return true;
+                    }
+                    return document.body.innerText.includes('并行编译或回测的数量最多');
+                }""")
+
+                if popup_text:
+                    logger.warning(f"Parallel limit popup detected (attempt {attempt+1}), dismissing and waiting...")
+                    await page.keyboard.press("Escape")
+                    await page.wait_for_timeout(1000)
+                    await self._dismiss_overlays(page)
+                    await page.wait_for_timeout(60000)
+                    continue
+
+                # Check if page navigated or shows compilation status
+                page_text = await page.evaluate("() => document.body.innerText || ''")
+                if "backtest/detail" in current_url:
+                    logger.info(f"Already redirected to: {current_url[:100]}")
+                elif "编译" in page_text or "回测" in page_text:
+                    logger.info(f"Page shows compilation status: {page_text[:200]}")
+
+                logger.info("Clicked '运行回测' button")
+                return True
+            except TimeoutError:
+                logger.error("Cannot find '运行回测' button")
+                return False
+
+        logger.error("Failed to start backtest after 3 attempts (parallel limit)")
+        return False
+
+    async def _wait_for_completion(self, page: Page) -> tuple[bool, str | None]:
         """Wait for backtest to complete.
 
-        Flow:
-        1. After clicking run, JQ redirects to /algorithm/backtest/detail?backtestId=NEW_ID
-        2. First wait for URL to change to a NEW backtest detail page
-        3. Then poll for '回测完成' text on that page
+        Returns:
+            (completed, error_message): error_message is set if backtest failed
+            due to account issues (e.g. negative points).
         """
         pre_url = getattr(self, "_pre_run_url", "")
         elapsed = 0
 
         # Phase 1: Wait for redirect to a new backtest result page
         logger.info("Waiting for redirect to new backtest result page...")
-        while elapsed < 60:  # max 60s to get redirected
+        redirect_timeout = 120  # Increased from 60s for slower JQ compilation
+        while elapsed < redirect_timeout:
             current_url = page.url
             if "backtest/detail" in current_url and current_url != pre_url:
                 logger.info(f"Redirected to new backtest: {current_url[:100]}")
                 break
+            # Also check for compilation/queue indicators on current page
+            page_text = await page.evaluate("() => document.body.innerText || ''")
+            if "编译中" in page_text or "排队中" in page_text or "回测中" in page_text:
+                logger.info(f"Backtest compiling/queued on current page (url={current_url[:80]})")
+                break
+            # Check for negative points error
+            if "积分为负" in page_text:
+                logger.warning("Negative points detected — cannot start backtest")
+                return True, "聚宽账户积分为负，无法启动回测。请充值积分或等待免费积分刷新。"
+            if "编译失败" in page_text or "回测失败" in page_text:
+                logger.warning(f"Backtest failed on current page")
+                return True, None
             await page.wait_for_timeout(POLL_INTERVAL * 1000)
             elapsed += POLL_INTERVAL
         else:
-            logger.warning("Never redirected to backtest detail page")
+            logger.warning(f"Never redirected to backtest detail page after {redirect_timeout}s, current url: {page.url[:80]}")
+            # Take screenshot for debugging
+            try:
+                ss_path = await _take_screenshot(page, "no_redirect")
+                logger.warning(f"Screenshot saved: {ss_path}")
+            except Exception:
+                pass
             # Still try to detect completion on current page
             pass
 
         # Phase 2: On the result page, poll for completion
-        # First wait a moment for the page to settle — it should show "回测中" initially
         await page.wait_for_timeout(2000)
 
         while elapsed < JQ_BACKTEST_TIMEOUT:
             state = await page.evaluate("""() => {
                 const text = document.body.innerText || "";
+                const completed = text.includes("回测完成");
+                const running = text.includes("回测中") || text.includes("排队中");
+                const failed = text.includes("回测失败") || text.includes("编译错误");
+
+                // Check if metrics are populated with real numbers (not "--")
+                let metricFilledCount = 0;
+                const allElements = document.querySelectorAll('*');
+                allElements.forEach(el => {
+                    const v = (el.innerText || '').trim();
+                    if (v && v !== '--' && !v.includes('回测') && /[\d.]+%/.test(v) && v.length < 20) {
+                        metricFilledCount++;
+                    }
+                });
+
+                // Check chart x-axis: if it shows the end date, backtest is done
+                const xAxisText = text;
+                const hasEndDate = xAxisText.includes('25-12') || xAxisText.includes('2025-12');
+
+                // Check if there's a progress timer still showing (means still running)
+                const hasProgressTimer = /\\d+分\\d+秒/.test(text);
+
                 return {
-                    completed: text.includes("回测完成"),
-                    running: text.includes("回测中") || text.includes("排队中"),
-                    failed: text.includes("回测失败") || text.includes("编译错误"),
+                    completed,
+                    running,
+                    failed,
+                    metricFilledCount,
+                    hasEndDate,
+                    hasProgressTimer,
                     url: location.href,
                 };
             }""")
 
-            if state.get("completed"):
-                logger.info(f"Backtest completed (url={state['url'][:80]})")
-                return True
+            filled = state.get("metricFilledCount", 0)
+            has_end = state.get("hasEndDate", False)
+            has_timer = state.get("hasProgressTimer", False)
+
+            # Backtest is done if: "回测完成" text, OR metrics filled AND chart reaches end date
+            if state.get("completed") or (filled >= 3 and has_end):
+                if state.get("completed"):
+                    logger.info(f"Backtest completed (url={state['url'][:80]})")
+                else:
+                    logger.info(f"Backtest detected: metrics_filled={filled}, has_end_date={has_end} (url={state['url'][:80]})")
+                return True, None
 
             if state.get("failed"):
                 logger.warning("Backtest failed indicator detected")
-                return True  # caller will check error via _check_backtest_error
+                return True, None
 
-            if state.get("running"):
-                logger.debug(f"Backtest still running... ({elapsed}s)")
+            if state.get("running") or has_timer:
+                logger.debug(f"Backtest still running... ({elapsed}s, timer={has_timer}, filled={filled}, end={has_end})")
 
             await page.wait_for_timeout(POLL_INTERVAL * 1000)
             elapsed += POLL_INTERVAL
 
         logger.warning(f"Backtest timed out after {JQ_BACKTEST_TIMEOUT}s")
-        return False
+        return False, None
 
     async def _check_backtest_error(self, page: Page) -> str | None:
         """Check if the backtest has an error on the results page.

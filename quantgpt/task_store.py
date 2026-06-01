@@ -134,6 +134,7 @@ SAFE_FILENAME_RE = re.compile(r"^backtest_report_[\w]+\.html$")
 
 def persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_filename: str | None = None):
     from .db import _get_session_factory
+    import uuid as _uuid
 
     async def _do_persist():
         factory = _get_session_factory()
@@ -149,9 +150,17 @@ def persist_task_to_db(task_id: str, user_id: str, task_data: dict, report_filen
                 if isinstance(real_completed, (int, float)):
                     ts_completed = datetime.fromtimestamp(real_completed, tz=timezone.utc)
 
+                # Convert string user_id to UUID if needed
+                uid = user_id
+                if isinstance(user_id, str):
+                    try:
+                        uid = _uuid.UUID(user_id)
+                    except ValueError:
+                        uid = _uuid.UUID("00000000-0000-0000-0000-000000000099")
+
                 task_record = TaskModel(
                     id=task_id,
-                    user_id=user_id,
+                    user_id=uid,
                     session_id=session_id,
                     status=task_data.get("status", "failed"),
                     task_type=task_data.get("task_type", "backtest"),

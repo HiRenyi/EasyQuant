@@ -215,7 +215,9 @@ def _run_backtest_task(task_id: str, req: AutoBacktestRequest, user_id: str):
 
         check_cancelled(task_id)
         task["status"] = "backtesting"
-        executor = get_executor()
+        # Use thread executor to avoid ProcessPool pickling overhead for large DataFrames
+        from ..task_executor import ThreadTaskExecutor
+        executor = ThreadTaskExecutor()
         future = executor.submit_cpu_work(
             _run_backtest_in_process,
             market_df, expression, req.n_groups, req.holding_period,
