@@ -1,5 +1,9 @@
 # Validated Strategies
 
+> **Forked from** [Miasyster/QuantGPT](https://github.com/Miasyster/QuantGPT) — an agent-driven LLM quant research engine.
+> This repository extends the original project with JoinQuant (聚宽) backtest integration, batch submission tools, and a curated collection of validated strategies.
+> Thanks to the original author for the excellent foundation.
+
 Backtested on JoinQuant (聚宽), period: 2025-01-01 ~ 2025-12-31, initial capital: 1M RMB.
 
 All 28 strategies that completed backtest with valid results. Ranked by Sharpe ratio.
