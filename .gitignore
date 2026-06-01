@@ -67,7 +67,7 @@ htmlcov/
 
 # Runtime artifacts (generated during execution)
 回测结果.md
-聚宽2025年精选/
+strategy-collection/
 PPT/
 优化建议/
 聚宽策略代码/

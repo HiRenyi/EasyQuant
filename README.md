@@ -240,7 +240,7 @@ PYTHONUNBUFFERED=1 python -m quantgpt
 **第三步：批量提交策略**
 
 ```bash
-# 将策略 .txt/.py 文件放到 聚宽2025年精选/ 目录
+# 将策略 .txt/.py 文件放到 strategy-collection/ 目录
 python scripts/submit_next.py
 ```
 
@@ -309,7 +309,7 @@ EasyQuant/
 │   ├── submit_next.py           # ★ Batch strategy submission
 │   ├── save_jq_login.py         # ★ Save JoinQuant credentials
 │   └── batch_backtest.py        # ★ Batch backtest helper
-├── 聚宽2025年精选/               # ★ Strategy collection (runtime, not in git)
+├── strategy-collection/          # ★ Strategy collection (runtime, not in git)
 ├── 回测结果.md                   # ★ Backtest results log (runtime)
 ├── restart.sh                   # Service restart script
 ├── frontend/                    # React monitoring dashboard

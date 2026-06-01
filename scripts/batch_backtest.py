@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""批量回测聚宽2025年精选策略。
+"""批量回测策略库（strategy-collection）。
 
 逐个读取策略文件，提交到 QuantGPT API 进行聚宽回测，结果记录到 回测结果.md。
 支持断点续传：已完成的策略自动跳过。
@@ -15,7 +15,7 @@ import urllib.error
 from pathlib import Path
 
 API_BASE = "http://localhost:8003/api/v1"
-STRATEGY_DIR = Path(__file__).resolve().parent.parent / "聚宽2025年精选"
+STRATEGY_DIR = Path(__file__).resolve().parent.parent / "strategy-collection"
 RESULT_FILE = Path(__file__).resolve().parent.parent / "回测结果.md"
 
 
@@ -136,7 +136,7 @@ def record_initialized():
     """初始化结果文件（如果不存在）。"""
     if not RESULT_FILE.exists():
         RESULT_FILE.write_text(
-            "# 聚宽2025年精选策略 — 回测结果汇总\n\n"
+            "# 策略库回测结果汇总\n\n"
             f"生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             "说明：所有策略使用统一参数回测（2023-01-01 至 2025-12-31，初始资金 100 万，基准 000300.XSHG）\n\n---\n",
             encoding="utf-8",

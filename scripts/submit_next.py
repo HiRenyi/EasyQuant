@@ -2,7 +2,7 @@
 import os, sys, json, time, re, urllib.request
 
 RESULTS_FILE = '/home/kevin/github/QuantGPT/回测结果.md'
-STRATEGIES_DIR = '/home/kevin/github/QuantGPT/聚宽2025年精选/'
+STRATEGIES_DIR = '/home/kevin/github/QuantGPT/strategy-collection/'
 API_BASE = 'http://localhost:8003'
 
 # Get completed filenames
