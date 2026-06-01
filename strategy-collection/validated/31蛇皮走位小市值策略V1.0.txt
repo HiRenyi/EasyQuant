@@ -1,11 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/48284
-# 标题：蛇皮走位小市值策略V1.0
-# 作者：MarioC
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/45510
-# 标题：5年15倍的收益，年化79.93%，可实盘，拿走不谢！
-# 作者：langcheng999
-
 from jqdata import *
 import warnings
 warnings.filterwarnings("ignore")

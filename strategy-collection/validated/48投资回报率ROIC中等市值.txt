@@ -1,7 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/45757
-# 标题：投资回报率ROIC中等市值
-# 作者：明曦
-
 import pandas as pd
 from jqdata import *
 import numpy as np

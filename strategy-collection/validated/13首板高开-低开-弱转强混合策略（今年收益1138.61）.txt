@@ -1,12 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/49499
-# 标题：首板高开-低开-弱转强混合策略（今年收益1138.61%）
-# 作者：天山灵兔
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/48680
-# 标题：追首板涨停 过去两年年化304%
-# 作者：子匀
-
-
 from jqdata import *
 from jqfactor import *
 import pandas as pd

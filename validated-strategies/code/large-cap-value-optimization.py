@@ -1,29 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/46876
-# 标题：大市值价值投资优化一波
-# 作者：七八十
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/41921
-# 标题：大市值价值投资，从2005年至今超额稳定
-# 作者：Ahfu
-
-"""
-一直担心天天想着年化N倍的圣杯策略，到最后发现都是白折腾，徒耗光阴，蓦然回首还是价值投资才是最终的归宿？毕竟这条路上有无数成功的先例。
-
-思路：
-1、选上市200天以上主板成熟个股；
-2、价格低于价值（pb< 1）；
-3、公司真的在不断赚钱，赚真钱，主要用到：
-（1）经营现金流：这个比利润真实，不像利润容易作假；
-（2）扣非净利润：别靠做账做出假利润；
-（3）总资产收益率：别靠负债做高ROE；
-（4）净利润同比增长：说明经营良好；
-
-再加上排序指标，取前5支，每月调仓。
-
-随着股市波动，在大牛市顶端会自动空仓留住利润，因为那个位置选不出有价值的票了。
-"""
-
-# 导入函数库
 from jqdata import *
 
 # 初始化函数，设定基准等等
@@ -193,4 +167,3 @@ def filter_limitdown_stock(context, stock_list):
         if stock in context.portfolio.positions
         or current_data[stock].last_price > current_data[stock].low_limit
     ]
-    

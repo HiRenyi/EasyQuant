@@ -1,7 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/48789
-# 标题：低风险中等收益策略
-# 作者：Gyro^.^
-
 import pandas as pd
 import json
 

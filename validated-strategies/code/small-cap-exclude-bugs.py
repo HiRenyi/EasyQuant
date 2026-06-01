@@ -1,15 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/47933
-# 标题：小市值排除3个bug版，22年至今收益506%回撤11%
-# 作者：1616
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/47791
-# 标题：国九小市值策略【年化100.5%|回撤25.6%】
-# 作者：zycash
-
-#enable_profile()
-#本策略为www.joinquant.com/post/47346的改进版本
-#根据国九条，筛选股票
-#导入函数库
 from jqdata import *
 from jqfactor import *
 import numpy as np

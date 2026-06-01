@@ -1,11 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/49263
-# 标题：安全摸狗策略
-# 作者：MarioC
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/42673
-# 标题：【回顾3】ETF策略之核心资产轮动
-# 作者：wywy1995
-
 import numpy as np
 import pandas as pd
 
@@ -86,4 +78,3 @@ def trade(context):
             if context.portfolio.positions[etf].total_amount == 0:
                 order_target_value(etf, value)
                 print('买入' + str(etf))
-

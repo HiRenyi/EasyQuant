@@ -1,8 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/46429
-# 标题：搞市场最靓的仔！指数ETF动量轮动策略-2
-# 作者：野蛮生涨
-
-# 导入函数库
 from jqdata import *
 import random
 
@@ -136,4 +131,3 @@ def after_market_close(context):
 
     log.info('一天结束')
     log.info('##############################################################\n\n')
-    

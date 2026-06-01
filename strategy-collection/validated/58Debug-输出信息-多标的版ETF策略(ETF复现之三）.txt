@@ -1,20 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/48875
-# 标题：Debug-输出信息-多标的版ETF策略(ETF复现之三）
-# 作者：璐璐202006
-
-'''
-买入规则：
-5日均线大于20日均线 。
-最近20个交易日的涨幅大于5% 。
-最近20个交易日的涨幅小于20%。
-从符合上述条件的ETF中，按涨幅从高到低排序，选择前g.etf_num个进行买入。
-卖出规则：
-当前持有的ETF不在最近20个交易日涨幅排名前g.rank_num的ETF中。
-当前持有的ETF涨幅超过20%。
-卖出后不立即买入已经卖出的ETF（通过检查是否在g.buy_etf列表中）。
-'''
-
-
 import pandas as pd
 import talib
 from jqdata import *

@@ -1,8 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/47566
-# 标题：大容量低回撤价值投资-排除小市值因子
-# 作者：Ahfu
-
-#导入函数库
 from jqdata import *
 from jqfactor import get_factor_values
 from jqlib.technical_analysis import *

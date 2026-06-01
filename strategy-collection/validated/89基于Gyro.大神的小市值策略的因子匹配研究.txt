@@ -1,11 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/45272
-# 标题：基于Gyro^.^大神的小市值策略的因子匹配研究
-# 作者：热情的刀
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/44563
-# 标题：微盘股研究
-# 作者：Gyro^.^
-
 import pandas as pd
 from jqdata import *
 

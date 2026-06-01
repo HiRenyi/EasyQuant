@@ -1,12 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/50043
-# 标题：国庆节献礼：实例说明白马股攻防转换策略
-# 作者：蚂蚁量化
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/41921
-# 标题：大市值价值投资，从2005年至今超额稳定
-# 作者：Ahfu
-
-# 导入函数库
 from jqdata import *
 
 # 初始化函数，设定基准等等

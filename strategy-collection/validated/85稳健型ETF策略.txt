@@ -1,11 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/48989
-# 标题：稳健型ETF策略
-# 作者：gjbdyrs
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/48355
-# 标题：7年回测，胜率100%、年化7.88%、最大回撤5.86%
-# 作者：东哥
-
 import pandas as pd
 import numpy as np
 from jqdata import *

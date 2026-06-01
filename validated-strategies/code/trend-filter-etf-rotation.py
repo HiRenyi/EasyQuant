@@ -1,23 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/49507
-# 标题：趋势筛选后相关性最小etf轮动
-# 作者：蚂蚁量化
-
-'''
-回测程序来源：
-# 克隆自聚宽文章：https://www.joinquant.com/post/49303
-# 标题：相关性最小etf轮动
-# 作者：开心果
-
-eft池来源：
-# 克隆自聚宽文章：ttps://www.joinquant.com/view/community/detail/cd4f11534d06711f53b4bad1f5105f09?type=1
-# 标题：手把手教你构建ETF策略候选池
-# 作者：JoelZ
-
-# 本人修改：d
-# 1. 添加了从历史数据中筛选维持多头趋势性较强的品种
-# 2. 添加了'score'的上下限-0.5<'score'<4.5，避免买入过强或过弱的etf
-
-'''
 import numpy as np
 import pandas as pd
 #初始化函数 
@@ -145,4 +125,3 @@ def mingcheng(stock):
         return get_security_info(stock).display_name
     except:
         return "还未上市"
-

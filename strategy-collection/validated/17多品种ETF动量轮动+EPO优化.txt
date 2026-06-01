@@ -1,11 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/47208
-# 标题：多品种ETF动量轮动+EPO优化
-# 作者：openhe
-
-# 克隆自聚宽文章：https://www.joinquant.com/post/47192
-# 标题：分享一个低波动ETF轮动策略，近四年最大回撤14.26%
-# 作者：hornor
-
 from jqdata import *
 from jqfactor import *
 import numpy as np
@@ -144,4 +136,4 @@ def trade(context):
     for w in weights:
         value = total_value * w 
         order_target_value(target_list[index], value) 
-        index+=1   
+        index+=1

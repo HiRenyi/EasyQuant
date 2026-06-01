@@ -1,7 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/45358
-# 标题：基本面01加RSI择时
-# 作者：明曦
-
 import pandas as pd
 from jqdata import *
 import numpy as np

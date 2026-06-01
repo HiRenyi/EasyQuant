@@ -1,7 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/45510
-# 标题：5年15倍的收益，年化79.93%，可实盘，拿走不谢！
-# 作者：langcheng999
-
 import pandas as pd 
 from jqdata import *
 from jqfactor import get_factor_values

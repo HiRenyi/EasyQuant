@@ -1,8 +1,3 @@
-# 克隆自聚宽文章：https://www.joinquant.com/post/44699
-# 标题：10年52倍，年化59%，全新因子方法超稳定
-# 作者：小白F
-
-#导入函数库
 from jqdata import *
 from jqfactor import *
 import numpy as np
