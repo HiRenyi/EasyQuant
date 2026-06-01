@@ -30,7 +30,7 @@ LLM Agent 自治因子挖矿 → 聚宽 Playwright 自动回测 → 批量策略
 
 1. **聚宽 (JoinQuant) 自动回测** — Playwright 浏览器自动化，直接在聚宽网页端运行回测，支持登录、代码注入、结果抓取
 2. **批量策略提交** — 自动按代码长度排序、逐个提交、等待完成、记录回测指标到 `回测结果.md`
-3. **策略验证库** — 28 个验证通过的策略源代码 + 指标文档，存放在 `validated-strategies/`
+3. **策略验证库** — 28 个验证通过的策略源代码 + 指标文档，中文命名存放在 `validated-strategies/`
 4. **单任务串行执行** — 适配聚宽非 VIP 账号限制（仅支持 1 个回测任务同时进行）
 
 ### 原始项目说明（来自 QuantGPT）
@@ -78,6 +78,8 @@ LLM Agent (Claude Code / Claude Desktop)
 ## Validated Results — JoinQuant Strategies
 
 聚宽回测已完成 **28 个验证策略**（2025-01-01 ~ 2025-12-31，初始资金 100 万），详见 [validated-strategies/README.md](validated-strategies/README.md)。
+
+**注意**：`validated-strategies/code/` 中的代码为实际通过回测的修改版本（已去除原始聚宽注释），非原始聚宽文章克隆代码。
 
 | # | 策略 | 年化收益 | 最大回撤 | 夏普比率 |
 |:--|------|:--------:|:--------:|:--------:|
@@ -289,32 +291,33 @@ curl -X POST http://localhost:8003/api/v1/auto_backtest \
 
 ```
 EasyQuant/
-├── quantgpt/                    # Backend (from QuantGPT + EasyQuant extensions)
-│   ├── expression_parser.py     # Factor expression parser (50+ ops)
-│   ├── backtest.py              # Local rank-based backtest engine
-│   ├── jq_automation.py         # ★ JoinQuant Playwright automation
-│   ├── task_store.py            # Task persistence + status management
-│   ├── strategy_code_utils.py   # Strategy code AST validation
-│   ├── llm_service.py           # LLM integration service
+├── quantgpt/                    # 后端（QuantGPT + EasyQuant 扩展）
+│   ├── expression_parser.py     # 因子表达式解析器（50+ 算子）
+│   ├── backtest.py              # 本地排名回测引擎
+│   ├── jq_automation.py         # ★ 聚宽 Playwright 浏览器自动化
+│   ├── task_store.py            # 任务持久化 + 状态管理
+│   ├── strategy_code_utils.py   # 策略代码 AST 验证
+│   ├── llm_service.py           # LLM 集成服务
 │   ├── routes/
-│   │   ├── strategy_backtest.py # ★ JoinQuant strategy backtest API
-│   │   └── backtest_tasks.py    # ★ Task management
-│   └── ...                      # Original QuantGPT modules
-├── validated-strategies/        # ★ 28 validated strategies (EasyQuant)
-│   ├── README.md                # Strategy index + metrics
-│   ├── code/                    # Strategy source code (.py)
-│   └── *.md                     # Detailed analysis docs (top 10)
+│   │   ├── strategy_backtest.py # ★ 聚宽策略回测 API
+│   │   └── backtest_tasks.py    # ★ 任务管理
+│   └── ...                      # 原始 QuantGPT 模块
+├── validated-strategies/        # ★ 28 个已验证策略（EasyQuant）
+│   ├── README.md                # 策略指标索引
+│   ├── code/                    # 策略源代码（28 个，实际回测修改版，中文命名）
+│   └── *.md                     # 详细分析文档（Top 10）
 ├── scripts/
-│   ├── factor_miner.py          # Batch factor evaluation (from QuantGPT)
-│   ├── submit_next.py           # ★ Batch strategy submission
-│   ├── save_jq_login.py         # ★ Save JoinQuant credentials
-│   └── batch_backtest.py        # ★ Batch backtest helper
-├── strategy-collection/          # ★ Strategy collection (runtime, not in git)
-├── 回测结果.md                   # ★ Backtest results log (runtime)
-├── restart.sh                   # Service restart script
-├── frontend/                    # React monitoring dashboard
-├── docs/                        # Documentation
-└── tests/                       # 74 tests
+│   ├── factor_miner.py          # 批量因子挖掘（来自 QuantGPT）
+│   ├── submit_next.py           # ★ 批量策略提交脚本
+│   ├── save_jq_login.py         # ★ 保存聚宽登录凭证
+│   └── batch_backtest.py        # ★ 批量回测辅助脚本
+├── strategy-collection/          # ★ 策略收集（运行时，未验证的不入 git）
+│   └── validated/                #   已验证策略（28 个，中文命名，git 跟踪）
+├── 回测结果.md                   # ★ 批量回测结果日志（运行时）
+├── restart.sh                   # 服务重启脚本
+├── frontend/                    # React 监控面板
+├── docs/                        # 文档
+└── tests/                       # 74 个测试
 ```
 
 ---
